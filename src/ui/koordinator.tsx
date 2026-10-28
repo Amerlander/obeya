@@ -660,7 +660,19 @@ function ReshareBox({ r, items, onOpen }: { r: Reshare; items: Item[]; onOpen: (
       <ul className="prefs proposals">
         {run && (
           <li>
-            <span className="pref-text">{going ? s.progress(out, run.total) : run.stopped ? s.stopped(run.done, run.total) : s.finished(run.done, run.total)}</span>
+            <span className="pref-text">
+              {run.tags
+                ? going
+                  ? s.tagProgress(out, run.total)
+                  : run.stopped
+                    ? s.tagStopped(run.done, run.total)
+                    : s.tagFinished(run.done, run.total)
+                : going
+                  ? s.progress(out, run.total)
+                  : run.stopped
+                    ? s.stopped(run.done, run.total)
+                    : s.finished(run.done, run.total)}
+            </span>
             <span className="bar">
               <span style={{ width: `${run.total ? (100 * out) / run.total : 100}%` }} />
             </span>
@@ -678,8 +690,8 @@ function ReshareBox({ r, items, onOpen }: { r: Reshare; items: Item[]; onOpen: (
                 })}
               </span>
             )}
-            {/* beside the notice of outdated pages, its "Ausblenden" puts both away */}
-            {(going || !r.outdated) && (
+            {/* beside the notice of outdated pages, its "Ausblenden" puts both away; a run tagging pages goes alone */}
+            {(going || run.tags || !r.outdated) && (
               <span className="pref-actions">
                 {going ? (
                   <button className="btn" title={s.stopHint} disabled={!!run.stopped} onClick={() => act(api.stopReshare)}>
@@ -715,6 +727,17 @@ function ReshareBox({ r, items, onOpen }: { r: Reshare; items: Item[]; onOpen: (
               </button>
               <button className="btn" title={s.dismissOutdatedHint} onClick={() => act(api.dismissReshare)}>
                 {s.dismiss}
+              </button>
+            </span>
+          </li>
+        )}
+        {!!r.untagged && !going && (
+          <li>
+            <span className="pref-text">{s.untagged(r.untagged)}</span>
+            <span className="occasion">{s.untaggedHint}</span>
+            <span className="pref-actions">
+              <button className="btn primary" onClick={() => act(() => api.reshare(null, true))}>
+                {s.tag(r.untagged)}
               </button>
             </span>
           </li>

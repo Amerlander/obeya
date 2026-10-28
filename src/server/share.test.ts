@@ -28,7 +28,7 @@ let settled: [string, ({ url: string } | { why: string })?][];
 interface Entry {
   rev: number;
   withdrawn?: true;
-  meta?: { kind?: 'html'; title: string; text: string; chapters: [number, string][]; pr: string | null; language: string };
+  meta?: { kind?: 'html'; title: string; text: string; chapters: [number, string][]; pr: string | null; language: string; tags?: Record<string, string[]> };
 }
 /**
  * Each deploy of the site: the pages of its manifest, those it changed (`wrote`), and where it
@@ -75,10 +75,13 @@ afterAll(() => server.stop(true));
 const SITE_URL = `http://localhost:${server.port}/`;
 /** When the site's demos go out: on approval (`approved`), or only on "Teilen". */
 let publish: DemoSite['publish'];
-const site = (): DemoSite => ({ title: 'Demos', url: SITE_URL, deploy: `${join(dir, 'deploy.ts')} {dir} ${dir}`, ...(publish ? { publish } : {}) });
+/** The site's vocabulary of tags (`demo.site.tags`); none without. */
+let vocabulary: DemoSite['tags'];
+const site = (): DemoSite => ({ title: 'Demos', url: SITE_URL, deploy: `${join(dir, 'deploy.ts')} {dir} ${dir}`, ...(publish ? { publish } : {}), ...(vocabulary ? { tags: vocabulary } : {}) });
 
 beforeEach(() => {
   publish = undefined;
+  vocabulary = undefined;
   dir = mkdtempSync(join(tmpdir(), 'obeya-share-'));
   writeFileSync(join(dir, 'deploy.ts'), DEPLOY);
   board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: dir, branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
@@ -88,6 +91,7 @@ beforeEach(() => {
   comments = [];
   settled = [];
   sharing = make();
+  board.showVocabulary(() => vocabulary);
 });
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
@@ -331,6 +335,147 @@ describe('sharing a demo', () => {
     sharing.resume();
     await until(() => share(a.id)?.state === 'shared');
     expect(calls().map((c) => c.wrote)).toEqual([['a']]);
+  });
+});
+
+describe('the tags of a page', () => {
+  beforeEach(() => {
+    vocabulary = { Area: ['Billing', 'Reports', 'Settings'], Audience: ['Admins', 'Customers'] };
+  });
+  /** The card's page is online and nothing goes out for it. */
+  const still = (id: string) => share(id)?.state === 'shared' && !JSON.parse(board.row(id).share!).state;
+  /** A card whose worker gave its page these tags. */
+  const tagged = (tags: Record<string, string[]>, title = 'Zählerstände exportieren') => card(title, { page: { title: 'CSV-Export', text: 'Vermieter laden Zählerstände als CSV.', tags } });
+
+  test("the worker's go on the page, in the vocabulary's order, and the card shows them", async () => {
+    const c = tagged({ Area: ['Reports', 'Billing'], Audience: [] });
+    expect(board.item(c.id)!.tags).toEqual({ Area: ['Reports', 'Billing'], Audience: [] });
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(runtime.sessions).toHaveLength(0);
+    expect(meta(c.id).tags).toEqual({ Area: ['Billing', 'Reports'], Audience: [] });
+  });
+
+  test('a page lacking them gets them from a short session over its title and text, for the dimensions it lacks only', async () => {
+    const c = tagged({ Area: ['Billing'] });
+    sharing.share(c.id);
+    await until(() => runtime.sessions.length === 1);
+    const s = runtime.last;
+    expect(s.spec.readOnly).toBe(true);
+    expect(s.inbox[0]).toContain('- Audience: Admins, Customers');
+    expect(s.inbox[0]).not.toContain('- Area:');
+    expect(s.inbox[0]).toContain('“CSV-Export”\nVermieter laden Zählerstände als CSV.');
+    // what it gives outside the vocabulary, or for a dimension it was not asked about, does not count
+    s.call('tags', { tags: { Audience: ['Customers', 'Tenants'], Area: ['Settings'] } });
+    s.emit({ type: 'idle' });
+    await until(() => share(c.id)?.state === 'shared');
+    expect(meta(c.id).tags).toEqual({ Area: ['Billing'], Audience: ['Customers'] });
+    expect(log(c.id)).toContain('Tags gewählt: Audience: Customers');
+    // kept: the next share needs no session
+    sharing.unshare(c.id);
+    await until(() => !share(c.id));
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(runtime.sessions).toHaveLength(1);
+    expect(meta(c.id).tags).toEqual({ Area: ['Billing'], Audience: ['Customers'] });
+  });
+
+  test('a page written for a demo without one chooses its tags in the same session', async () => {
+    const c = card('Zähler', { page: undefined });
+    sharing.share(c.id);
+    await until(() => runtime.sessions.length === 1);
+    runtime.last.call('page', { title: 'Zählerstände als CSV', text: 'Vermieter laden sie herunter.', tags: { Area: ['Reports'], Audience: ['Customers'] } });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => share(c.id)?.state === 'shared');
+    expect(runtime.sessions).toHaveLength(1);
+    expect(meta(c.id).tags).toEqual({ Area: ['Reports'], Audience: ['Customers'] });
+  });
+
+  test('set by hand, they take effect at once and stay: a later worker sets only the others, the session none', async () => {
+    const c = tagged({ Area: ['Billing'], Audience: ['Admins'] });
+    // before sharing: kept for the page
+    sharing.setTags(c.id, 'Area', ['Reports']);
+    expect(board.item(c.id)!.tags).toEqual({ Area: ['Reports'], Audience: ['Admins'] });
+    expect(log(c.id).at(-1)).toBe('Tags von Hand gesetzt, Area: Reports');
+    expect(calls()).toHaveLength(0);
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(meta(c.id).tags).toEqual({ Area: ['Reports'], Audience: ['Admins'] });
+    // after sharing: the page goes out again right away, with the same demo
+    sharing.setTags(c.id, 'Audience', []);
+    // the card shows the page as shared meanwhile
+    expect(JSON.parse(board.row(c.id).share!).state).toBe('publishing');
+    await until(() => still(c.id));
+    expect(calls()).toHaveLength(2);
+    expect(meta(c.id).tags).toEqual({ Area: ['Reports'], Audience: [] });
+    expect(log(c.id).at(-1)).toBe(`Die geteilte Seite zeigt jetzt ihre neuen Tags: ${share(c.id)!.url}`);
+    // a later demo's worker
+    const newer = videoDir(join(dir, 'newer'));
+    board.work(c.id, { demos: board.row(c.id).demo!.replace(/^/, '[') + ']', demo: JSON.stringify({ kind: 'video', dir: newer, chapters: [], page: { title: 'T', text: 'T.', tags: { Area: ['Settings'], Audience: ['Customers'] } } }) });
+    expect(board.item(c.id)!.tags).toEqual({ Area: ['Reports'], Audience: [] });
+    // a dimension the owner left alone comes from the newest worker
+    vocabulary = { ...vocabulary, Plan: ['Free', 'Pro'] };
+    board.work(c.id, { demo: JSON.stringify({ kind: 'video', dir: newer, chapters: [], page: { title: 'T', text: 'T.', tags: { Area: ['Settings'], Audience: ['Customers'], Plan: ['Pro'] } } }) });
+    expect(board.item(c.id)!.tags).toEqual({ Area: ['Reports'], Audience: [], Plan: ['Pro'] });
+  });
+
+  test('set while the page goes out, it goes out once more with them', async () => {
+    const c = tagged({ Area: ['Billing'], Audience: [] });
+    writeFileSync(join(dir, 'hold'), '');
+    sharing.share(c.id);
+    await until(() => calls().length === 1);
+    sharing.setTags(c.id, 'Area', ['Settings']);
+    rmSync(join(dir, 'hold'));
+    await until(() => calls().length === 2 && still(c.id));
+    expect(meta(c.id).tags).toEqual({ Area: ['Settings'], Audience: [] });
+  });
+
+  test('only from the vocabulary', () => {
+    const c = tagged({ Area: [], Audience: [] });
+    expect(() => sharing.setTags(c.id, 'Area', ['Marketing'])).toThrow(BadRequest);
+    expect(() => sharing.setTags(c.id, 'Team', ['A'])).toThrow(BadRequest);
+    vocabulary = undefined;
+    expect(() => sharing.setTags(c.id, 'Area', ['Billing'])).toThrow(BadRequest);
+  });
+
+  test('pages without tags, or with a value struck from the vocabulary, are tagged and shared again in one run; hand-set tags stay', async () => {
+    const a = tagged({ Area: ['Billing'], Audience: ['Admins'] }, 'A');
+    const b = tagged({ Area: ['Billing'], Audience: ['Admins'] }, 'B');
+    const c = tagged({ Area: ['Reports'], Audience: ['Admins'] }, 'C');
+    for (const x of [a, b, c]) {
+      sharing.share(x.id);
+      await until(() => share(x.id)?.state === 'shared');
+    }
+    sharing.setTags(b.id, 'Area', ['Billing']);
+    await until(() => still(b.id));
+    expect(calls()).toHaveLength(4);
+    expect(board.snapshot().reshare).toBeUndefined();
+    // Billing is struck: A and B lack their Area, C has its tags
+    vocabulary = { Area: ['Invoices', 'Reports', 'Settings'], Audience: ['Admins', 'Customers'] };
+    board.changed();
+    expect(board.snapshot().reshare).toEqual({ outdated: 0, untagged: 2 });
+    sharing.reshareMany(null, true);
+    for (let i = 0; i < 2; i++) {
+      await until(() => runtime.sessions.length === i + 1);
+      expect(runtime.last.inbox[0]).toContain('- Area: Invoices, Reports, Settings');
+      expect(runtime.last.inbox[0]).not.toContain('- Audience:');
+      runtime.last.call('tags', { tags: { Area: ['Invoices'] } });
+      runtime.last.emit({ type: 'idle' });
+    }
+    await until(() => board.snapshot().reshare?.run?.left === 0);
+    expect(board.snapshot().reshare).toEqual({ outdated: 0, run: { total: 2, done: 2, failed: [], left: 0, tags: true } });
+    for (const x of [a, b]) {
+      expect(meta(x.id).tags).toEqual({ Area: ['Invoices'], Audience: ['Admins'] });
+      expect(log(x.id)).toContain('Seiten ohne Tags taggen: Die Seite bekommt Tags und wird erneut geteilt.');
+    }
+    // the owner's choice for B was a struck value: the session's stands in for it, and the next owner's choice over that
+    sharing.setTags(b.id, 'Area', ['Reports']);
+    expect(board.item(b.id)!.tags!.Area).toEqual(['Reports']);
+    // put away, a run tagging pages leaves the notice of outdated pages as it was
+    await until(() => still(b.id));
+    sharing.dismissResharing();
+    expect(board.snapshot().reshare).toBeUndefined();
+    expect(board.setting('reshare_dismissed')).toBeNull();
   });
 });
 
@@ -582,8 +727,8 @@ describe('sharing many outdated pages again at once', () => {
     // the card still offers it
     expect(share(video!.id)!.outdated).toEqual(lacking());
     expect(() => sharing.reshareMany(null)).toThrow(BadRequest);
-    // put away before the newest change came: the pages lacking that one show again, with all they lack
-    const before = PAGE_CHANGES.at(-2)!.id;
+    // put away before the newest change that marks pages came: the pages lacking that one show again, with all they lack
+    const before = PAGE_CHANGES.filter((c) => !('tagged' in c)).at(-2)!.id;
     board.setSetting('reshare_dismissed', before);
     backdate(html.id);
     const lacksNewer = (kind: 'video' | 'html') => missedChanges(before, kind, PAGE_CHANGES).length > 0;

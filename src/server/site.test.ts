@@ -124,7 +124,7 @@ const page = (slug: string, extra: Partial<SharePage> = {}): SharePage => ({
   shared: [],
   ...extra,
 });
-const meta = (slug: string) => JSON.parse(readFileSync(join(siteDir(), slug, 'meta.json'), 'utf8')) as { at: string; first: string; kind?: string; language?: string };
+const meta = (slug: string) => JSON.parse(readFileSync(join(siteDir(), slug, 'meta.json'), 'utf8')) as { at: string; first: string; kind?: string; language?: string; tags?: Record<string, string[]> };
 const overview = () => readFileSync(join(siteDir(), 'index.html'), 'utf8');
 const CREDIT_DE = '<footer class="credit">Aufgenommen mit <a href="https://obeya.si">Obeya</a></footer>\n';
 const CREDIT_EN = '<footer class="credit">Recorded with <a href="https://obeya.si">Obeya</a></footer>\n';
@@ -267,6 +267,45 @@ describe('a site Obeya keeps', () => {
     // withdrawn, a page leaves the feed too
     await empty.withdraw('a-111111', ['b-222222']);
     expect(parseXml(readFileSync(join(siteDir(), 'feed.xml'), 'utf8')).children.filter((c) => c.name === 'entry')).toHaveLength(1);
+  });
+
+  test('tags: chips under the title linking the filtered overview, a row of chips per dimension there, and categories in the feed', async () => {
+    const tagged = make(SITE({ tags: { Area: ['Billing', 'Reports', 'Settings'], 'Who & why': ['Admins', 'Customers'] } }));
+    await tagged.publish(page('a-111111', { tags: { Area: ['Billing', 'Reports'], 'Who & why': [] } }));
+    await tagged.publish(page('b-222222', { tags: { Area: ['Billing'], 'Who & why': ['Customers'] }, shared: ['a-111111'] }));
+    await tagged.publish(page('c-333333', { shared: ['a-111111', 'b-222222'] }));
+    const a = readFileSync(join(siteDir(), 'a-111111', 'index.html'), 'utf8');
+    expect(a).toContain('<div class="tags"><a class="tag" href="../?Area=Billing"><span>Area</span> Billing</a><a class="tag" href="../?Area=Reports"><span>Area</span> Reports</a></div>');
+    expect(readFileSync(join(siteDir(), 'b-222222', 'index.html'), 'utf8')).toContain('href="../?Who+%26+why=Customers"><span>Who &amp; why</span> Customers</a>');
+    expect(readFileSync(join(siteDir(), 'c-333333', 'index.html'), 'utf8')).not.toContain('class="tags"');
+    expect(meta('a-111111')).toMatchObject({ tags: { Area: ['Billing', 'Reports'], 'Who & why': [] } });
+    expect(meta('c-333333')).not.toHaveProperty('tags');
+    // the overview offers the values some page has, in the vocabulary's order; each page carries its tags and what the search reads
+    const o = overview();
+    expect(o).toContain('<div class="dim" role="group" aria-label="Area"><span>Area</span><button class="chip" data-d="Area" data-v="Billing" aria-pressed="false">Billing</button><button class="chip" data-d="Area" data-v="Reports" aria-pressed="false">Reports</button></div>');
+    expect(o).toContain('data-v="Customers"');
+    expect(o).not.toContain('data-v="Settings"');
+    expect(o).not.toContain('data-v="Admins"');
+    expect(o).toContain(`data-tags="{&quot;Area&quot;:[&quot;Billing&quot;],&quot;Who &amp; why&quot;:[&quot;Customers&quot;]}" data-search="titel b-222222 erster satz &lt;b&gt;roh&lt;/b&gt;. zweiter satz."`);
+    expect(o).toContain(`<button class="copy" data-url="${URL_}a-111111/" data-done="Kopiert" title="Link kopieren"`);
+    expect(o).toContain('<span id="count">3 von 3</span>');
+    expect(o).toContain('<span>Links kopieren</span>');
+    const entries = parseXml(readFileSync(join(siteDir(), 'feed.xml'), 'utf8')).children.filter((c) => c.name === 'entry');
+    expect(entries.map((e) => e.children.filter((c) => c.name === 'category').map((c) => c.attrs))).toEqual([
+      [],
+      [
+        { term: 'Billing', label: 'Area: Billing' },
+        { term: 'Customers', label: 'Who & why: Customers' },
+      ],
+      [
+        { term: 'Billing', label: 'Area: Billing' },
+        { term: 'Reports', label: 'Area: Reports' },
+      ],
+    ]);
+    // without a vocabulary the overview has no chips, and still its search and its links to copy
+    await make(SITE()).publish(page('d-444444', { shared: ['a-111111', 'b-222222', 'c-333333'] }));
+    expect(overview()).not.toContain('class="chip"');
+    expect(overview()).toContain('<input type="search" id="q"');
   });
 
   test('publishes an HTML artifact: its files beside the page, in a sandboxed frame that grows to it', async () => {

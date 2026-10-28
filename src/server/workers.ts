@@ -28,7 +28,8 @@ import { readingShared } from '../adapters';
 import { branchName, type CardWorkspaces, type FileAt, gitSteps, type Landed, type Lease, shortageOf, together, WorkspaceError } from './workspaces';
 import type { FolderWorkspaces, UndoReport } from './folder';
 import { contributionOf, type PrState, type Shipped, type StoredContribution, type StoredNewRepo } from './board';
-import type { ChangeRoute, Finding, FindingStatus } from '../core/types';
+import type { ChangeRoute, Finding, FindingStatus, PageTags } from '../core/types';
+import { dimensions, outside, tagsOf } from '../core/page-tags';
 import { gitAsync, gitOrNull } from './workspaces';
 import { defaultBranchCommit } from './read-tree';
 import type { CardRow } from './db';
@@ -3145,6 +3146,8 @@ export class Workers {
     const language = "the owner's language";
     // the page goes to colleagues: in the language of the repository's demos where it names one
     const pageLanguage = LANGUAGE_NAMES[this.demoLanguage()];
+    // the vocabulary the page's tags come from, where the repository's site names one
+    const vocabulary = this.shares ? dimensions(this.o.adapter.demo?.site?.tags) : [];
     // on a canvas with several repositories a proposal may go to another one than the card's
     const repos = this.o.board.canvas.repos;
     const ownRepo = this.o.repo ?? this.o.board.home;
@@ -3377,10 +3380,23 @@ export class Workers {
               ...(this.shares
                 ? {
                     page: z
-                      .object({ title: z.string(), text: z.string() })
+                      .object({
+                        title: z.string(),
+                        text: z.string(),
+                        ...(vocabulary.length
+                          ? {
+                              tags: z
+                                .record(z.string(), z.array(z.string()))
+                                .optional()
+                                .describe(
+                                  `required: for each of these dimensions, the values that fit the change (an empty list where none does), only from those given, so colleagues find the page by them: ${vocabulary.map(([d, v]) => `${d}: ${v.join(', ')}`).join('; ')}`,
+                                ),
+                            }
+                          : {}),
+                      })
                       .optional()
                       .describe(
-                        `required: the page on which the owner may share the demo (the video, or the HTML artifact below the text) with colleagues, in ${pageLanguage}. They know the product but have never seen Obeya, this card or the plan doc. title: what changes, in a few words; text: two to five sentences on what changes for the user and why, without findings, tests or internal process`,
+                        `required: the page on which the owner may share the demo (the video, or the HTML artifact below the text) with colleagues, in ${pageLanguage}. They know the product but have never seen Obeya, this card or the plan doc. title: what changes, in a few words; text: two to five sentences on what changes for the user and why, without findings, tests or internal process${vocabulary.length ? '; tags: see there' : ''}`,
                       ),
                     follows: z
                       .enum(['replaces', 'supplements'])
@@ -3447,9 +3463,17 @@ export class Workers {
               const kind = d.kind ?? 'video';
               // what the worker says of it beside the demo before, for the owner's buttons when the page shows that one
               const report = { ...(d.question ? { question: d.question } : {}), ...(row.demo && (d.follows === 'replaces' || d.follows === 'supplements') ? { follows: d.follows } : {}) };
-              const page = d.page && d.page.title.trim() && d.page.text.trim() ? { title: clip(d.page.title.trim(), 200), text: clip(d.page.text.trim(), 2000) } : undefined;
+              const tags = vocabulary.length && d.page?.tags && typeof d.page.tags === 'object' ? (d.page.tags as PageTags) : undefined;
+              const page =
+                d.page && d.page.title.trim() && d.page.text.trim() ? { title: clip(d.page.title.trim(), 200), text: clip(d.page.text.trim(), 2000), ...(tags ? { tags: tagsOf(tags, Object.fromEntries(vocabulary)) } : {}) } : undefined;
               if (this.shares && !page)
                 return 'Not handed over: a demo here needs its page (title and text) for colleagues, in case the owner shares it. Call ready_for_review again with demo.page.';
+              if (vocabulary.length) {
+                const wrong = tags ? outside(tags, Object.fromEntries(vocabulary)) : [];
+                const lacking = vocabulary.filter(([dim]) => !tags?.[dim]).map(([dim]) => dim);
+                if (wrong.length) return `Not handed over: the page's tags come from the site's alone, and these are not among them: ${wrong.join(', ')}. Call ready_for_review again with demo.page.tags from those its description gives.`;
+                if (lacking.length) return `Not handed over: the page's tags lack ${lacking.join(', ')}. Give each dimension its values (an empty list where none fits), then call ready_for_review again.`;
+              }
               if (kind === 'html') {
                 const wrong = checkArtifact(d.dir);
                 if (wrong) return `Not handed over: ${wrong}. Fix the artifact, then call ready_for_review again.`;
@@ -3867,7 +3891,7 @@ ${idea.idea.brief}` : '',
     parts.push(
       [
         `Then show the owner the result with a demo, so they can judge at a glance whether the work is done, and hand it over with ready_for_review.`,
-        `Usually that is a video of the change, recorded with ${this.demoSkill(card.id)} as its instructions say (directory, chapter titles). Its length follows the size of the change, never padded: 30–60 s for a small one (a fix: the broken behaviour, then the fixed one), 1½–3 min for a larger one. Skip the skill's last steps (opening the page, the notification, the chat reply): Obeya shows the demo on the card.${this.shares ? ' The owner may share the demo, a video or an HTML artifact, with colleagues of the team on a page of its own: hand it over with that page (title, text), written for them.' : ''} ${run?.trim() ? 'Run the app for it as the recipe above says.' : "The repository's settings say nothing yet about how to run the app: find it out from the repository (README, scripts, configuration) and say in your summary how you ran it."}`,
+        `Usually that is a video of the change, recorded with ${this.demoSkill(card.id)} as its instructions say (directory, chapter titles). Its length follows the size of the change, never padded: 30–60 s for a small one (a fix: the broken behaviour, then the fixed one), 1½–3 min for a larger one. Skip the skill's last steps (opening the page, the notification, the chat reply): Obeya shows the demo on the card.${this.shares ? ` The owner may share the demo, a video or an HTML artifact, with colleagues of the team on a page of its own: hand it over with that page (title, text${dimensions(this.o.adapter.demo?.site?.tags).length ? ', tags' : ''}), written for them.` : ''} ${run?.trim() ? 'Run the app for it as the recipe above says.' : "The repository's settings say nothing yet about how to run the app: find it out from the repository (README, scripts, configuration) and say in your summary how you ran it."}`,
         `When the result is something to look at rather than something that happens (drafts of a logo or a layout side by side, a comparison of variants, an analysis, an answer), make an HTML artifact instead: an index.html in a new directory under ${this.demosDir(card.id)} (never in git), self-contained or with the files it loads beside it, made for the owner to decide on, and hand it over with kind 'html'. It shows in a sandboxed frame on the card, about 800 px wide, without Obeya's API.`,
         'Where either would do, record the video: watching the work happen is what the owner enjoys most.',
         "Where the work itself is a file for the owner (a document, a report, a spreadsheet in the repository), name it in ready_for_review's files: the card shows it beside the demo.",

@@ -21,6 +21,12 @@ describe('the changes a shared page lacks', () => {
     expect(ids('9aef9b8395b7', 'video')).toEqual(['2026-01-01-a', '2026-03-01-c']);
   });
 
+  test('a change that shows only on pages with tags leaves none outdated: pages from before it had none', () => {
+    const tagged: PageChange[] = [...changes, { id: '2026-04-01-tags', kinds: ['video', 'html'], tagged: true }];
+    expect(missedChanges('2026-03-01-c', 'video', tagged)).toEqual([]);
+    expect(pagesVersion(tagged)).toBe('2026-04-01-tags');
+  });
+
   test('a page published now lacks none', () => {
     expect(pagesVersion(changes)).toBe('2026-03-01-c');
     expect(pagesVersion([])).toBe('');

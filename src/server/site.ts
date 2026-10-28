@@ -40,6 +40,8 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameS
 import { dirname, join, resolve, sep } from 'node:path';
 import type { DemoSite } from '../adapters/types';
 import type { Messages } from '../core/messages';
+import { dimensions } from '../core/page-tags';
+import type { PageTags } from '../core/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, credit, day, demoFile, demoPageHtml, esc, OBEYA_URL, PAGE_STYLE, paragraphs, PAGE_WORDS, type PageLanguage, type StackedDemo, stackedPageHtml } from './demo-page';
 import { artifactCopy } from './artifact-copy';
@@ -74,6 +76,8 @@ interface Meta {
   by?: string;
   /** The later demo versions on the page, in order of handover, each in a directory of the page's (`dir`). */
   more?: MoreMeta[];
+  /** The page's tags from the site's vocabulary (`demo.site.tags`), by dimension; absent on pages without. */
+  tags?: PageTags;
 }
 
 /** A later demo version on a page: what its section shows, and when it was handed over (`handed`, its heading). */
@@ -587,6 +591,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
               source: first.source,
               language: p.language,
               ...(by ? { by } : {}),
+              ...(p.tags && Object.values(p.tags).some((v) => v.length) ? { tags: p.tags } : {}),
               ...(later.length
                 ? {
                     more: later.map(({ d, html, source, at }) => ({
@@ -690,6 +695,7 @@ export function pagesHash(): { video: string; html: string; stacked: string } {
     source: '',
     language: 'de',
     by: 'Ada Lovelace',
+    tags: { Area: ['Billing', 'Reports'], Audience: [] },
   };
   const hash = (pages: string[]) => createHash('sha256').update(pages.join('\0')).digest('hex').slice(0, 12);
   const languages: PageLanguage[] = ['de', 'en'];
@@ -741,6 +747,8 @@ function pageHtml(site: DemoSite, m: Meta, poster: (dir: string) => boolean, tim
     tabTitle: `${m.title} · ${site.title}`,
     language,
     top: { href: '../', text: w.allDemos },
+    // each links the overview showing the pages that have it
+    tags: Object.entries(m.tags ?? {}).flatMap(([dimension, values]) => values.map((value) => ({ dimension, value, href: `../?${new URLSearchParams({ [dimension]: value })}` }))),
   };
   if (m.more?.length) {
     const demo = (d: { kind?: 'html'; title: string; text: string; chapters: [number, string][] }, dir: string): StackedDemo =>
@@ -772,23 +780,141 @@ export const FEED = 'feed.xml';
 /** The first sentence of a page's text, as the overview shows it. */
 const firstSentence = (t: string) => (t.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? t).slice(0, 240);
 
-/** Every page on the site, the most recently shared first, in the site's language. */
+/** The style the overview adds: its filter (search, a row of chips per dimension), the count and „Links kopieren“, each page's copy icon. */
+const OVERVIEW_STYLE = `
+  .filter { display: grid; gap: 10px; margin: 0 0 16px; }
+  .filter input { font: inherit; font-size: 15px; width: 100%; padding: 7px 11px; border: 1px solid var(--line); border-radius: 3px; background: var(--card); color: var(--ink); }
+  .filter input:focus { outline: none; border-color: var(--accent); }
+  .dim { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .dim > span { color: var(--muted); font-size: 13px; min-width: 90px; }
+  .chip { all: unset; cursor: pointer; font-size: 13px; line-height: 1.5; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); }
+  .chip:hover { border-color: var(--accent); }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--card); }
+  .chip:focus-visible, .copy:focus-visible, .copy-all:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding: 10px 0 12px; font-size: 14px; color: var(--muted); }
+  .copy-all, .copy { all: unset; cursor: pointer; color: var(--accent); display: inline-flex; align-items: center; gap: 6px; }
+  .copy-all svg, .copy svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  ul.demos li { position: relative; }
+  ul.demos li[hidden] { display: none; }
+  ul.demos a { padding-right: 52px; }
+  ul.demos i { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; font-style: normal; }
+  ul.demos i em { font-style: normal; font-size: 12px; padding: 0 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+  .copy { position: absolute; top: 12px; right: 12px; padding: 6px; border-radius: 3px; opacity: 0; transition: opacity 0.1s; }
+  .copy:hover { background: var(--chip); }
+  ul.demos li:hover .copy, .copy:focus-visible, .copy.done { opacity: 1; }
+  .copy.done::after { content: attr(data-done); position: absolute; right: 100%; margin-right: 4px; font-size: 13px; white-space: nowrap; }
+  @media (hover: none) { .copy { opacity: 1; } }
+`;
+
+/** Two overlapping sheets: the mark for copying. */
+const COPY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
+
+/**
+ * Every page on the site, the most recently shared first, in the site's language. Above them a
+ * filter: a search over title and text, and a row of chips per dimension of the site's vocabulary
+ * (its values that some page has), any of a dimension's and all dimensions; it stands in the URL
+ * (`?Area=Billing&q=pdf`), so a filtered list can be passed on. Each page's link is copied by its
+ * icon, those shown all at once by „Links kopieren“: as HTML links and as a Markdown list. It all
+ * runs in the browser; the site stays static.
+ */
 function overviewHtml(site: DemoSite, pages: (Meta & { slug: string })[], language: PageLanguage): string {
   const w = PAGE_WORDS[language];
+  const has = (d: string, v: string) => pages.some((p) => p.tags?.[d]?.includes(v));
+  const dims = dimensions(site.tags).flatMap(([d, values]) => {
+    const on = values.filter((v) => has(d, v));
+    return on.length ? [[d, on] as const] : [];
+  });
+  const search = (d: Meta) => [d.title, d.text, ...(d.more ?? []).flatMap((m) => [m.title, m.text])].join(' ').toLowerCase().replace(/\s+/g, ' ');
+  const entry = (d: Meta & { slug: string }) => {
+    const tags = dims.flatMap(([dim, values]) => values.filter((v) => d.tags?.[dim]?.includes(v)));
+    const line = [day(newest(d), language), ...(d.by ? [w.by(d.by)] : []), firstSentence(d.text)].map(esc).join(' · ');
+    return `<li data-tags="${esc(JSON.stringify(d.tags ?? {}))}" data-search="${esc(search(d))}"><a href="${d.slug}/"><b>${esc(d.title)}</b><span>${line}</span>${tags.length ? `<i>${tags.map((v) => `<em>${esc(v)}</em>`).join('')}</i>` : ''}</a><button class="copy" data-url="${esc(pageUrl(site, d.slug))}" data-done="${esc(w.copied)}" title="${esc(w.copyLink)}" aria-label="${esc(w.copyLink)}">${COPY_ICON}</button></li>`;
+  };
+  const filter = `<div class="filter">
+<input type="search" id="q" placeholder="${esc(w.search)}" aria-label="${esc(w.search)}" autocomplete="off">
+${dims.map(([d, values]) => `<div class="dim" role="group" aria-label="${esc(d)}"><span>${esc(d)}</span>${values.map((v) => `<button class="chip" data-d="${esc(d)}" data-v="${esc(v)}" aria-pressed="false">${esc(v)}</button>`).join('')}</div>`).join('\n')}
+</div>
+<div class="bar"><span id="count">${esc(w.shown.replace('{n}', String(pages.length)).replace('{m}', String(pages.length)))}</span><button class="copy-all" title="${esc(w.copyLinksHint)}">${COPY_ICON}<span>${esc(w.copyLinks)}</span></button></div>
+`;
   return `<!doctype html>
 <html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(site.title)}</title><link rel="alternate" type="application/atom+xml" title="${esc(site.title)}" href="${FEED}"><style>${PAGE_STYLE}</style></head>
+<title>${esc(site.title)}</title><link rel="alternate" type="application/atom+xml" title="${esc(site.title)}" href="${FEED}"><style>${PAGE_STYLE}${OVERVIEW_STYLE}</style></head>
 <body><main>
 <h1>${esc(site.title)}</h1>
 <div class="when">${esc(w.overview)} · <a href="${FEED}">${esc(w.feed)}</a></div>
 ${
   pages.length
-    ? `<ul class="demos">${pages.map((d) => `<li><a href="${d.slug}/"><b>${esc(d.title)}</b><span>${[day(newest(d), language), ...(d.by ? [w.by(d.by)] : []), firstSentence(d.text)].map(esc).join(' · ')}</span></a></li>`).join('\n')}</ul>`
+    ? `${filter}<ul class="demos">${pages.map(entry).join('\n')}</ul>
+<p class="none" hidden>${esc(w.noMatch)}</p>
+<script>${overviewScript(w)}</script>`
     : `<p>${esc(w.noDemos)}</p>`
 }
 ${credit(language)}</main></body></html>
 `;
 }
+
+/**
+ * The overview's filter in the browser: the chips and the search from the URL, the pages that pass
+ * them, the count, the URL kept in step; copying a page's link, and the links of those shown as
+ * `text/html` and as a Markdown list (`text/plain`), as text alone where the browser has no `ClipboardItem`.
+ */
+const overviewScript = (w: (typeof PAGE_WORDS)[PageLanguage]) => `
+  const words = ${JSON.stringify({ shown: w.shown, copied: w.copied, copyLinks: w.copyLinks }).replace(/</g, '\\u003c')};
+  const q = document.getElementById('q'), chips = [...document.querySelectorAll('.chip')], items = [...document.querySelectorAll('ul.demos li')];
+  const count = document.getElementById('count'), none = document.querySelector('.none'), all = document.querySelector('.copy-all');
+  const params = new URLSearchParams(location.search);
+  q.value = params.get('q') || '';
+  for (const c of chips) c.setAttribute('aria-pressed', String(params.getAll(c.dataset.d).includes(c.dataset.v)));
+  const tagsOf = (li) => { try { return JSON.parse(li.dataset.tags); } catch { return {}; } };
+  const apply = () => {
+    const chosen = {};
+    for (const c of chips) if (c.getAttribute('aria-pressed') === 'true') (chosen[c.dataset.d] ||= []).push(c.dataset.v);
+    const terms = q.value.toLowerCase().split(/\\s+/).filter(Boolean);
+    let n = 0;
+    for (const li of items) {
+      const tags = tagsOf(li);
+      // any of a dimension's chips, and every dimension with one
+      const pass = Object.entries(chosen).every(([d, vs]) => vs.some((v) => (tags[d] || []).includes(v))) && terms.every((t) => li.dataset.search.includes(t));
+      li.hidden = !pass;
+      if (pass) n++;
+    }
+    count.textContent = words.shown.replace('{n}', n).replace('{m}', items.length);
+    none.hidden = n > 0;
+    all.disabled = n === 0;
+    const next = new URLSearchParams();
+    for (const [d, vs] of Object.entries(chosen)) for (const v of vs) next.append(d, v);
+    if (q.value.trim()) next.set('q', q.value.trim());
+    const search = next.toString();
+    history.replaceState(null, '', search ? '?' + search : location.pathname);
+  };
+  for (const c of chips) c.addEventListener('click', () => { c.setAttribute('aria-pressed', String(c.getAttribute('aria-pressed') !== 'true')); apply(); });
+  q.addEventListener('input', apply);
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const copy = async (html, text) => {
+    if (window.ClipboardItem && navigator.clipboard.write) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
+        return;
+      } catch {}
+    }
+    await navigator.clipboard.writeText(text);
+  };
+  for (const b of document.querySelectorAll('.copy')) b.addEventListener('click', async () => {
+    const url = b.dataset.url;
+    await copy('<a href="' + esc(url) + '">' + esc(url) + '</a>', url);
+    b.classList.add('done');
+    setTimeout(() => b.classList.remove('done'), 1500);
+  });
+  all.addEventListener('click', async () => {
+    const shown = items.filter((li) => !li.hidden).map((li) => ({ title: li.querySelector('b').textContent, url: li.querySelector('.copy').dataset.url }));
+    if (!shown.length) return;
+    await copy('<ul>' + shown.map((d) => '<li><a href="' + esc(d.url) + '">' + esc(d.title) + '</a></li>').join('') + '</ul>', shown.map((d) => '- [' + d.title.replace(/([\\[\\]])/g, '\\\\$1') + '](' + d.url + ')').join('\\n'));
+    const label = all.querySelector('span');
+    label.textContent = words.copied;
+    setTimeout(() => { label.textContent = words.copyLinks; }, 1500);
+  });
+  apply();
+`;
 
 /** Text without the control characters XML 1.0 does not allow. */
 const printable = (s: string) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '');
@@ -812,7 +938,9 @@ function feedXml(site: DemoSite, pages: (Meta & { slug: string })[], language: P
 <id>${url}</id>
 <published>${xml(d.first)}</published>
 <updated>${xml(newest(d))}</updated>
-${d.by ? `<author><name>${xml(d.by)}</name></author>\n` : ''}<summary type="text">${xml(firstSentence(plain))}</summary>
+${d.by ? `<author><name>${xml(d.by)}</name></author>\n` : ''}${Object.entries(d.tags ?? {})
+      .flatMap(([dim, values]) => values.map((v) => `<category term="${xml(v)}" label="${xml(`${dim}: ${v}`)}"/>\n`))
+      .join('')}<summary type="text">${xml(firstSentence(plain))}</summary>
 <content type="html">${xml(paragraphs(plain))}</content>
 </entry>
 `;

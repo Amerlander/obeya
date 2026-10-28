@@ -2,7 +2,7 @@
 
 import { createContext, type CSSProperties, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, type ChangeRoute, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, openQuestions, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type Finding, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor } from '../core/types';
+import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, type ChangeRoute, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, type PageTags, openQuestions, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type Finding, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
@@ -15,7 +15,8 @@ import { ResultFiles } from './files';
 import { DiscardChanges, FolderBox, FolderLine, useFolderDiff } from './folder';
 import { landedRef, shownTitle } from './parts';
 import { inQueue } from '../core/queue';
-import { QueueList, scrollerOf, useQueueMove, useQueueSort, waitedOn } from './queue';
+import { QueueList, scrollerOf, useMenuClose, useQueueMove, useQueueSort, waitedOn } from './queue';
+import { dimensions, shownTags } from '../core/page-tags';
 import { Inline, plain } from './markdown';
 import { Body, goToMessage, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
 import { appended, cardDraft, giveBack, questionsKey, typeAtCursor, updateDraft, useDraft } from './draft';
@@ -205,7 +206,11 @@ export function Detail(p: Props) {
   // about the demo shown, the latest or an earlier one
   const sharing = !!item.demo && !item.prototypeOf;
   const shareBox = (demo: Demo) =>
-    shares?.share || item.share ? <ShareBox item={item} demo={demo} act={act} onApproval={!!shares?.shareOnApproval} /> : <ExportBox item={item} demo={demo} run={run} needs={shares?.shareNeeds} />;
+    shares?.share || item.share ? (
+      <ShareBox item={item} demo={demo} act={act} onApproval={!!shares?.shareOnApproval} vocabulary={shares?.shareTags} />
+    ) : (
+      <ExportBox item={item} demo={demo} run={run} needs={shares?.shareNeeds} />
+    );
   // a prototype is discarded or its idea built on it, never approved or deleted; built once the idea's agent has taken in what changed
   const ideaTitle = plain(item.ideaTitle ?? p.from?.title ?? '');
   // once the idea has become a project, one of its workstreams is built on the prototype instead
@@ -2233,7 +2238,7 @@ function PrBox({ pr }: { pr: PullRequest }) {
  * the latest demo not on the page has „Mit der Freigabe teilen“ until the card is approved, and
  * "Teilen" reads „Jetzt teilen“: the owner may share it before approving, or not on approving.
  */
-function ShareBox({ item, demo, act, onApproval }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void>; onApproval: boolean }) {
+function ShareBox({ item, demo, act, onApproval, vocabulary }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void>; onApproval: boolean; vocabulary?: PageTags | undefined }) {
   const [copied, copy] = useCopy(2000);
   const s = item.share;
   const all = [...(item.demos ?? []), ...(item.demo ? [item.demo] : [])];
@@ -2325,6 +2330,68 @@ function ShareBox({ item, demo, act, onApproval }: { item: Item; demo: Demo; act
           </div>
           {approval && <div className="share-row">{approval}</div>}
         </>
+      )}
+      {vocabulary && <ShareTags tags={item.tags} vocabulary={vocabulary} set={(dimension, values) => go({ action: 'pageTags', dimension, values })} />}
+    </div>
+  );
+}
+
+/**
+ * The page's tags as chips, before sharing and after: × takes one off, „+“ offers the values of the
+ * site's vocabulary the page lacks. A change takes effect at once (a shared page goes out again), and
+ * stays: neither a later worker nor Obeya's reading session changes what the owner set.
+ */
+function ShareTags({ tags, vocabulary, set }: { tags: PageTags | undefined; vocabulary: PageTags; set: (dimension: string, values: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useMenuClose(open, box, () => setOpen(false), true);
+  const shown = shownTags(tags, vocabulary);
+  const on = new Map(shown);
+  const rest = dimensions(vocabulary).flatMap(([d, values]) => {
+    const left = values.filter((v) => !on.get(d)?.includes(v));
+    return left.length ? [[d, left] as const] : [];
+  });
+  return (
+    <div className="share-row share-tags" ref={box} title={t.share.tagsHint}>
+      <span className="share-label">{t.share.tags}</span>
+      {!shown.length && <span className="hint">{t.share.noTags}</span>}
+      {shown.flatMap(([d, values]) =>
+        values.map((v) => (
+          <span key={`${d}\n${v}`} className="tag-chip">
+            <span className="dim">{d}:</span> {v}
+            <button className="x" title={t.share.removeTag(d, v)} aria-label={t.share.removeTag(d, v)} onClick={() => set(d, values.filter((x) => x !== v))}>
+              ×
+            </button>
+          </span>
+        )),
+      )}
+      {rest.length > 0 && (
+        <span className="menu-pill">
+          <button className={open ? 'tag-add on' : 'tag-add'} title={t.share.addTag} aria-label={t.share.addTag} aria-expanded={open} onClick={() => setOpen(!open)}>
+            +
+          </button>
+          {open && (
+            <div className="bar-menu tag-menu">
+              {rest.map(([d, values]) => (
+                <div key={d} className="tag-dim">
+                  <span className="hint">{d}</span>
+                  {values.map((v) => (
+                    <button
+                      key={v}
+                      className="tag-chip pick"
+                      onClick={() => {
+                        setOpen(false);
+                        set(d, [...(on.get(d) ?? []), v]);
+                      }}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </span>
       )}
     </div>
   );

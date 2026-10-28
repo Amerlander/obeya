@@ -13,9 +13,10 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
-import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item } from '../core/types';
-import { BadRequest, type Board, cardDemos, contributionOf, type DemoRef, type PrState, reshareable, sameDemo, type SharedDemo, sharedDemos, type StoredDemo, type StoredReshare, type StoredShare } from './board';
+import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item, type PageTags } from '../core/types';
+import { BadRequest, type Board, cardDemos, contributionOf, type DemoRef, pageTagsOf, type PrState, reshareable, sameDemo, type SharedDemo, sharedDemos, type StoredDemo, type StoredReshare, type StoredShare } from './board';
 import { PAGE_CHANGES, pagesVersion } from '../core/page-changes';
+import { dimensions, shownTags, tagsOf, untagged } from '../core/page-tags';
 import type { DemoSite } from '../adapters/types';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { type Gone, siteBase, siteMissing, siteTarget } from './site';
@@ -61,6 +62,8 @@ export interface SharePage {
   shared: string[];
   /** The later demo versions on the page, in order of handover. */
   more?: PageDemo[];
+  /** The page's tags from the site's vocabulary, by dimension (`tagsOf`); none where the site has none. */
+  tags?: PageTags;
 }
 
 /** Where a repository's demos go: the site its settings name; with its checkout. */
@@ -237,6 +240,26 @@ export class Sharing {
     this.set(cardId, on ? s : { ...s, notOnApproval: true });
   }
 
+  /**
+   * The owner sets one dimension of the page's tags by hand: neither a worker nor the reading session
+   * changes it after. It takes effect at once: a page online goes out again with it, one going out
+   * gets it right after.
+   */
+  setTags(cardId: string, dimension: string, values: string[]) {
+    const card = this.card(cardId);
+    if (card.prototypeOf) throw new BadRequest('noShare', 'prototypes are not shared');
+    const vocabulary = this.vocabulary(card);
+    const allowed = dimensions(vocabulary).find(([d]) => d === dimension)?.[1];
+    if (!allowed) throw new BadRequest('invalid', `the site has no tags of the dimension ${dimension}`);
+    const wrong = values.filter((v) => !allowed.includes(v));
+    if (wrong.length) throw new BadRequest('invalid', `not in the site's tags of ${dimension}: ${wrong.join(', ')}`);
+    const s = this.stored(cardId) ?? { slug: slugOf(card) };
+    const chosen = allowed.filter((v) => values.includes(v));
+    this.setTagFields(cardId, card, { tags: { ...s.tags, [dimension]: chosen } });
+    this.o.board.log(cardId, 'state', 'owner', this.o.board.t.share.tagsSet(dimension, chosen));
+    if (s.url && !s.state) this.refresh(cardId, true);
+  }
+
   /** The approval of a card whose owner unticked „Mit der Freigabe teilen“: the log says so where it would have shared. */
   private notOnPage(cardId: string) {
     const demo = this.demo(cardId);
@@ -362,14 +385,13 @@ export class Sharing {
    * now, so a newer demo on a card still waits for its "Neu teilen"; a share the owner starts
    * meanwhile goes out between two of them.
    */
-  reshareMany(count: number | null) {
+  reshareMany(count: number | null, tags = false) {
     const run = this.o.board.reshareRun();
     if (run?.queue.length) throw new BadRequest('reshareBusy', 'pages are being shared again already');
-    const rows = this.o.board
-      .outdatedRows()
-      .filter(({ r }) => this.find(r.id) && this.target(this.find(r.id)!))
-      .map(({ r }) => ({ r, s: JSON.parse(r.share!) as StoredShare }));
-    if (!rows.length) throw new BadRequest('nothingOutdated', 'no shared page is outdated');
+    const rows = (tags ? this.o.board.untaggedRows() : this.o.board.outdatedRows().map(({ r }) => r))
+      .filter((r) => this.find(r.id) && this.target(this.find(r.id)!))
+      .map((r) => ({ r, s: JSON.parse(r.share!) as StoredShare }));
+    if (!rows.length) throw new BadRequest('nothingOutdated', tags ? 'no shared page lacks tags' : 'no shared page is outdated');
     const made = (dir?: string) => (dir ? (statOr(join(dir, 'demo.mp4')) ?? statOr(join(dir, 'index.html')) ?? statOr(dir) ?? 0) : 0);
     // newest by the newest version on the page
     const queue = rows
@@ -377,7 +399,7 @@ export class Sharing {
       .sort((a, b) => b.at - a.at)
       .slice(0, count ?? undefined)
       .map((r) => r.id);
-    this.o.board.setReshareRun({ queue, total: queue.length, done: 0, failed: [] });
+    this.o.board.setReshareRun({ queue, total: queue.length, done: 0, failed: [], ...(tags ? { tags: true as const } : {}) });
     this.nextAgain();
   }
 
@@ -391,8 +413,11 @@ export class Sharing {
 
   /** "Ausblenden": puts away what the finished run says, and the notice of outdated pages until a newer change. */
   dismissResharing() {
-    if (this.o.board.reshareRun()?.queue.length) throw new BadRequest('reshareBusy', 'pages are being shared again');
-    this.o.board.dismissOutdated();
+    const run = this.o.board.reshareRun();
+    if (run?.queue.length) throw new BadRequest('reshareBusy', 'pages are being shared again');
+    // a run tagging pages leaves the notice of outdated pages as it is
+    if (run?.tags) this.o.board.setReshareRun(null);
+    else this.o.board.dismissOutdated();
   }
 
   /** The next page of the run sharing many again, once the site is free. */
@@ -409,13 +434,16 @@ export class Sharing {
     const id = this.o.board.reshareRun()?.queue[0];
     if (!id) return;
     const s = this.stored(id);
+    const tags = !!this.o.board.reshareRun()?.tags;
     let ok: boolean | null = null;
     if (s?.state === 'publishing' && s.again) ok = await this.publish(id);
     else {
       const row = this.find(id) && this.o.board.row(id);
-      if (s && row && reshareable(row).length) {
+      // one that got its tags meanwhile, or is up to date, no longer counts
+      const still = row && (tags ? this.o.board.untaggedRows().some((r) => r.id === id) : reshareable(row).length > 0);
+      if (s && still) {
         this.set(id, { ...s, state: 'publishing', refresh: true, again: true });
-        this.o.board.log(id, 'state', 'owner', this.o.board.t.share.againWithOthers);
+        this.o.board.log(id, 'state', 'owner', tags ? this.o.board.t.share.tagging : this.o.board.t.share.againWithOthers);
         ok = await this.publish(id);
       }
     }
@@ -483,11 +511,11 @@ export class Sharing {
     }
   }
 
-  /** Publishes again what the page shows, with the pull request's link. */
-  private refresh(cardId: string) {
+  /** Publishes again what the page shows, with the pull request's link, or with the tags the owner set (`retag`). */
+  private refresh(cardId: string, retag = false) {
     const s = this.stored(cardId);
     if (!s?.url || s.state) return;
-    this.set(cardId, { ...s, state: 'publishing', refresh: true });
+    this.set(cardId, { ...s, state: 'publishing', refresh: true, ...(retag ? { retag: true as const } : {}) });
     void serial(() => this.publish(cardId));
   }
 
@@ -497,7 +525,7 @@ export class Sharing {
     const card = this.find(cardId);
     if (s?.state !== 'publishing' || !card) return null;
     const t = this.o.board.t.share;
-    const failed = s.again ? t.notAgain : s.refresh ? t.notLinked : t.notShared;
+    const failed = s.again ? t.notAgain : s.retag ? t.notShared : s.refresh ? t.notLinked : t.notShared;
     const back = (why: string, out = '') => {
       this.set(cardId, atRest(s));
       this.o.board.log(cardId, 'error', 'obeya', [`${failed}: ${why}`, out].filter(Boolean).join('\n\n'));
@@ -530,11 +558,16 @@ export class Sharing {
         }
         const demo = this.cardDemo(cardId, ref);
         if (!demo) return back(t.noDemo);
-        const page = await this.page(card, demo);
+        // a page written now chooses the tags the card's page lacks along with its text
+        const page = await this.page(card, demo, this.missingTags(card));
         demos.push({ ...refOf(demo), ...(demo.at ? { at: demo.at } : {}), shown: { title: page.title, text: page.text, chapters: demo.chapters, kind: demo.kind } });
       }
     }
     const [first, ...later] = demos as [SharedDemo, ...SharedDemo[]];
+    const vocabulary = this.vocabulary(card);
+    const lacking = this.missingTags(card);
+    if (lacking) await this.chooseTags(card, demos, lacking);
+    const tags = tagsOf(pageTagsOf(this.o.board.row(cardId)), vocabulary);
     const pr = this.prOf(cardId);
     const input: SharePage = {
       slug: s.slug,
@@ -544,6 +577,7 @@ export class Sharing {
       dir: first.dir,
       shared: this.others(cardId, target.key),
       ...(later.length ? { more: later.map((d) => ({ ...d.shown, dir: d.dir, ...(d.at ? { at: d.at } : {}) })) } : {}),
+      ...(Object.keys(tags).length ? { tags } : {}),
     };
     const r = await target.publish(input, (text) => this.o.board.log(cardId, 'activity', 'obeya', text));
     this.lost(target.key, r.gone);
@@ -551,12 +585,13 @@ export class Sharing {
     const { url } = r;
     this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), version: pagesVersion(), ...kept(s) });
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
-    this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.refresh ? t.linksPr(url) : t.shared(url));
+    this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.retag ? t.retagged(url) : s.refresh ? t.linksPr(url) : t.shared(url));
     this.settled(cardId, { url });
     if (pr) await this.linkPr(cardId, pr, url, target.repo, first.shown.kind);
-    // the pull request was opened while the page went out: once more, with its link
+    // the pull request was opened while the page went out, or the owner changed its tags: once more, with them
     const now = this.prOf(cardId);
-    if (now && now !== pr) this.refresh(cardId);
+    const retag = JSON.stringify(tagsOf(pageTagsOf(this.o.board.row(cardId)), vocabulary)) !== JSON.stringify(tags);
+    if ((now && now !== pr) || retag) this.refresh(cardId, retag);
     return true;
   }
 
@@ -701,10 +736,14 @@ export class Sharing {
     return out;
   }
 
-  /** The page's title and text: the worker's, else written now and kept with the demo, so it is not written again. */
-  private async page(card: Item, demo: Demo & { dir: string }): Promise<DemoPage> {
+  /**
+   * The page's title and text: the worker's, else written now and kept with the demo, so it is not
+   * written again; a page written now chooses the tags the card's page lacks (`lacking`) along with it.
+   */
+  private async page(card: Item, demo: Demo & { dir: string }, lacking: PageTags | null = null): Promise<DemoPage> {
     if (demo.page) return demo.page;
-    const page = await this.writePage(card, demo, this.languageOf(demo.dir, card));
+    const { tags, ...page } = await this.writePage(card, demo, this.languageOf(demo.dir, card), lacking);
+    if (tags) this.chosen(card.id, tags);
     const row = this.o.board.row(card.id);
     const latest = this.demo(card.id);
     if (latest && sameDemo(latest, demo)) this.o.board.work(card.id, { demo: JSON.stringify({ ...latest, page }) });
@@ -717,7 +756,7 @@ export class Sharing {
    * The page's text for a demo handed over without one (its repository did not share then): a short
    * session writes it from the worker's summary. Without one, the card's title and the summary's start stand in.
    */
-  private async writePage(card: Item, demo: Demo, language: PageLanguage): Promise<DemoPage> {
+  private async writePage(card: Item, demo: Demo, language: PageLanguage, lacking: PageTags | null): Promise<DemoPage> {
     // a card's summary goes with its approval; the log keeps every handover
     const summary = this.o.board.summary(card.id) ?? this.o.board.events(card.id).filter((e) => e.kind === 'review' && e.author === 'worker').at(-1)?.text ?? '';
     const fallback: DemoPage = { title: plainText(card.title), text: plainText(summary).split(/(?<=[.!?])\s+/).slice(0, 4).join(' ') || plainText(card.title) };
@@ -725,15 +764,19 @@ export class Sharing {
     await readSession(this.o.runtime, {
       cwd: this.target(card)?.repo ?? this.o.home,
       role: 'chores',
-      system: pageSystem(LANGUAGE_NAMES[language]),
+      system: pageSystem(LANGUAGE_NAMES[language], lacking),
       tools: (finish) => [
         {
           name: 'page',
-          description: `The page's title and text, in ${LANGUAGE_NAMES[language]}.`,
-          schema: { title: z.string(), text: z.string() },
-          run: ({ title, text }) => {
+          description: `The page's title and text, in ${LANGUAGE_NAMES[language]}${lacking ? `, and its tags: ${TAGS_FIELD}` : ''}.`,
+          schema: { title: z.string(), text: z.string(), ...(lacking ? { tags: tagsSchema(lacking) } : {}) },
+          run: ({ title, text, tags }) => {
             if (page) return 'Already written.';
-            page = { title: String(title).trim().slice(0, 200) || fallback.title, text: String(text).trim().slice(0, 2000) || fallback.text };
+            page = {
+              title: String(title).trim().slice(0, 200) || fallback.title,
+              text: String(text).trim().slice(0, 2000) || fallback.text,
+              ...(lacking ? { tags: picked(tags, lacking) } : {}),
+            };
             return finish('Recorded. End your turn now.');
           },
         },
@@ -752,6 +795,67 @@ export class Sharing {
         .join('\n\n'),
     });
     return page ?? fallback;
+  }
+
+  /**
+   * The tags the card's page lacks for the site's vocabulary (each such dimension with its values),
+   * chosen by a short session from the title and text of its demos; it chooses only those, so what
+   * the owner or a worker chose stays. Without an answer they stay lacking.
+   */
+  private async chooseTags(card: Item, demos: SharedDemo[], lacking: PageTags) {
+    let tags: PageTags | null = null;
+    await readSession(this.o.runtime, {
+      cwd: this.target(card)?.repo ?? this.o.home,
+      role: 'chores',
+      system: TAGS_SYSTEM,
+      tools: (finish) => [
+        {
+          name: 'tags',
+          description: `The page's tags: ${TAGS_FIELD}.`,
+          schema: { tags: tagsSchema(lacking) },
+          run: ({ tags: given }) => {
+            if (tags) return 'Already chosen.';
+            tags = picked(given, lacking);
+            return finish('Recorded. End your turn now.');
+          },
+        },
+      ],
+      brief: [
+        `The dimensions to choose for, each with its values:\n${dimensions(lacking)
+          .map(([d, v]) => `- ${d}: ${v.join(', ')}`)
+          .join('\n')}`,
+        ...demos.map((d, i) => `${i ? 'A later demo on the page' : 'The page'}: “${d.shown.title}”\n${d.shown.text}`),
+      ].join('\n\n'),
+    });
+    if (tags) this.chosen(card.id, tags);
+  }
+
+  /**
+   * Keeps the tags the reading session chose: each dimension of them in place of what the card had
+   * of it (which lacked a value the vocabulary has), below what a worker or the owner chooses later.
+   */
+  private chosen(cardId: string, tags: PageTags) {
+    const row = this.o.board.row(cardId);
+    const without = (t: PageTags | undefined) => (t ? Object.fromEntries(Object.entries(t).filter(([d]) => !(d in tags))) : undefined);
+    const page = <D extends Demo>(d: D): D => (d.page?.tags ? { ...d, page: { ...d.page, tags: without(d.page.tags) } } : d);
+    if (row.demo) this.o.board.work(cardId, { demo: JSON.stringify(page(JSON.parse(row.demo) as StoredDemo)) });
+    if (row.demos) this.o.board.work(cardId, { demos: JSON.stringify((JSON.parse(row.demos) as StoredDemo[]).map(page)) });
+    const s = this.stored(cardId);
+    this.setTagFields(cardId, this.card(cardId), { tags: without(s?.tags) ?? {}, auto: { ...s?.auto, ...tags } });
+    this.o.board.log(cardId, 'activity', 'obeya', this.o.board.t.share.tagsChosen(shownTags(tags, tags).map(([d, v]) => `${d}: ${v.join(', ')}`).join(' · ') || '–'));
+  }
+
+  /** The site's vocabulary of tags for the card's page; none where its repository names none. */
+  private vocabulary(card: Item): PageTags | undefined {
+    const v = this.o.sourceFor(card)?.site.tags;
+    return v && dimensions(v).length ? v : undefined;
+  }
+
+  /** The dimensions of the vocabulary the card's page lacks tags for, each with its values; null where it lacks none. */
+  private missingTags(card: Item): PageTags | null {
+    const vocabulary = this.vocabulary(card);
+    const lacking = untagged(pageTagsOf(this.o.board.row(card.id)), vocabulary);
+    return lacking.length ? Object.fromEntries(lacking.map((d) => [d, vocabulary![d]!])) : null;
   }
 
   /** The slugs of the other pages shared through the target. */
@@ -833,18 +937,56 @@ export class Sharing {
     if (!this.after.has(cardId)) this.o.onPage?.(cardId, r);
   }
 
-  private set(cardId: string, s: StoredShare) {
-    this.o.board.work(cardId, { share: JSON.stringify(s) });
+  /**
+   * Stores the card's share. The page's tags stay as they are (`setTags`, `chosen` change them): a
+   * share read before the owner changed them, while its page went out, would bring the old ones back.
+   */
+  private set(cardId: string, { tags: _, auto: __, ...s }: StoredShare) {
+    const now = this.stored(cardId);
+    this.o.board.work(cardId, { share: JSON.stringify({ ...s, ...(now?.tags ? { tags: now.tags } : {}), ...(now?.auto ? { auto: now.auto } : {}) }) });
+  }
+
+  /** Changes the page's tags the owner set by hand, or the reading session chose. */
+  private setTagFields(cardId: string, card: Item, fields: Pick<StoredShare, 'tags' | 'auto'>) {
+    const s = this.stored(cardId) ?? { slug: slugOf(card) };
+    this.o.board.work(cardId, { share: JSON.stringify({ ...s, ...fields }) });
   }
 }
 
-const pageSystem = (language: string) => `You write the page on which the demo of a change (a video, or a page with charts or an analysis) is shared with colleagues of the team. They have never seen the tool the change was planned in, its cards or plan docs; they know the product. Read the card's task and its worker's summary, and call the tool page once with:
+const pageSystem = (language: string, lacking: PageTags | null) => `You write the page on which the demo of a change (a video, or a page with charts or an analysis) is shared with colleagues of the team. They have never seen the tool the change was planned in, its cards or plan docs; they know the product. Read the card's task and its worker's summary, and call the tool page once with:
 - title: what changes, for a user of the product, in a few words (not the card's internal wording).
-- text: two to five sentences in ${language}: what changes for the user and why. No findings, no test details, no internal process (cards, workers, demos, reviews), no markdown.
+- text: two to five sentences in ${language}: what changes for the user and why. No findings, no test details, no internal process (cards, workers, demos, reviews), no markdown.${
+  lacking
+    ? `
+- tags: for each of these dimensions, the values that fit the change (an empty list where none does), from these alone:
+${dimensions(lacking)
+  .map(([d, v]) => `  - ${d}: ${v.join(', ')}`)
+  .join('\n')}`
+    : ''
+}
 Then end your turn. Read code only if the summary leaves unclear what the change does for the user.`;
 
+const TAGS_SYSTEM = `You tag the page on which the demo of a change is shared with colleagues, so they find it among many by its tags. Read the page's title and text, and call the tool tags once: for each dimension the brief names, the values that fit the change (an empty list where none does), from its values alone. Then end your turn.`;
+
+const TAGS_FIELD = 'for each dimension, the values that fit (an empty list where none does), only from the values given for it';
+
+const tagsSchema = (lacking: PageTags) =>
+  z
+    .record(z.string(), z.array(z.string()))
+    .describe(
+      dimensions(lacking)
+        .map(([d, v]) => `${d}: ${v.join(', ')}`)
+        .join('; '),
+    );
+
+/** The tags a session gave, kept to the dimensions and values asked for; a dimension it left out has none. */
+function picked(given: unknown, lacking: PageTags): PageTags {
+  const g = (given && typeof given === 'object' ? given : {}) as Record<string, unknown>;
+  return Object.fromEntries(dimensions(lacking).map(([d, values]) => [d, values.filter((v) => Array.isArray(g[d]) && (g[d] as unknown[]).includes(v))]));
+}
+
 /** A share at rest: neither held, nor publishing, nor withdrawing. */
-function atRest({ state: _, refresh: __, again: ___, next: ____, ...s }: StoredShare): StoredShare {
+function atRest({ state: _, refresh: __, again: ___, next: ____, retag: _____, ...s }: StoredShare): StoredShare {
   return s;
 }
 

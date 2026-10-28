@@ -38,6 +38,7 @@ import { commandsOf, heldGroups, withoutHeld } from './trust';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
+import { dimensions } from '../core/page-tags';
 import { type DueRestart, Workers } from './workers';
 import { branchSetting, type CardWorkspaces, defaultBranch, type FileAt, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, markFolder, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
 import { FolderWorkspaces } from './folder';
@@ -392,6 +393,11 @@ export class CanvasRuntime {
       },
     });
     this.sharing.resume();
+    // the pages without tags the Koordinator's sheet offers to tag, by each repository's site
+    board.showVocabulary((repo) => {
+      const site = this.repos.find((r) => r.ref.id === repo)?.site;
+      return site && dimensions(site.tags).length ? site.tags : undefined;
+    });
     // snoozed cards wake at their time: one that passed while Obeya was not running, or the machine slept, at once
     this.wakeDue();
     this.waker = setInterval(() => this.wakeDue(), WAKE_EVERY_MS);
@@ -1478,6 +1484,9 @@ export class CanvasRuntime {
       case 'shareOnApproval':
         if (typeof a.on !== 'boolean') throw new BadRequest('invalid', 'on must be true or false');
         return this.sharing.onApproval(cardId, a.on);
+      case 'pageTags':
+        if (typeof a.dimension !== 'string' || !Array.isArray(a.values) || !a.values.every((v) => typeof v === 'string')) throw new BadRequest('invalid', 'dimension must be a string, values a list of strings');
+        return this.sharing.setTags(cardId, a.dimension, a.values);
       default:
         throw new BadRequest('invalid', 'unknown action');
     }
@@ -2623,17 +2632,19 @@ function siteOf(adapter: RepoAdapter): DemoSite | null {
 }
 
 /** What the canvas tells the UI about it: a site to share on here, or the env file the site lacks on this machine. */
-function shareRef(site: DemoSite | null, home: string): Pick<RepoRef, 'share' | 'shareNeeds' | 'shareOnApproval'> {
+function shareRef(site: DemoSite | null, home: string): Pick<RepoRef, 'share' | 'shareNeeds' | 'shareOnApproval' | 'shareTags'> {
   if (!site) return {};
   const missing = siteMissing(home, site);
-  return missing ? { shareNeeds: { site: siteName(site), file: missing } } : { share: true, ...(site.publish === 'approved' ? { shareOnApproval: true as const } : {}) };
+  const tags = dimensions(site.tags).length ? { shareTags: Object.fromEntries(dimensions(site.tags)) } : {};
+  return missing ? { shareNeeds: { site: siteName(site), file: missing } } : { share: true, ...(site.publish === 'approved' ? { shareOnApproval: true as const } : {}), ...tags };
 }
 
 /** Tells the UI about sharing on the repository what `share` says, in place of what it was told before. */
-function setShare(ref: RepoRef, share: Pick<RepoRef, 'share' | 'shareNeeds' | 'shareOnApproval'>) {
+function setShare(ref: RepoRef, share: Pick<RepoRef, 'share' | 'shareNeeds' | 'shareOnApproval' | 'shareTags'>) {
   delete ref.share;
   delete ref.shareNeeds;
   delete ref.shareOnApproval;
+  delete ref.shareTags;
   Object.assign(ref, share);
 }
 

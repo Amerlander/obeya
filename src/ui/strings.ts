@@ -800,6 +800,12 @@ const de = {
     outdated: 'Seit diese Seite geteilt wurde, haben sich die Seiten geändert:',
     reshare: 'Erneut teilen',
     reshareHint: 'Erzeugt die Seite neu, mit denselben Demos; der Link bleibt.',
+    /** The page's tags as chips in the share box, from the site's vocabulary. */
+    tags: 'Tags',
+    tagsHint: 'Die Tags der Seite: Danach filtert die Übersicht der Demo-Site. Eine Änderung gilt sofort, eine geteilte Seite geht gleich neu hinaus.',
+    noTags: 'noch keine',
+    addTag: 'Tag hinzufügen',
+    removeTag: (dimension: string, value: string) => `${dimension}: ${value} entfernen`,
   },
   /** What changed on shared demo pages (src/core/page-changes.ts), as their viewers see it. */
   pageChanges: {
@@ -815,6 +821,7 @@ const de = {
       '2026-10-20-by': 'Jede Seite nennt, wer sie geteilt hat („Geteilt von … am …“), die Übersicht ebenso.',
       '2026-10-20-inline':
         'Bilder, Stylesheets und Skripte des Artefakts stecken in seiner Seite: hinter einem Login (Cloudflare Access) fehlten sie in Firefox, das sie ohne das Login-Cookie anfragte.',
+      '2026-10-28-tags': 'Die Tags der Seite stehen unter dem Titel und führen zur so gefilterten Übersicht.',
     } satisfies Record<PageChangeId, string>,
     pages: (n: number) => (n === 1 ? 'eine Seite' : `${n} Seiten`),
   },
@@ -940,6 +947,12 @@ const de = {
       stopHint: 'Die Seite, die gerade hinausgeht, wird fertig; die übrigen bleiben, wie sie sind.',
       dismiss: 'Ausblenden',
       dismissOutdatedHint: 'Blendet den Hinweis aus, bis sich die Seiten wieder ändern. Jede Aufgabe bietet „Erneut teilen“ weiter an.',
+      untagged: (n: number) => (n === 1 ? 'Eine Seite ohne Tags' : `${n} Seiten ohne Tags`),
+      untaggedHint: 'Geteilte Seiten, denen Tags aus dem Vokabular der Demo-Site fehlen (oder die einen gestrichenen Wert tragen). Eine kurze Lese-Session wählt sie aus Titel und Text, dann geht die Seite neu hinaus, eine nach der anderen. Von Hand gesetzte Tags bleiben.',
+      tag: (n: number) => (n === 1 ? 'Taggen und teilen' : `Alle ${n} taggen und teilen`),
+      tagProgress: (done: number, total: number) => `Getaggt und geteilt: ${done} von ${total}`,
+      tagFinished: (done: number, total: number) => (done === total ? (total === 1 ? 'Eine Seite getaggt und geteilt' : `${total} Seiten getaggt und geteilt`) : `Getaggt und geteilt: ${done} von ${total}`),
+      tagStopped: (done: number, total: number) => `Angehalten: ${done} von ${total} getaggt und geteilt`,
     },
   },
   /** Other devices reaching Obeya: „Telefon verbinden“ and the section „Von anderen Geräten“ (src/ui/access.tsx). */
@@ -1216,6 +1229,8 @@ const de = {
       siteEnv: 'Datei mit Zugangsdaten (SCHLÜSSEL=Wert), relativ zu Obeyas Verzeichnis',
       siteHeaders: 'Header zum Lesen hinter einem Login, einer pro Zeile',
       siteMaxFile: 'Größte Datei (MiB)',
+      siteTags: 'Tags der Seiten, eine Dimension pro Zeile: Name, Doppelpunkt, erlaubte Werte mit Komma',
+      siteTagsPlaceholder: 'Bereich: Abrechnung, Berichte, Einstellungen\nZielgruppe: Admins, Endkunden',
       sitePublish: 'Auf die Site kommt eine Demo',
       sitePublishes: { click: 'beim Klick auf „Teilen“', approved: 'mit der Freigabe' },
       siteHint:
@@ -2576,6 +2591,11 @@ const en: Strings = {
     outdated: 'Since this page was shared, the pages changed:',
     reshare: 'Share again',
     reshareHint: 'Makes the page afresh, with the same demos; the link stays.',
+    tags: 'Tags',
+    tagsHint: 'The page’s tags: the demo site’s overview filters by them. A change takes effect at once; a shared page goes out again right away.',
+    noTags: 'none yet',
+    addTag: 'Add a tag',
+    removeTag: (dimension: string, value: string) => `Remove ${dimension}: ${value}`,
   },
   pageChanges: {
     only: { video: 'Video pages', html: 'Artifact pages' },
@@ -2589,6 +2609,7 @@ const en: Strings = {
       '2026-10-20-by': 'Every page names who shared it (“Shared by … on …”), and so does the overview.',
       '2026-10-20-inline':
         'The artifact’s images, stylesheets and scripts are inside its page: behind a login (Cloudflare Access) Firefox showed none of them, as it asked for them without the login’s cookie.',
+      '2026-10-28-tags': 'The page’s tags stand under its title and lead to the overview filtered by them.',
     },
     pages: (n: number) => (n === 1 ? 'one page' : `${n} pages`),
   },
@@ -2708,6 +2729,12 @@ const en: Strings = {
       stopHint: 'The page going out right now is finished; the others stay as they are.',
       dismiss: 'Hide',
       dismissOutdatedHint: 'Hides the notice until the pages change again. Each card still offers “Share again”.',
+      untagged: (n: number) => (n === 1 ? 'One page without tags' : `${n} pages without tags`),
+      untaggedHint: 'Shared pages that lack tags from the demo site’s vocabulary (or carry a value it no longer has). A short reading session chooses them from title and text, then the page goes out again, one after the other. Tags set by hand stay.',
+      tag: (n: number) => (n === 1 ? 'Tag and share' : `Tag and share all ${n}`),
+      tagProgress: (done: number, total: number) => `Tagged and shared: ${done} of ${total}`,
+      tagFinished: (done: number, total: number) => (done === total ? (total === 1 ? 'One page tagged and shared' : `${total} pages tagged and shared`) : `Tagged and shared: ${done} of ${total}`),
+      tagStopped: (done: number, total: number) => `Stopped: ${done} of ${total} tagged and shared`,
     },
   },
   access: {
@@ -2974,6 +3001,8 @@ const en: Strings = {
       siteEnv: 'File with credentials (KEY=value), relative to Obeya’s directory',
       siteHeaders: 'Headers for reading behind a login, one per line',
       siteMaxFile: 'Largest file (MiB)',
+      siteTags: 'Tags of the pages, a dimension per line: its name, a colon, its values separated by commas',
+      siteTagsPlaceholder: 'Area: Billing, Reports, Settings\nAudience: Admins, Customers',
       sitePublish: 'A demo goes on the site',
       sitePublishes: { click: 'on a click on “Share”', approved: 'with the approval' },
       siteHint:

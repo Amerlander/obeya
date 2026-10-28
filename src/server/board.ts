@@ -14,6 +14,7 @@ import type { CardFile } from '../core/files';
 import type { Language } from '../core/locale';
 import { MESSAGES, type Messages, snoozeTerm } from '../core/messages';
 import { type KnownChange, missedChanges, PAGE_CHANGES, pagesVersion } from '../core/page-changes';
+import { pageTags, untagged } from '../core/page-tags';
 import { allTicked, type OtherDoc, type PlanDoc } from '../core/plan-doc';
 import {
   type AnswerFile,
@@ -26,6 +27,7 @@ import {
   type Decision,
   type Demo,
   type DemoKind,
+  type PageTags,
   type EarlierDemo,
   type ErrorCode,
   type Group,
@@ -194,8 +196,24 @@ export interface StoredShare {
   version?: string;
   /** While `publishing` (with `refresh`): the page goes out again as it is, one of many the owner shares again at once. */
   again?: true;
+  /** While `publishing` (with `refresh`): the page goes out again as it is, with the tags the owner set. */
+  retag?: true;
   /** The owner unticked „Mit der Freigabe teilen“: where the site publishes on approval, approving the card shares nothing. */
   notOnApproval?: true;
+  /** The page's tags the owner set by hand, by dimension: neither a worker nor the reading session changes them. */
+  tags?: PageTags;
+  /** The page's tags the reading session chose, by dimension, where neither the owner nor a worker had (`pageTagsOf`). */
+  auto?: PageTags;
+}
+
+/**
+ * The tags of a card's page, each dimension from the first that has it: the owner's by hand, the
+ * newest demo whose worker gave it, the reading session's. They belong to the page, not to a version.
+ */
+export function pageTagsOf(r: CardRow): PageTags {
+  const s = r.share ? (JSON.parse(r.share) as StoredShare) : null;
+  const demos = [...storedDemos(r), ...(r.demo ? [JSON.parse(r.demo) as StoredDemo] : [])].reverse();
+  return pageTags([s?.tags, ...demos.map((d) => d.page?.tags), s?.auto]);
 }
 
 /** The demo versions on a stored page, in order of handover. */
@@ -212,6 +230,8 @@ export interface StoredReshare {
   done: number;
   failed: string[];
   stopped?: true;
+  /** It tags pages without tags and shares them again, rather than sharing outdated ones again. */
+  tags?: true;
 }
 
 const RESHARE_SETTING = 'reshare';
@@ -868,6 +888,29 @@ export class Board {
     return this.sharedRows()
       .map((r) => ({ r, missed: reshareable(r) }))
       .filter(({ missed }) => missed.some((c) => at(c.id) > dismissed));
+  }
+
+  /**
+   * The shared pages the Koordinator's sheet offers to tag („N Seiten ohne Tags“), archived cards'
+   * included: at rest, their demos at hand, on a site with a vocabulary, and lacking tags in one of
+   * its dimensions.
+   */
+  untaggedRows(): CardRow[] {
+    return this.sharedRows().filter((r) => {
+      const s = JSON.parse(r.share!) as StoredShare;
+      const vocabulary = this.vocabularyOf?.(r.repo ?? (r.plan_ref ? repoOfRef(r.plan_ref, this.home) : this.home));
+      if (!s.url || s.state || !vocabulary || !untagged(pageTagsOf(r), vocabulary).length) return false;
+      const demos = sharedDemos(s);
+      return demos.length > 0 && demos.every((d) => demoThere({ dir: d.dir, kind: d.shown.kind }));
+    });
+  }
+
+  /** The vocabulary of tags each repository's site names (`demo.site.tags`), for the pages without tags; none where it names none. */
+  private vocabularyOf?: (repo: string) => PageTags | undefined;
+
+  showVocabulary(of: (repo: string) => PageTags | undefined) {
+    this.vocabularyOf = of;
+    this.changed();
   }
 
   /** "Ausblenden": the notice of outdated pages goes until a newer change, and the result of a run that finished with it. */
@@ -1624,7 +1667,8 @@ export class Board {
     const run = this.reshareRun();
     const queued = new Set(run?.queue);
     const left = this.outdatedRows().filter(({ r }) => !queued.has(r.id));
-    if (!left.length && !run) return null;
+    const untagged = this.untaggedRows().filter((r) => !queued.has(r.id)).length;
+    if (!left.length && !untagged && !run) return null;
     // what sharing them again brings, and to how many of them
     const changes = PAGE_CHANGES.flatMap(({ id }) => {
       const pages = left.filter(({ missed }) => missed.some((c) => c.id === id)).length;
@@ -1635,6 +1679,7 @@ export class Board {
     const current = first?.share && (JSON.parse(first.share) as StoredShare).state === 'publishing' ? first.title : undefined;
     return {
       outdated: left.length,
+      ...(untagged ? { untagged } : {}),
       ...(changes.length ? { changes } : {}),
       ...(run
         ? {
@@ -1645,6 +1690,7 @@ export class Board {
               left: run.queue.length,
               ...(current ? { current } : {}),
               ...(run.stopped ? { stopped: true } : {}),
+              ...(run.tags ? { tags: true } : {}),
             },
           }
         : {}),
@@ -2343,6 +2389,7 @@ function work(r: CardRow): Partial<Item> {
   const contribution = contributionOf(r);
   const share = shareOf(r);
   const notOnApproval = r.share ? (JSON.parse(r.share) as StoredShare).notOnApproval : undefined;
+  const tags = demo && !r.prototype_of ? pageTagsOf(r) : {};
   const landed = r.landed ? (JSON.parse(r.landed) as { followUp?: boolean; needsClone?: boolean }) : null;
   return {
     ...(scope?.length ? { scope } : {}),
@@ -2364,6 +2411,7 @@ function work(r: CardRow): Partial<Item> {
     ...(r.files ? { files: JSON.parse(r.files) as CardFile[] } : {}),
     ...(share ? { share } : {}),
     ...(notOnApproval ? { notOnApproval } : {}),
+    ...(Object.keys(tags).length ? { tags } : {}),
     ...(r.from_id ? { from: r.from_id } : {}),
     ...(r.branch ? { branch: r.branch } : {}),
     // a workspace on another machine as ssh and scp write it

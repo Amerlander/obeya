@@ -34,6 +34,14 @@ export const PAGE_WORDS: Record<
     /** The line every page and the overview end in, before the link to Obeya's site; the overview's link to its feed. */
     recordedWith: string;
     feed: string;
+    /** The overview's filter: its search field, how many of the pages it shows, copying their links, a page's link, none passing. */
+    search: string;
+    shown: string;
+    copyLinks: string;
+    copyLinksHint: string;
+    copyLink: string;
+    copied: string;
+    noMatch: string;
   }
 > = {
   de: {
@@ -55,6 +63,13 @@ export const PAGE_WORDS: Record<
     },
     recordedWith: 'Aufgenommen mit',
     feed: 'Feed abonnieren',
+    search: 'Suchen …',
+    shown: '{n} von {m}',
+    copyLinks: 'Links kopieren',
+    copyLinksHint: 'Kopiert die gezeigten Demos als Liste aus Titel und Link, für eine Mail, ein Dokument oder Markdown',
+    copyLink: 'Link kopieren',
+    copied: 'Kopiert',
+    noMatch: 'Keine Demo passt zum Filter.',
   },
   en: {
     locale: 'en-US',
@@ -75,6 +90,13 @@ export const PAGE_WORDS: Record<
     },
     recordedWith: 'Recorded with',
     feed: 'Subscribe to the feed',
+    search: 'Search …',
+    shown: '{n} of {m}',
+    copyLinks: 'Copy links',
+    copyLinksHint: 'Copies the demos shown as a list of titles and links, for a mail, a document or Markdown',
+    copyLink: 'Copy link',
+    copied: 'Copied',
+    noMatch: 'No demo matches the filter.',
   },
 };
 
@@ -103,6 +125,8 @@ interface PageParts {
   language?: PageLanguage;
   /** A link above the title (say, to all demos). */
   top?: { href: string; text: string };
+  /** The page's tags, by dimension, each a link (say, to the overview showing the pages with it). */
+  tags?: { dimension: string; value: string; href: string }[];
 }
 
 export interface DemoPageParts extends PageParts {
@@ -169,6 +193,10 @@ export const PAGE_STYLE = `
   body.alone .artifact { margin: 0; border: 0; border-radius: 0; }
   body.alone .artifact iframe { height: 100vh; }
   .links { margin-top: 10px; font-size: 14px; display: flex; gap: 18px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 18px; }
+  .tag { font-size: 13px; line-height: 1.5; padding: 2px 10px; border-radius: 999px; background: var(--chip); color: var(--ink); text-decoration: none; border: 1px solid transparent; }
+  a.tag:hover { border-color: var(--accent); }
+  .tag span { color: var(--muted); }
   .credit { margin-top: 48px; font-size: 13px; color: var(--muted); }
 `;
 
@@ -278,7 +306,7 @@ function pageStart(p: PageParts, language: PageLanguage, policy?: string, style 
 <body><main>
 ${p.top ? `<div class="top"><a href="${esc(p.top.href)}">${esc(p.top.text)}</a></div>\n` : ''}<h1>${esc(p.title)}</h1>
 <div class="when">${esc(p.when)}</div>
-${list}<div class="text">${paragraphs(p.text)}</div>
+${p.tags?.length ? `<div class="tags">${p.tags.map((x) => `<a class="tag" href="${esc(x.href)}"><span>${esc(x.dimension)}</span> ${esc(x.value)}</a>`).join('')}</div>\n` : ''}${list}<div class="text">${paragraphs(p.text)}</div>
 `;
 }
 

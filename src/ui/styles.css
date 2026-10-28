@@ -672,6 +672,20 @@ textarea.p-body:focus { border-color: var(--muted); }
 .share-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--approved); font-weight: 600; }
 .share-link { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .share-busy { color: var(--muted); }
+/* the page's tags: chips with their ×, and „+“ with the vocabulary's other values in a list under it */
+.share-tags { gap: 6px; }
+.share-tags > .share-label { color: var(--muted); }
+.tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--chip); font-size: 12.5px; line-height: 20px; white-space: nowrap; }
+.tag-chip .dim { color: var(--muted); }
+.tag-chip .x { all: unset; cursor: pointer; width: 18px; height: 18px; border-radius: 50%; text-align: center; line-height: 18px; color: var(--muted); font-size: 14px; }
+.tag-chip .x:hover { background: var(--line); color: var(--ink); }
+.tag-chip.pick { all: unset; cursor: pointer; padding: 2px 10px; border-radius: 999px; background: var(--chip); font-size: 12.5px; line-height: 20px; }
+.tag-chip.pick:hover { background: var(--line); }
+.tag-add { all: unset; cursor: pointer; width: 24px; height: 24px; border-radius: 50%; border: 1px dashed var(--muted); color: var(--muted); text-align: center; line-height: 22px; font-size: 15px; box-sizing: border-box; }
+.tag-add:hover, .tag-add.on { border-style: solid; color: var(--ink); }
+.bar-menu.tag-menu { left: auto; right: 0; width: min(340px, calc(100vw - 28px)); padding: 10px 12px; display: grid; gap: 10px; }
+.tag-dim { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tag-dim > .hint { flex-basis: 100%; margin: 0; font-size: 12px; }
 .share .hint { margin: 0; }
 .share:not(.wide) > .hint { text-align: right; }
 /* a split (an idea, a proposal, a task) is as tall as its taller column, up to the room down to the microphone

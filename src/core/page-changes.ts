@@ -15,6 +15,11 @@ export interface PageChange {
   id: string;
   /** The kinds of page it shows on. */
   kinds: readonly DemoKind[];
+  /**
+   * It shows only on a page with tags, which no page published before it had: those get it with
+   * their tags (the Koordinator's „N Seiten ohne Tags“), so it leaves no page outdated.
+   */
+  tagged?: true;
 }
 
 export const PAGE_CHANGES = [
@@ -24,13 +29,14 @@ export const PAGE_CHANGES = [
   { id: '2026-10-19-credit', kinds: ['video', 'html'] },
   { id: '2026-10-20-by', kinds: ['video', 'html'] },
   { id: '2026-10-20-inline', kinds: ['html'] },
+  { id: '2026-10-28-tags', kinds: ['video', 'html'], tagged: true },
 ] as const satisfies readonly PageChange[];
 
 export type KnownChange = (typeof PAGE_CHANGES)[number];
 export type PageChangeId = KnownChange['id'];
 
 /** The sample pages' hash (`pagesHash` in site.ts) the changes above account for. */
-export const PAGES_HASH = { video: '3c3b6d43f1c9', html: '6468ae12a4fb', stacked: 'd18d5bb16c57' };
+export const PAGES_HASH = { video: '7411298dd5fd', html: '586c685c35f7', stacked: '4f613249d46b' };
 
 /** The version a page published now gets: the newest change; '' while there is none. */
 export const pagesVersion = (changes: readonly PageChange[] = PAGE_CHANGES): string => changes.at(-1)?.id ?? '';
@@ -41,5 +47,5 @@ export const pagesVersion = (changes: readonly PageChange[] = PAGE_CHANGES): str
  */
 export function missedChanges<C extends PageChange>(version: string | undefined, kind: DemoKind, changes: readonly C[]): C[] {
   const after = changes.findIndex((c) => c.id === version);
-  return changes.slice(after + 1).filter((c) => c.kinds.includes(kind));
+  return changes.slice(after + 1).filter((c) => c.kinds.includes(kind) && !c.tagged);
 }

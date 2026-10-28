@@ -4,8 +4,9 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type PageTags, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { lineDiff } from '../core/diff';
+import { parseTagLines, tagLines } from '../core/page-tags';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { AccessSection } from './access';
@@ -1723,6 +1724,7 @@ function RepoSettingsBlock({
                   onChange={(e) => setSite({ maxFile: Number(e.target.value) > 0 ? Math.round(Number(e.target.value) * MIB) : undefined })}
                 />,
               )}
+              {sub(c.siteTags, <TagLines tags={site.tags} placeholder={c.siteTagsPlaceholder} label={c.siteTags} onChange={(tags) => setSite({ tags })} />, true)}
               {/* not a label: a click on its words would press the first button */}
               <div className="wide">
                 <span className="hint">{c.sitePublish}</span>
@@ -1752,6 +1754,31 @@ function RepoSettingsBlock({
 const fromRepository = (v: RepoValues) => SHARED_FIELDS.some((k) => (isNested(k) ? Object.values(v[k]).some((f) => f.source === 'repository') : v[k].source === 'repository'));
 
 const MIB = 1024 * 1024;
+
+/**
+ * The site's vocabulary of tags, a dimension per line (`Area: Billing, Reports`): the text stays as
+ * typed while the owner writes (a trailing comma, an empty line), and what it says goes to the setting.
+ */
+function TagLines({ tags, placeholder, label, onChange }: { tags: PageTags | undefined; placeholder: string; label: string; onChange: (tags: PageTags | undefined) => void }) {
+  const [text, setText] = useState(() => tagLines(tags));
+  // the setting changed elsewhere (another machine's file, a reset): its lines, unless they say the same
+  useEffect(() => {
+    if (JSON.stringify(parseTagLines(text)) !== JSON.stringify(tags)) setText(tagLines(tags));
+  }, [JSON.stringify(tags)]);
+  return (
+    <textarea
+      rows={Math.max(2, text.split('\n').length + 1)}
+      spellCheck={false}
+      aria-label={label}
+      placeholder={placeholder}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        onChange(parseTagLines(e.target.value));
+      }}
+    />
+  );
+}
 
 /** The headers of `Name: value` lines; none for lines without a name. */
 function headerLines(text: string): Record<string, string> | undefined {

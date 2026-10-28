@@ -27,6 +27,8 @@ const site = z
     headers: z.record(z.string(), z.string()).optional(),
     maxFile: z.number().int().positive().optional(),
     publish: z.enum(['approved']).optional(),
+    // the vocabulary pages are tagged from: each dimension with its values
+    tags: z.record(z.string().trim().min(1), z.array(z.string().trim().min(1))).optional(),
   })
   .strict();
 const demo = z.object({ site: site.optional(), language: z.enum(LANGUAGES).optional() }).strict();

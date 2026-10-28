@@ -66,7 +66,7 @@ touches, and keep those current in the same change.
   the demo on the card (watching it, comments in the video, earlier demos), UI checks in a
   headless browser.
 - [Sharing demos](design/sharing-demos.md) — demos on a page of their own for colleagues: where a
-  demo goes, several versions on one page, publishing (on approval too), outdated pages, the page
+  demo goes, tags, several versions on one page, publishing (on approval too), outdated pages, the page
   and the pull request, export without a site, static sites, several machines on one site.
 - [Repositories and configuration](design/repositories-and-configuration.md) — canvases and
   repositories, main branch, Lesestand, plan docs (and how Obeya reads them), repository settings

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -569,6 +570,27 @@ describe('handing over with a demo', () => {
     expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...html, page } })).toContain('End your turn');
     // its index.html alone: it also goes out as one HTML file
     expect(board.item(c.id)!.demo).toMatchObject({ kind: 'html', page, single: true });
+  });
+
+  test("where the site names tags, the page comes with them, each dimension's from its values alone", async () => {
+    rmSync(dir, { recursive: true, force: true });
+    const tags = { Area: ['Billing', 'Reports'], Audience: ['Admins', 'Customers'] };
+    setup({ ...generic, land: 'main', workspaces: 'clones', app: { run: 'bun start' }, demo: { site: { title: 'Demos', url: 'https://demos.example.dev', deploy: 'deploy {dir}', tags } } });
+    const c = manual();
+    await workers.start(c.id);
+    expect(runtime.last.inbox[0]).toContain('hand it over with that page (title, text, tags)');
+    const tool = runtime.last.spec.tools!.find((t) => t.name === 'ready_for_review')!;
+    expect(JSON.stringify(z.toJSONSchema(z.object(tool.schema as z.ZodRawShape)))).toContain('Area: Billing, Reports; Audience: Admins, Customers');
+    const d = demoDir();
+    const page = { title: 'Zählerstände als CSV', text: 'Vermieter laden die Zählerstände jetzt als CSV herunter.' };
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...demo(d), page } })).toContain('lack Area, Audience');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...demo(d), page: { ...page, tags: { Area: ['Invoices'], Audience: [], Team: ['A'] } } } })).toContain(
+      'not among them: Area: Invoices, Team (no such dimension)',
+    );
+    expect(state(c.id)).toBe('working');
+    expect(await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...demo(d), page: { ...page, tags: { Audience: [], Area: ['Reports', 'Billing'] } } } })).toContain('End your turn');
+    expect(board.item(c.id)!.demo!.page).toEqual({ ...page, tags: { Area: ['Billing', 'Reports'], Audience: [] } });
+    expect(board.item(c.id)!.tags).toEqual({ Area: ['Billing', 'Reports'], Audience: [] });
   });
 
   test('a broken demo or a missing one is refused, and the worker keeps the card', async () => {

@@ -300,6 +300,12 @@ export interface Item {
   share?: Share;
   /** Where the repository's site publishes on approval: the owner unticked „Mit der Freigabe teilen“, so approving shares nothing. */
   notOnApproval?: true;
+  /**
+   * The tags of the card's page (`pageTags` in src/core/page-tags.ts), by dimension, as they stand
+   * without the site's vocabulary: set by hand, else by the newest worker that gave them, else by
+   * Obeya's reading session. A dimension without a key has none chosen yet.
+   */
+  tags?: PageTags;
   /** The card it comes from: a proposal's source, a prototype's idea, or the card a follow-up follows up on. */
   from?: string;
   /** With `from` on another canvas (a card moved there, or one made there by Obeya): that card's title and canvas. */
@@ -780,7 +786,12 @@ export interface DemoPage {
   title: string;
   /** Two to five sentences on what changes and why. */
   text: string;
+  /** The values of the site's vocabulary (`demo.site.tags`) the worker chose for each dimension; an empty list where none fits. */
+  tags?: PageTags;
 }
+
+/** Tags by dimension: a site's vocabulary (each dimension with its values), or what a page carries of it. */
+export type PageTags = Record<string, string[]>;
 
 /**
  * The largest video exported as one HTML file (which holds it in base64, a third larger): such a
@@ -905,6 +916,8 @@ export interface RepoRef {
   shareNeeds?: { site: string; file: string };
   /** With `share`: its site publishes each approved card's latest demo by itself (`demo.site.publish`), unless the card opts out. */
   shareOnApproval?: true;
+  /** With `share`: the site's vocabulary of tags (`demo.site.tags`), which a card's page takes its tags from. */
+  shareTags?: PageTags;
   /** Its approved work goes out as a pull request (else it lands on the default branch of the Obeya checkout). */
   pullRequests?: boolean;
   /** Its `origin` is on a server, where others may open pull requests („Review PR #5“). */
@@ -1019,6 +1032,8 @@ export interface PlanDir {
 export interface Reshare {
   /** Pages that could be shared again and are not queued (after "Ausblenden", those a newer change left outdated). */
   outdated: number;
+  /** Shared pages on a site with a vocabulary that lack tags in a dimension (none chosen, or a value the vocabulary no longer has), not queued. */
+  untagged?: number;
   /** What sharing them again brings: each change they lack, oldest first, with how many of them lack it. */
   changes?: { id: PageChangeId; pages: number }[];
   run?: {
@@ -1033,6 +1048,8 @@ export interface Reshare {
     current?: string;
     /** The owner stopped it: the pages not yet out stay as they were. */
     stopped?: boolean;
+    /** It tags the pages without tags and shares them again („N Seiten ohne Tags“), rather than sharing outdated ones again. */
+    tags?: boolean;
   };
 }
 
@@ -1362,6 +1379,8 @@ export type CardAction =
   | { action: 'unshare'; demo?: number }
   /** „Mit der Freigabe teilen“, where the repository's site publishes on approval: whether approving the card shares its latest demo. */
   | { action: 'shareOnApproval'; on: boolean }
+  /** The owner sets the values of one dimension of the page's tags by hand; a shared page goes out again at once. */
+  | { action: 'pageTags'; dimension: string; values: string[] }
   /** Question cards: the owner's words to the agent that looked the answers up. */
   | { action: 'ask'; text: string; spoken?: boolean; images?: string[]; replyTo?: number }
   /** Question cards: the thread becomes an idea, whose exploration agent starts from it. */
@@ -1604,6 +1623,11 @@ export interface DemoSite {
    * (before it lands); without it, only when the owner clicks "Teilen".
    */
   publish?: 'approved';
+  /**
+   * The vocabulary pages are tagged from: each dimension with its values, in the order the overview
+   * shows them. Workers and Obeya's reading session choose from it and add nothing to it.
+   */
+  tags?: PageTags;
 }
 
 /**

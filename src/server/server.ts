@@ -883,12 +883,13 @@ export function serve(
         }),
       },
       '/api/c/:canvas/setting-proposals/:id/reject': { POST: on((c, req) => click(c, c.rejectSetting(Number(req.params.id)))) },
-      // "Erneut teilen" for many outdated pages at once: `count` of them, the newest demos first, or all (null)
+      // "Erneut teilen" for many outdated pages at once (or, with `tags`, the pages without tags): `count` of them, the newest demos first, or all (null)
       '/api/c/:canvas/reshare': {
         POST: on(async (c, req) => {
-          const { count } = (await req.json().catch(() => ({}))) as { count?: number | null };
+          const { count, tags } = (await req.json().catch(() => ({}))) as { count?: number | null; tags?: unknown };
           if (count != null && !(Number.isInteger(count) && count > 0)) throw new BadRequest('invalid', 'count must be a positive integer or null');
-          c.sharing.reshareMany(count ?? null);
+          // `tags`: the pages without tags, tagged and shared again („N Seiten ohne Tags“)
+          c.sharing.reshareMany(count ?? null, tags === true);
         }),
         // "Ausblenden": puts away what the finished run says, and the notice of outdated pages until a newer change
         DELETE: on((c) => c.sharing.dismissResharing()),

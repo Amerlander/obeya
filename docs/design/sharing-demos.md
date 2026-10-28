@@ -22,6 +22,34 @@ The page has a title and two to five sentences for colleagues who have never see
 without them, a short read-only session writes them from the worker's last summary when the owner
 shares, kept with the demo from then on.
 
+#### Tags
+
+A site may name a vocabulary of tags (`demo.site.tags`): a few dimensions, each with its values, in
+the order the overview shows them (`{"Area": ["Billing", "Reports"], "Audience": ["Admins"]}`). As
+the repository's settings, it is the same for everyone who shares on the site. Nobody adds to it:
+workers and the reading session choose from it, and the owner picks from it by hand. A page carries
+per dimension zero or more of its values; a dimension it has no key for has none chosen yet.
+
+Tags belong to the card's page, not to a version. Each dimension comes from the first that has it:
+the owner's choice by hand, the newest demo whose worker gave it, the reading session's. Where the
+site has a vocabulary, `ready_for_review` takes `demo.page.tags` with every page and refuses a
+dimension left out or a value outside the vocabulary; the demo skill asks the worker for them. A page
+going out that lacks a dimension, or holds a value the vocabulary no longer has (struck or renamed),
+gets it from the short read-only session that writes missing page texts (in the same session where
+it writes the text, else in one of its own from the title and text of the page's versions); it
+chooses only those dimensions, kept on the card from then on, so a later worker's tags come before
+it and the owner's before both.
+
+The share box shows the page's tags as chips, before sharing and after: × takes one off, „+“ offers
+the vocabulary's other values. A change takes effect at once, without a hold: a shared page goes out
+again with the same demos (one going out goes out once more after it), and the log says so.
+
+Pages without tags are tagged from the Koordinator's sheet: while pages on a site with a vocabulary
+lack tags in a dimension (archived cards' included, their demos at hand), an entry says how many
+(„N Seiten ohne Tags“), and „Alle N taggen und teilen“ tags and shares them again in one run through
+the queue that shares outdated pages again (one run at a time, with its progress, "Anhalten" and the
+failed ones). Its "Ausblenden" puts away only its own result.
+
 #### Several versions on one page
 
 A card has one page under one link, holding the demo versions the owner shared, in order of
@@ -87,7 +115,9 @@ on its versions' kinds make it outdated. Its card lists them with their days, be
 teilen" (same versions, same link) and "Nicht mehr teilen"; the latest demo not yet on the page
 brings them with replacing or adding. A change that shows nowhere gets no entry. A test pins a hash
 of sample pages (both languages, both kinds, several versions) and fails once they differ, asking to
-add an entry where a viewer sees it and to take the new hash. A new site title shows with the next
+add an entry where a viewer sees it and to take the new hash. A change that shows only on pages with
+tags (the chips under the title) marks no page: none published before it had tags, and those get it
+with their tags (see Tags). A new site title shows with the next
 publish without marking pages. A page whose demo files are gone (demos get deleted to free space) is
 neither offered nor counted.
 
@@ -184,7 +214,8 @@ browser cannot seek in it otherwise.
   outside the home is refused, and `${KEY}` comes from that file only, so a repository's settings
   cannot send the machine's secrets anywhere;
 - `headers`: for reading the live site behind a login; `maxFile`: the host's file limit (25 MiB
-  default); `publish`: see Publishing on approval.
+  default); `publish`: see Publishing on approval; `tags`: the vocabulary (see Tags), which
+  Konfiguration writes as a line per dimension (`Area: Billing, Reports`).
 
 The overview is in `demo.language`, else the narration language. Konfiguration has a field for each.
 A site counts once it has a title, an http(s) URL and a deploy command; an unusable one (incomplete,
@@ -199,7 +230,7 @@ Pages, Netlify, Vercel, `aws s3 sync`, `rsync`, a Pages branch, a script.
 The site lives in `sites/<key>/` under Obeya's home, the key from the URL's host and path, shared by
 all repositories naming it. `site/` holds a directory per page (demo files, `index.html`,
 `meta.json`: kind, title, text, chapters, PR, first shared, last changed, a hash of the demo's own
-files, language, who shared it, and under `more` the later versions, their files in `2/`, `3/` …),
+files, language, who shared it, its tags, and under `more` the later versions, their files in `2/`, `3/` …),
 the overview, dated by each page's newest version, and an Atom feed (`feed.xml`, linked from the
 overview as „Feed abonnieren“ and by `<link rel="alternate">`) with one entry per page in the overview's order (title,
 first sentence as summary, the whole text as content, the page's address as link and id, the
@@ -209,6 +240,17 @@ current. A page keeps its date while its demo's own files stay the same.
 Each page names who shared it („Geteilt von Ada Lovelace am 20. Oktober 2026“), and the overview
 after the date, as colleagues publish to one site from their own Obeya: git's `user.name` in the
 card's repository, left out where none is set.
+
+A page's tags stand as chips under the line saying who shared it, each linking the overview filtered
+by it (`../?Area=Billing`), and in the feed as `<category term="Billing" label="Area: Billing"/>`. The
+overview starts with a search over the pages' titles and texts and, where the site has a
+vocabulary, a row of chips per dimension (the values some page has): any chip of a dimension, and
+every dimension with one chosen. The filter stands in the URL (`?Area=Billing&Area=Reports&q=pdf`),
+so a filtered list can be passed on. Each entry shows its tags and, on hover (always on a touch
+screen), an icon copying the page's URL. Above the list, „N von M“ and „Links kopieren“: the pages
+shown as a list of titles and URLs, put on the clipboard as `text/html` (links in a mail or a
+document) and as Markdown (`- [Title](URL)`) in `text/plain`, as text alone where the browser lacks
+`ClipboardItem`. It all runs in an inline script; the site stays static.
 
 A machine without the site's `env` file exports, with a line naming the missing file; once placed,
 it counts when the owner comes back. A site without `env` deploys with the machine's own login.
@@ -275,6 +317,14 @@ another machine withdrew loses its link here, with a line naming the machine.
   Obeya (one more field for a name agents already commit under) and the host name (a computer, not a
   person).
 - **The credit line has no setting**: settings stay few; a static credit line is common practice.
+- **Pages are tagged from a fixed vocabulary in the repository's settings; the worker tags at
+  handover, a session fills gaps, the owner corrects on the card** (owner, 2026-10-28): with a
+  hundred pages and more the overview needs a filter, and the worker knows the change best, at no
+  extra cost. Rejected: a session tagging at every share (a session per approval, knowing less than
+  the worker), tagging by hand only (too much with over 100 pages; it stays the way to correct), tags
+  the AI makes up (a filter with near-duplicates).
+- **Links are copied one by one and as the filtered list** (owner, 2026-10-28): a demo goes to one
+  person, or several on one topic into a mail, release notes or to a customer.
 - **Several machines pull before they push** (2026-10-09). Rejected: refusing deploys while the live
   site has pages missing here (leaves copying by hand), and a shared storage folder or bucket as the
   source (pushes the problem onto each user's setup).

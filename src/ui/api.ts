@@ -320,7 +320,7 @@ export const api = {
   takeSetting: (id: number, where: 'machine' | 'repository', value?: string | string[]) => call<unknown>('POST', at(`/setting-proposals/${id}/take`), { where, ...(value === undefined ? {} : { value }) }),
   rejectSetting: (id: number) => call<void>('POST', at(`/setting-proposals/${id}/reject`)),
   /** Shares outdated pages again, the newest demos first: `count` of them, or all with null. */
-  reshare: (count: number | null) => call<void>('POST', at('/reshare'), { count }),
+  reshare: (count: number | null, tags = false) => call<void>('POST', at('/reshare'), { count, ...(tags ? { tags } : {}) }),
   stopReshare: () => call<void>('POST', at('/reshare/stop')),
   /** "Ausblenden": puts away what the finished run says, and the notice of outdated pages until a newer change. */
   dismissReshare: () => call<void>('DELETE', at('/reshare')),

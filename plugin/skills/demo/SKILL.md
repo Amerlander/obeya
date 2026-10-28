@@ -110,6 +110,10 @@ explained since the one before (often after feedback, a short one). Where `ready
 for the demo's `follows`, say which (`replaces` or `supplements`): the owner can share a
 supplement beside the earlier demo on the same page, and a demo recorded afresh in its place.
 
+Where `ready_for_review` asks for the page's `tags`, choose for each dimension it names the values
+that fit the change, from those it gives (an empty list where none does): colleagues find the page
+on the demo site by them.
+
 ## 4. Write the demo script
 
 Demos go into the demo directory of the demo settings (`~/demos` unless they name another):
