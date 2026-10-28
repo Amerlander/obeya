@@ -1240,9 +1240,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus
             })}
           </span>
         )}
-        <button className="c-del" title={t.config.removeCanvas} onClick={() => onChange(null)}>
-          ✕
-        </button>
+        <RemoveButton label={t.config.removeCanvas} onClick={() => onChange(null)} />
       </div>
       {fresh && <p className="hint warn">{t.config.freshHint}</p>}
       <div className="cfg-repos">
@@ -1357,7 +1355,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   const leaving = resolved?.leaving?.length ? <span className="hint cfg-clone-leaving">{t.config.cloneLeaving(resolved.leaving.map((c) => (c.card ? { ...c, card: plain(c.card) } : c)))}</span> : null;
   // one row of the canvas's table of repositories; what only some have (clones, problems) spans the row below it
   return (
-    <>
+    <div className="cfg-repo">
       <div className="cfg-cell">
         <input className="c-path" aria-label={t.config.path} value={repo.path} placeholder={t.config.path} spellCheck={false} onChange={(e) => {
             // another folder: whether it goes without git is chosen for it anew
@@ -1366,9 +1364,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           }} />
         {resolved && <span className="hint">{`${resolved.id}${home ? ` · ${t.config.home}` : ''}${folder ? ` · ${t.config.folderMode}` : ''}`}</span>}
       </div>
-      <button className="c-del" title={t.config.removeRepo} onClick={() => onChange(null)}>
-        ✕
-      </button>
+      <RemoveButton label={t.config.removeRepo} onClick={() => onChange(null)} />
       {!folder && (resolved || clones) && (
         <div ref={clonesBox} className={flash ? 'cfg-span cfg-clones flash' : 'cfg-span cfg-clones'}>
           <div className="cfg-work-in cfg-has-info">
@@ -1458,7 +1454,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           <AdapterSetup canvas={canvasId} repo={resolved.id} />
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -1837,6 +1833,20 @@ function slotsOf(value: string): number | undefined {
   return value.trim() === '' || !Number.isFinite(Number(value)) ? undefined : Math.max(0, Math.round(Number(value)));
 }
 
+/**
+ * Removes an entry of the configuration (a canvas, a repository, a host): a waste bin, so that it
+ * does not pass for the dialog's close button, shown while the pointer or focus is on its entry.
+ */
+function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button className="c-del c-remove" title={label} aria-label={label} onClick={onClick}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10.5 11v5.5M13.5 11v5.5" />
+      </svg>
+    </button>
+  );
+}
+
 /** The machines over SSH a repository's workers also run on: a table, one row each. */
 function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: HostConfig[]) => void }) {
   const set = (i: number, h: HostConfig | null) => onChange(h ? hosts.map((x, k) => (k === i ? h : x)) : hosts.filter((_, k) => k !== i));
@@ -1848,7 +1858,7 @@ function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: Hos
       {hosts.length > 0 && (
         <div className="cfg-host-rows">
           {hosts.map((h, i) => (
-            <Fragment key={i}>
+            <div key={i} className="cfg-host">
               <input aria-label={t.config.hostName} value={h.name} placeholder={t.config.hostName} spellCheck={false} onChange={(e) => set(i, { ...h, name: e.target.value })} />
               <input className="c-path" aria-label={t.config.hostSsh} value={h.ssh} placeholder={t.config.hostSsh} spellCheck={false} onChange={(e) => set(i, { ...h, ssh: e.target.value })} />
               <input className="c-path" aria-label={t.config.hostRoot} value={h.root} placeholder={t.config.hostRoot} spellCheck={false} onChange={(e) => set(i, { ...h, root: e.target.value })} />
@@ -1874,10 +1884,8 @@ function Hosts({ hosts, onChange }: { hosts: HostConfig[]; onChange: (hosts: Hos
                   }}
                 />
               </label>
-              <button className="c-del" title={t.config.removeHost} onClick={() => set(i, null)}>
-                ✕
-              </button>
-            </Fragment>
+              <RemoveButton label={t.config.removeHost} onClick={() => set(i, null)} />
+            </div>
           ))}
         </div>
       )}

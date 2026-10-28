@@ -265,8 +265,10 @@ compiled binary carries `docs/settings.md` where the skill finds it.
 
 The „Konfiguration“ dialog covers the page but for a margin (a press there or Esc closes it,
 leaving what was open behind it as it was). Its close button stays at the top right however far
-the section scrolls, so a click meant to close never lands on what scrolled under it (the ✕ that
-removes a repository, say). An unsaved draft survives per tab, also a reload or
+the section scrolls, so a click meant to close never lands on what scrolled under it. What removes
+an entry (a canvas, a repository, a machine) is a waste bin, not a cross that passes for a close
+button, and shows only while the pointer or the focus is on its entry (a canvas: its heading line),
+always where nothing hovers (touch). An unsaved draft survives per tab, also a reload or
 restart. Its sections, listed on the left and shown one at a time (the last one chosen per tab):
 Leinwände (canvases, repositories, clones, settings), Modelle und Effort, Spracheingabe, Demos, Von anderen Geräten (see Other devices) and Allgemein
 (languages, light or dark, the server); below them „Einrichtung prüfen“ and „Wunsch oder Fehler
