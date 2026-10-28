@@ -302,6 +302,8 @@ export interface Item {
   notOnApproval?: true;
   /** The card it comes from: a proposal's source, a prototype's idea, or the card a follow-up follows up on. */
   from?: string;
+  /** With `from` on another canvas (a card moved there, or one made there by Obeya): that card's title and canvas. */
+  fromElsewhere?: Elsewhere;
   /** A card the Arbeitsrückschau proposed: the cards and the friction on them it rests on. */
   retro?: string;
   /** A worker's proposal, while it waits: an idea or a task, why, and what the owner has to decide. */
@@ -312,6 +314,12 @@ export interface Item {
   superseded?: Superseded;
   /** The repository the card belongs to (an id from the canvas's `repos`). */
   repo: string;
+  /**
+   * Before work begins on a task or an idea of the owner's: it is to be built in a repository that
+   * does not exist yet (`NewRepo`), as the owner or the idea's agent chose. Building or starting it
+   * creates that repository first.
+   */
+  newRepo?: NewRepo;
   /**
    * Its repository does not run on the canvas (it left the configuration, or did not start): its
    * agents take nothing until it is back, and no other repository's agents take it meanwhile.
@@ -1067,11 +1075,21 @@ export interface Talk {
   waits?: TalkWait[];
   /** Words of no one: the Koordinator took them up by itself, since a card it waited on got there (or no longer can). */
   after?: TalkAfter;
+  /** Words of no one: a card left this canvas for another, built there in a new repository. */
+  moved?: TalkMoved;
   /**
    * Written in this project's sheet: the words went straight to its project agent as a question
    * (`question` is the words), so Obeya has no reply of its own to them.
    */
   askedIn?: string;
+}
+
+/** A card that moved to another canvas: its id and title, and that canvas. */
+export interface TalkMoved {
+  card: string;
+  title: string;
+  canvas: string;
+  canvasName: string;
 }
 
 /** A card the Koordinator waits on: until it is done or waits for the owner. */
@@ -1176,6 +1194,33 @@ export interface NewCard {
   images?: string[];
 }
 
+/**
+ * A repository to be created for a card: its folder (absolute or from `~`; empty while the owner has
+ * not named one yet) and whether it gets a canvas of its own, which the card moves to, or joins the
+ * card's canvas. `by`: who chose it; what the owner chose, the idea's agent does not change.
+ * `due`: building or starting the card was clicked, and Obeya creates the repository then (ISO),
+ * unless the owner takes it back meanwhile (`NEW_REPO_HOLD_MS`).
+ */
+export interface NewRepo {
+  path: string;
+  canvas: boolean;
+  by: 'owner' | 'agent';
+  due?: string;
+}
+
+/** How long building a card in a new repository waits for the owner to take it back. */
+export const NEW_REPO_HOLD_MS = 8000;
+
+/** The name a new repository's folder gives it (and its canvas): the last part of its path. */
+export const newRepoName = (path: string) => path.trim().replace(/[/\\]+$/, '').split(/[/\\]/).at(-1) ?? '';
+
+/** A card on another canvas, as a card that refers to it shows it. */
+export interface Elsewhere {
+  canvas: string;
+  canvasName: string;
+  title: string;
+}
+
 export interface CardPatch {
   x?: number;
   y?: number;
@@ -1189,6 +1234,8 @@ export interface CardPatch {
   collapsed?: boolean;
   /** The task's screenshots, all of them (ids from `POST /api/c/<canvas>/images`). */
   images?: string[];
+  /** Before work begins: a repository to create for the card (`by` is the owner's), or none (null). */
+  newRepo?: Pick<NewRepo, 'path' | 'canvas'> | null;
 }
 
 /** Owner actions on a card's work, posted to `/api/c/:canvas/cards/:id/act`. */
@@ -1271,6 +1318,11 @@ export type CardAction =
   | { action: 'build' }
   /** Ideas: building after the reply is taken back. */
   | { action: 'unbuild' }
+  /**
+   * A task or an idea whose start or building waits to create its new repository (`NewRepo.due`):
+   * that is taken back, and the card stays as it was.
+   */
+  | { action: 'stayHere' }
   /**
    * Ideas: the part its agent marked as settled becomes a task of its own beside the idea, started at
    * once; the idea stays open with its conversation, its agent and its prototypes.
@@ -1376,6 +1428,12 @@ export type ErrorCode =
   | 'notEvictable'
   /** Starting a card while its workspace is being given to another. */
   | 'evicting'
+  /** Changing a card's new repository, or starting it, while Obeya is about to make it (`NewRepo.due`). */
+  | 'newRepoDue'
+  /** Building or starting a card in a new repository that has no folder named. */
+  | 'newRepoPath'
+  /** The undo window of a new repository is over: it is being made. */
+  | 'newRepoGone'
   /** Every machine with a clean free clone has as many workers busy as it has slots. */
   | 'noSlot'
   | 'workspace'
@@ -2418,4 +2476,6 @@ export interface Notice {
   project?: string;
   /** The page opens the card (`cardId`), unless the owner has another one open: the one a review of its PR asked for. */
   open?: true;
+  /** The card (`cardId`) moved to this canvas: a page that has it open follows it there. */
+  movedTo?: string;
 }

@@ -337,6 +337,29 @@ const de = {
   acceptsAfterRevision: 'danach übernommen',
   reviseHint: 'Sag oder schreib, was anders werden soll: ergänzen, streichen, entscheiden. Ein Agent schreibt Text und Fragen danach neu; was du nicht ansprichst, bleibt.',
   followUpOf: (title: string) => `Kommt von der Aufgabe „${title}“.`,
+  /** A card that comes from a card on another canvas; the link opens it there. */
+  fromElsewhere: (title: string, canvas: string) => `Kommt von „${title}“ auf der Leinwand „${canvas}“.`,
+  openThere: 'Dort öffnen',
+  /** The repository picker of a card before work begins, with a repository Obeya creates for it. */
+  repoPick: {
+    label: 'Repository',
+    newRepo: 'Neues Repository …',
+    newRepoHint: 'Ein Repository, das es noch nicht gibt: Obeya legt Ordner und git an, nur lokal.',
+    /** The picker's entry and the buttons once a new repository has its folder. */
+    named: (name: string) => `${name} (neu)`,
+    path: 'Ordner',
+    pathPlaceholder: '~/dev/name',
+    ownCanvas: 'eigene Leinwand',
+    ownCanvasHint: 'An: Das Repository bekommt eine eigene Leinwand, und die Karte zieht mit allem dorthin um. Aus: Es kommt zu dieser Leinwand dazu.',
+    /** Under the buttons: what the click does. */
+    willMove: (path: string, canvas: string, idea: boolean) => `Legt das Repository ${path} und die Leinwand „${canvas}“ an und nimmt die ${idea ? 'Idee' : 'Aufgabe'} mit allem dorthin mit.`,
+    willJoin: (path: string) => `Legt das Repository ${path} an; es kommt zu dieser Leinwand dazu.`,
+    noPath: 'Gib den Ordner des neuen Repositorys an.',
+    build: (name: string) => `So bauen in ${name} (neu)`,
+    start: (name: string) => `Agent starten in ${name} (neu)`,
+    /** While the undo window runs, in place of the button. */
+    making: (name: string) => `Legt ${name} an …`,
+  },
   task: 'Auftrag',
   talk: {
     heading: 'Gespräch',
@@ -505,6 +528,9 @@ const de = {
     notQueued: 'Die Aufgabe wartet nicht in der Warteschlange.',
     notEvictable: 'Diesen Workspace kann die Karte nicht abgeben.',
     evicting: 'Die Aufgabe gibt gerade ihren Workspace ab; starte sie gleich noch einmal.',
+    newRepoDue: 'Obeya legt das neue Repository gerade an.',
+    newRepoPath: 'Für das neue Repository fehlt der Ordner.',
+    newRepoGone: 'Zu spät: Obeya legt das Repository schon an.',
     notMovable: 'Die Aufgabe kann in der Warteschlange nicht weiter.',
     notPlannable: 'Als Projekt planen lässt sich nur eine Idee oder eine eigene, geplante Aufgabe, an der noch niemand gearbeitet hat.',
     noAgent: 'An dieser Aufgabe arbeitet gerade kein Agent.',
@@ -896,6 +922,7 @@ const de = {
     unwait: 'Nicht mehr warten',
     unwaitHint: 'Obeya lässt dann aus, was es für danach angekündigt hat',
     /** In place of the owner's words: what became of the card Obeya waited on, which it goes on with. */
+    moved: (title: string, canvas: string) => `„${title}“ ist auf die Leinwand „${canvas}“ umgezogen und wird dort im neuen Repository gebaut.`,
     after: (title: string, met: Awaited, state: AwaitedState) =>
       `„${title}“ ${{ reached: state === 'done' ? 'ist erledigt' : 'wartet auf dich', gone: 'ist nicht mehr da', archived: 'ist archiviert', stopped: 'wurde gestoppt', dropped: 'wurde verworfen' }[met]}`,
     reshare: {
@@ -2122,6 +2149,24 @@ const en: Strings = {
   acceptsAfterRevision: 'accepted after',
   reviseHint: 'Say or type what should change: add, drop, decide. An agent rewrites text and questions by it; what you do not mention stays.',
   followUpOf: (title: string) => `Follows from the task “${title}”.`,
+  fromElsewhere: (title: string, canvas: string) => `Comes from “${title}” on the canvas “${canvas}”.`,
+  openThere: 'Open it there',
+  repoPick: {
+    label: 'Repository',
+    newRepo: 'New repository …',
+    newRepoHint: 'A repository that does not exist yet: Obeya creates the folder and git, local only.',
+    named: (name: string) => `${name} (new)`,
+    path: 'Folder',
+    pathPlaceholder: '~/dev/name',
+    ownCanvas: 'own canvas',
+    ownCanvasHint: 'On: the repository gets a canvas of its own, and the card moves there with everything. Off: it joins this canvas.',
+    willMove: (path: string, canvas: string, idea: boolean) => `Creates the repository ${path} and the canvas “${canvas}”, and takes the ${idea ? 'idea' : 'task'} there with everything.`,
+    willJoin: (path: string) => `Creates the repository ${path}; it joins this canvas.`,
+    noPath: 'Give the folder of the new repository.',
+    build: (name: string) => `Build it like this in ${name} (new)`,
+    start: (name: string) => `Start agent in ${name} (new)`,
+    making: (name: string) => `Creating ${name} …`,
+  },
   task: 'Task',
   talk: {
     heading: 'Conversation',
@@ -2273,6 +2318,9 @@ const en: Strings = {
     notQueued: 'The task is not waiting in the queue.',
     notEvictable: 'This card cannot give up this workspace.',
     evicting: 'The task is giving up its workspace right now; start it again in a moment.',
+    newRepoDue: 'Obeya is creating the new repository right now.',
+    newRepoPath: 'The new repository has no folder yet.',
+    newRepoGone: 'Too late: Obeya is creating the repository already.',
     notMovable: 'The task cannot move further in the queue.',
     notPlannable: 'Only an idea, or a planned task of your own nobody has worked on yet, can be planned as a project.',
     noAgent: 'No agent is working on this task right now.',
@@ -2640,6 +2688,7 @@ const en: Strings = {
     waits: (title: string, state: AwaitedState) => `Waiting until “${title}” ${state === 'done' ? 'is done' : 'waits for you'}`,
     unwait: 'Stop waiting',
     unwaitHint: 'Obeya then leaves out what it said it would do afterwards',
+    moved: (title: string, canvas: string) => `“${title}” moved to the canvas “${canvas}” and is built there in its new repository.`,
     after: (title: string, met: Awaited, state: AwaitedState) =>
       `“${title}” ${{ reached: state === 'done' ? 'is done' : 'waits for you', gone: 'is gone', archived: 'was archived', stopped: 'was stopped', dropped: 'was dropped' }[met]}`,
     reshare: {

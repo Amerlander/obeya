@@ -27,7 +27,7 @@ import { runAppCommand } from './app-command';
 import { readingShared } from '../adapters';
 import { branchName, type CardWorkspaces, type FileAt, gitSteps, type Landed, type Lease, shortageOf, together, WorkspaceError } from './workspaces';
 import type { FolderWorkspaces, UndoReport } from './folder';
-import { contributionOf, type PrState, type Shipped, type StoredContribution } from './board';
+import { contributionOf, type PrState, type Shipped, type StoredContribution, type StoredNewRepo } from './board';
 import type { ChangeRoute, Finding, FindingStatus } from '../core/types';
 import { gitAsync, gitOrNull } from './workspaces';
 import { defaultBranchCommit } from './read-tree';
@@ -3847,6 +3847,11 @@ ${idea.idea.brief}` : '',
           : `You are on branch ${branch}, fresh from the default branch.`,
     );
     if (this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the clone.`);
+    const made = this.o.board.row(card.id).new_repo;
+    if (made && (JSON.parse(made) as StoredNewRepo).made)
+      parts.push(
+        `This repository is new: Obeya created it for this card with a first commit of what its folder held (a default .gitignore, else nothing). It is local only, with no remote. Besides the task, set it up as part of your work: a CLAUDE.md with what the task says about how to work in this repository, and its Obeya settings (\`.obeya/settings.json\`) with the skill \`obeya:settings\`, as the card “${this.o.board.t.adapterSetup.title(basename(this.o.repoPath ?? ''))}” would.`,
+      );
     const { run, stop } = this.o.adapter.app ?? {};
     const parking = stop ? ' While the card waits for the owner, Obeya stops the app in your workspace; your next message then says so.' : '';
     const far = hostName(this.o.board.row(card.id).workspace) ? " (this workspace is on another machine: Obeya forwards that address's port, and only that one, to the owner's)" : '';

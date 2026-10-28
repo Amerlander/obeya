@@ -27,6 +27,7 @@ import { useFullscreen } from './fullscreen';
 import { type Box, onto, ZOOM_EASE, ZOOM_MS, zoomBox } from './zoomBox';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { useStickToEnd } from './stickToEnd';
+import { newRepoWords, type RepoChoice, RepoPick, useRepoChoice } from './repoPick';
 import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
 import { cameInView, useSeen } from './seen';
 import { ClockMark, SnoozeLine, SnoozeMenu, snoozeWho } from './snooze';
@@ -118,6 +119,8 @@ export function Detail(p: Props) {
     }
   };
   const act = (a: CardAction, done: ActDone) => run(() => api.act(item.id, a), done);
+  // the repository the card is to be built in, before work on it begins: one of the canvas's or a new one
+  const choice = useRepoChoice(item, p.onEdit);
   // in a folder without git the card's change list takes the place of its branch
   const inFolder = !!p.repos.find((r) => r.id === item.repo)?.folder;
   const changes = useFolderDiff(item, inFolder && item.kind === 'task' && !!item.branch);
@@ -165,7 +168,7 @@ export function Detail(p: Props) {
         {item.archivedAt ? <div className="p-title">{shownTitle(item)}</div> : <ManualTitle item={item} onEdit={p.onEdit} />}
         <SupersededBox item={item} all={all} act={act} onDelete={p.onDelete} />
         <RepoDownBox item={item} />
-        <IdeaView item={item} act={act} run={run} listener={listener} onDelete={p.onDelete} onTell={p.onTell} prototypes={!inFolder} />
+        <IdeaView item={item} act={act} run={run} listener={listener} onDelete={p.onDelete} onTell={p.onTell} prototypes={!inFolder} choice={choice} repos={p.repos} />
         {error && <p className="p-error">{error}</p>}
       </>
     );
@@ -193,6 +196,8 @@ export function Detail(p: Props) {
       </>
     );
   const worked = isWorked(item);
+  // a new repository the start creates first: the button names it, a line under it says what it does
+  const fresh = newRepoWords(choice, false);
   // a task waiting for its first start keeps its text in full beside its conversation, where notes wait for its agent
   const waits = waitsFirstStart(item);
   // a demo, video or HTML artifact, goes to a page where the repository has a share target, else it is exported as a file; prototypes stay here
@@ -411,7 +416,7 @@ export function Detail(p: Props) {
       {item.state === 'proposal' && (
         <ProposalView item={item} from={p.from} act={act} listener={listener} onRevise={tell('revise')}>
           {editable ? (
-            <ManualFields item={item} repos={p.repos} onEdit={p.onEdit} grow />
+            <ManualFields item={item} repos={p.repos} choice={choice} onEdit={p.onEdit} grow />
           ) : (
             <>
               <Body md={item.body} />
@@ -440,13 +445,14 @@ export function Detail(p: Props) {
         <p className="hint">{t.idea.builtOn(plain(item.prototypes?.find((x) => x.id === item.builtOn)?.title ?? ''))}</p>
       )}
       {p.from && !item.prototypeOf && item.state !== 'proposal' && <p className="hint">{t.followUpOf(plain(p.from.title))}</p>}
+      {!p.from && item.fromElsewhere && <FromElsewhere item={item} />}
 
       {item.state === 'planned' && !item.queue && <LastFailure cardId={item.id} />}
 
       {item.state === 'planned' && !worked && !waits && (
         <>
           {editable ? (
-            <ManualFields item={item} repos={p.repos} onEdit={p.onEdit} />
+            <ManualFields item={item} repos={p.repos} choice={choice} fresh onEdit={p.onEdit} />
           ) : (
             <>
               <Body md={item.body} />
@@ -571,10 +577,19 @@ export function Detail(p: Props) {
       {item.state === 'planned' && !worked && !waits && !item.queue && (
         <div className="actions">
           {/* one snoozed to start later starts now with „Jetzt zurückholen“ on its line in the conversation */}
-          {!item.snoozed && (
-            <button className="btn primary" title={inFolder ? t.folder.startHint : t.startHint} onClick={() => act({ action: 'start' }, { close: false })}>
-              {t.start}
-            </button>
+          {item.newRepo?.due ? (
+            <Armed label={t.repoPick.making(choice.name)} undo={t.undo} onUndo={() => act({ action: 'stayHere' }, { close: false })} />
+          ) : (
+            !item.snoozed && (
+              <button
+                className="btn primary"
+                disabled={!!fresh && !fresh.ready}
+                title={fresh?.hint ?? (inFolder ? t.folder.startHint : t.startHint)}
+                onClick={() => act({ action: 'start' }, { close: false })}
+              >
+                {fresh?.button ?? t.start}
+              </button>
+            )
           )}
           <Later item={item} act={act} />
           {prototypeActions}
@@ -635,6 +650,7 @@ export function Detail(p: Props) {
           )}
         </div>
       )}
+      {item.state === 'planned' && !worked && !waits && !item.queue && fresh && <p className="hint">{fresh.hint}</p>}
       {review && item.noChange && !item.prototypeOf && <p className="hint">{inFolder ? t.folder.noChangeHint : t.noChangeHint}</p>}
       {review && direct && !item.prototypeOf && <p className="hint">{t.directHint}</p>}
     </>
@@ -697,6 +713,19 @@ function SupersededBox({ item, all, act, onDelete }: { item: Item; all: Item[]; 
   );
 }
 
+/** A card that comes from a card on another canvas: which, and a link that opens it there. */
+function FromElsewhere({ item }: { item: Item }) {
+  const e = item.fromElsewhere!;
+  return (
+    <p className="hint">
+      {t.fromElsewhere(plain(e.title), e.canvasName)}{' '}
+      <a className="link" href={`?c=${encodeURIComponent(e.canvas)}&card=${encodeURIComponent(item.from!)}`}>
+        {t.openThere}
+      </a>
+    </p>
+  );
+}
+
 /** On a card whose repository does not run on the canvas: no agent works on it until that is back. */
 function RepoDownBox({ item }: { item: Item }) {
   if (!item.repoDown) return null;
@@ -708,8 +737,30 @@ function RepoDownBox({ item }: { item: Item }) {
 }
 
 /** `prototypes`: the idea's repository can have them (a folder without git has no branch to build one on). */
-function IdeaView({ item, act, run, listener, onDelete, onTell, prototypes }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void>; run: Run; listener?: string; onDelete: () => void; onTell: Tell; prototypes: boolean }) {
+function IdeaView({
+  item,
+  act,
+  run,
+  listener,
+  onDelete,
+  onTell,
+  prototypes,
+  choice,
+  repos,
+}: {
+  item: Item;
+  act: (a: CardAction, done: ActDone) => Promise<void>;
+  run: Run;
+  listener?: string;
+  onDelete: () => void;
+  onTell: Tell;
+  prototypes: boolean;
+  choice: RepoChoice;
+  repos: RepoRef[];
+}) {
   const idea = item.idea!;
+  // a new repository building creates first: the button names it, a line under it says what it does
+  const fresh = newRepoWords(choice, true);
   const [prototyping, setPrototyping] = useState(false);
   // what the agent would do in the owner's place is the marked click; without a suggestion, building is
   const next = idea.status === 'open' && !idea.thinking ? idea.next : undefined;
@@ -782,6 +833,7 @@ function IdeaView({ item, act, run, listener, onDelete, onTell, prototypes }: { 
           )}
           {/* planning waits for the reply, which will change the brief the owner decides on; building goes ahead after it unless it asks questions */}
           {idea.thinking && <p className={idea.buildAfterReply ? 'hint go-waits' : 'hint'}>{idea.buildAfterReply ? t.idea.buildWaitsHint : idea.split ? t.idea.waitForReplySplit : t.idea.waitForReply}</p>}
+          {idea.status === 'open' && !item.newRepo?.due && <RepoPick choice={choice} repos={repos} />}
           <div className="actions">
             {/* the settled part as a task of its own; the reply may change the split, so it waits for it */}
             {idea.split && (
@@ -794,12 +846,20 @@ function IdeaView({ item, act, run, listener, onDelete, onTell, prototypes }: { 
                 {t.idea.splitOff}
               </button>
             )}
-            {idea.buildAfterReply ? (
+            {item.newRepo?.due ? (
+              <Armed label={t.repoPick.making(choice.name)} undo={t.undo} onUndo={() => act({ action: 'stayHere' }, { close: false })} />
+            ) : idea.buildAfterReply ? (
               <Armed label={t.idea.buildWaits} undo={t.idea.unbuild} onUndo={() => act({ action: 'unbuild' }, { close: false })} />
             ) : (
-              // while the agent works, the click waits for its reply in view; else the panel closes on the built card
-              <button className={btn('build')} onClick={() => act({ action: 'build' }, idea.thinking ? { close: false } : { close: true, ack: t.idea.built })}>
-                {t.idea.build}
+              // while the agent works, the click waits for its reply in view; else the panel closes on the built card;
+              // built in a new repository, it stays open for „Rückgängig“ and then follows the card to its canvas
+              <button
+                className={btn('build')}
+                disabled={!!fresh && !fresh.ready}
+                title={fresh?.hint}
+                onClick={() => act({ action: 'build' }, idea.thinking || fresh ? { close: false } : { close: true, ack: t.idea.built })}
+              >
+                {fresh?.button ?? t.idea.build}
               </button>
             )}
             <button className={btn('planDoc')} disabled={idea.thinking} onClick={() => act({ action: 'planDoc' }, { close: true, ack: t.idea.planned })}>
@@ -827,6 +887,7 @@ function IdeaView({ item, act, run, listener, onDelete, onTell, prototypes }: { 
               {t.delete}
             </button>
           </div>
+          {fresh && <p className="hint">{fresh.hint}</p>}
         </>
       )}
     </>
@@ -2384,12 +2445,12 @@ function ManualTitle({ item, onEdit }: { item: Item; onEdit: (p: CardPatch) => v
   );
 }
 
-function ManualFields({ item, repos, onEdit, grow }: { item: Item; repos: RepoRef[]; onEdit: (p: CardPatch) => void; grow?: boolean }) {
+/** `fresh`: the repository picker offers a new repository (not on a proposal, which starts where it is). */
+function ManualFields({ item, repos, choice, fresh, onEdit, grow }: { item: Item; repos: RepoRef[]; choice: RepoChoice; fresh?: boolean; onEdit: (p: CardPatch) => void; grow?: boolean }) {
   const [body, setBody] = useState(item.body);
   // a proposal's text shows in full as far as the screen allows, the panel growing with it
   const ref = useRef<HTMLTextAreaElement>(null);
   useFitHeight(ref, body, grow);
-  const [repo, setRepo] = useState(item.repo);
   // a dropped file's path goes in as typed while the field has the cursor, else after the text
   // (the latest, which a path put in just before is part of before React has drawn it)
   const latest = useRef(body);
@@ -2404,24 +2465,7 @@ function ManualFields({ item, repos, onEdit, grow }: { item: Item; repos: RepoRe
   const shots = useShotInput({ initial: item.images, onChange: (images) => onEdit({ images }), put });
   return (
     <>
-      <div className="segs">
-        {repos.length > 1 && (
-          <div className="seg">
-            {repos.map((r) => (
-              <button
-                key={r.id}
-                className={r.id === repo ? 'on' : ''}
-                onClick={() => {
-                  setRepo(r.id);
-                  onEdit({ repo: r.id });
-                }}
-              >
-                {r.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {!item.newRepo?.due && <RepoPick choice={choice} repos={repos} fresh={!!fresh} />}
       {/* the task's screenshots: the worker gets them with the task when it starts */}
       <div className={`p-body-field${shots.dropping ? ' dropping' : ''}`} {...shots.drop}>
         <ShotStrip shots={shots} />

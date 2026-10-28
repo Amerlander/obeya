@@ -168,6 +168,13 @@ card or project open, in the view closing it returns to. A follow-up goes below 
 What comes without a pointer (the app's key, a request an agent passed on) uses the view the page
 last reported. The camera flies only when the card landed out of view.
 
+A new card or idea may go onto another canvas the owner names („leg auf Super 59 eine Aufgabe an“),
+into that canvas's home repository, with the command's screenshots; the Koordinator hears the other
+canvases' names with every command. A follow-up made there names the card it follows here, with its
+canvas. „Bau das in einem neuen Repo unter ~/dev/super59“ builds an idea, or starts a planned task
+nobody has worked on, in a new repository (see Building in a new repository); the card's own undo
+window follows the command's.
+
 Asking for an opinion or a way forward, with no agent on the open card, makes an idea with the
 owner's words (see Ideas); a question of fact gets a reply. With a card open the Koordinator gets its
 worker's whole summary, so "lege eine Folgeaufgabe für den ambient-Ton an" gets the context from it.
@@ -197,8 +204,8 @@ feedback the Koordinator passes on („sag dem Export, …“) waits for undo li
 
 #### A step once a card gets somewhere
 
-What can only follow once a card gets somewhere (a canvas for the repository a new task creates,
-starting „Login“ once „Export“ has landed) the Koordinator waits for, as a worker snoozes: `wait_for`
+What can only follow once a card gets somewhere (starting „Login“ once „Export“ has landed, a new
+card on another canvas once a task here is done) the Koordinator waits for, as a worker snoozes: `wait_for`
 on a card, or on a new card of the same act, until it is done (default) or waits for the owner, with
 the step written to stand on its own (cards named by title, since another session tags cards anew). A card already there or a step without
 text is refused. The waited-on card's agent may read the step in its task; it asks Obeya for it in
@@ -340,6 +347,10 @@ as an app (see Distribution: The app from a checkout).
 - **The Koordinator knows what a card's agent can do on the machine** (2026-10-18): otherwise it told
   the owner to `git init` themselves rather than make a card for it.
 - **A new card lands where the owner looks** (2026-10-14). Rejected: a column right of everything.
+- **The Koordinator makes cards on other canvases** (2026-10-28), though it works per canvas:
+  „leg auf Super 59 eine Karte an“ said elsewhere, or a step it waited for, failed twice on one
+  idea, and a card it then made on the wrong canvas could not start there. Its other actions stay
+  on its own canvas.
 - **The Koordinator's model stays**: Sonnet, Haiku or a shorter prompt saved nothing reliable.
 - **Obeya does not speak** (2026-10-08): spoken confirmations and answers distracted the owner, who
   reads them anyway.

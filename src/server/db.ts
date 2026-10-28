@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { AnswerFile, AnswerRef, CardEvent, DeviceView, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, RepoCommands, SettingProposal, SettingProposalState, Spot, Talk, TalkAfter, TalkQuote, TalkRef, TalkWait } from '../core/types';
+import type { AnswerFile, AnswerRef, CardEvent, DeviceView, CardKind, CardState, Mock, Need, Preference, PreferenceState, ProposedSetting, RepoCommands, SettingProposal, SettingProposalState, Spot, Talk, TalkAfter, TalkMoved, TalkQuote, TalkRef, TalkWait } from '../core/types';
 import type { Wish } from '../core/wish';
 
 export interface CardRow {
@@ -113,6 +113,11 @@ export interface CardRow {
    * once the card works in a clone again, which takes the branch from there.
    */
   kept_in: string | null;
+  /**
+   * JSON: a repository to create for the card before work begins (`NewRepo`); once Obeya made it,
+   * `{ path, canvas, made: true }`, so its worker hears that the repository is new.
+   */
+  new_repo: string | null;
 }
 
 /** Words the usage limit keeps the Koordinator from reading (`talk.held`): until when, and how it reads them then (`Commander`'s). */
@@ -427,6 +432,9 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN kept_in TEXT;',
   // a review card: the pull request of someone outside it reviews (JSON `StoredContribution`)
   'ALTER TABLE cards ADD COLUMN contribution TEXT;',
+  // a repository to create for a card before work begins, and that Obeya made it (JSON `StoredNewRepo` in board.ts);
+  // an exchange of no one's in the sheet that says a card moved to another canvas (JSON `TalkMoved`)
+  'ALTER TABLE cards ADD COLUMN new_repo TEXT; ALTER TABLE talk ADD COLUMN moved TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply';
@@ -508,6 +516,23 @@ export class Store {
         this.db.run(`PRAGMA user_version = ${v + 1}`);
       })();
     }
+  }
+
+  /** A canvas's name as last stored; none for a canvas this database has never seen. */
+  canvasName(id: string): string | null {
+    return (this.db.query('SELECT name FROM canvases WHERE id = $id').get({ id }) as { name: string } | null)?.name ?? null;
+  }
+
+  /**
+   * The card goes to another canvas, at `at`, with its history and decisions: into that canvas's
+   * home repository (`repo` null) and out of its group, which belongs to the canvas it leaves.
+   */
+  moveCard(id: string, canvasId: string, at: { x: number; y: number }, fields: RowUpdate = {}) {
+    this.db.transaction(() => {
+      this.update(id, { ...fields, x: at.x, y: at.y, repo: null, group_id: null });
+      this.db.query('UPDATE cards SET canvas_id = $c WHERE id = $id').run({ id, c: canvasId });
+      this.db.query('UPDATE decisions SET canvas_id = $c WHERE card_id = $id').run({ id, c: canvasId });
+    })();
   }
 
   ensureCanvas(id: string, name: string) {
@@ -886,6 +911,11 @@ export class Store {
 
   // ---------------------------------------------------------------- the Koordinator's memory
 
+  /** An exchange of no one's in the canvas's sheet, `reply` saying the card moved to another canvas. */
+  addMoved(canvasId: string, moved: TalkMoved, reply: string): number {
+    return (this.db.query("INSERT INTO talk (canvas_id, at, said, reply, moved) VALUES ($c, $at, '', $reply, $moved) RETURNING id").get({ c: canvasId, at: now(), reply, moved: JSON.stringify(moved) }) as { id: number }).id;
+  }
+
   addTalk(canvasId: string, said: string, reply: string, cardId: string | null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter, askedIn?: string): number {
     return (
       this.db
@@ -1096,7 +1126,7 @@ export class Store {
              WHERE c.canvas_id = $c AND e.author = 'owner' AND e.kind IN ('hint', 'answer', 'talk') AND e.at > $since
              UNION ALL
              SELECT t.at, t.card_id, c.title, 'say', t.said, t.id FROM talk t LEFT JOIN cards c ON c.id = t.card_id
-             WHERE t.canvas_id = $c AND t.undone = 0 AND t.after_wait IS NULL AND t.at > $since
+             WHERE t.canvas_id = $c AND t.undone = 0 AND t.after_wait IS NULL AND t.moved IS NULL AND t.at > $since
            ) ORDER BY at DESC, seq DESC LIMIT $limit`,
         )
         .all({ c: canvasId, since, limit }) as { at: string; cardId: string | null; title: string | null; kind: Utterance['kind']; text: string }[]
@@ -1313,6 +1343,7 @@ interface TalkRow {
   waits: string | null;
   after_wait: string | null;
   asked_in: string | null;
+  moved: string | null;
 }
 
 const toTalk = (r: TalkRow): Talk => ({
@@ -1338,6 +1369,7 @@ const toTalk = (r: TalkRow): Talk => ({
   ...(r.waits ? { waits: (JSON.parse(r.waits) as TalkWaitRow[]).map(({ card, title, state }) => ({ card, title, state })) } : {}),
   ...(r.after_wait ? { after: JSON.parse(r.after_wait) as TalkAfter } : {}),
   ...(r.asked_in ? { askedIn: r.asked_in } : {}),
+  ...(r.moved ? { moved: JSON.parse(r.moved) as TalkMoved } : {}),
 });
 
 /**

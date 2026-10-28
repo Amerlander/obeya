@@ -564,6 +564,11 @@ textarea.p-body:focus { border-color: var(--muted); }
 .seg { display: inline-flex; background: var(--chip); border-radius: 3px; padding: 3px; gap: 2px; margin-top: 12px; }
 .seg button { border: 0; background: transparent; border-radius: 2px; padding: 4px 12px; font-size: 13px; cursor: pointer; color: var(--muted); }
 .seg button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+/* the repository a card is built in, with a new one's folder and whether it gets a canvas of its own */
+.repo-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.repo-new { display: flex; align-items: center; gap: 14px; margin-top: 12px; flex: 0 1 560px; }
+.repo-path { flex: 1; min-width: 0; font: 13px var(--mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--card); color: var(--ink); }
+.repo-canvas { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; cursor: pointer; }
 .actions { display: flex; gap: 10px; margin-top: 18px; align-items: center; }
 /* deleting stands apart from what moves the card on */
 .actions > .btn.danger { margin-left: auto; }

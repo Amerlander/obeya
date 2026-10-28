@@ -868,6 +868,9 @@ function Canvas({
   useEffect(
     () =>
       onNotice((n) => {
+        // the open card moved to another canvas (built in a new repository there): the page follows it
+        const f = focusRef.current;
+        if (n.movedTo && n.cardId && f?.type === 'card' && f.id === n.cardId) return location.assign(`?c=${encodeURIComponent(n.movedTo)}&card=${encodeURIComponent(n.cardId)}`);
         const i = itemsRef.current.find((x) => x.id === n.cardId);
         if (n.wish) openWish(n.wish);
         // the card a review of its PR asked for, unless the owner has another one open; one just made, once it is on the canvas

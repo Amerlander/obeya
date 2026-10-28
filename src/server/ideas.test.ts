@@ -1471,3 +1471,22 @@ describe('by voice', () => {
     expect(item(i.id).state).toBe('working');
   });
 });
+
+describe('a new repository for an idea', () => {
+  test("its agent picks one from the conversation, the whole value each time; the owner's pick on the card stands", async () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Bau es in ~/dev/super59, eigene Leinwand.' });
+    await settle();
+    const s = explorer();
+    expect(s.spec.system).toContain('plan_repo');
+    expect(s.call('plan_repo', { path: 'dev/super59' })).toContain('give it absolute or from ~');
+    expect(s.call('plan_repo', { path: ' ~/dev/super59 ' })).toContain('a new repository at ~/dev/super59, with a canvas of its own');
+    expect(item(i.id).newRepo).toEqual({ path: '~/dev/super59', canvas: true, by: 'agent' });
+    expect(s.call('plan_repo', { path: '' })).toContain('No new repository');
+    expect(item(i.id).newRepo).toBeUndefined();
+    s.call('plan_repo', { path: '~/dev/super59', canvas: false });
+    board().patch(i.id, { newRepo: { path: '~/dev/termine', canvas: true } });
+    expect(s.call('plan_repo', { path: '~/dev/other' })).toContain('The owner picked the repository on the card themselves (a new one at ~/dev/termine)');
+    expect(item(i.id).newRepo).toEqual({ path: '~/dev/termine', canvas: true, by: 'owner' });
+  });
+});

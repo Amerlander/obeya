@@ -13,7 +13,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
 import { inQueue } from '../core/queue';
 import { BadRequest, Board, pathOfRef, replyNote, type StoredContribution } from './board';
 import type { ChangeRoute } from '../core/types';
@@ -23,6 +23,7 @@ import type { Store } from './db';
 import { Explorers } from './explorers';
 import { Files } from './files';
 import { Images, MAX_IMAGES } from './images';
+import { makeRepo, newRepoPath } from './new-repo';
 import { type ContributionInfo, type Forge, parsePrUrl, sameRepo } from './forge';
 import { Koordinator } from './koordinator';
 import { WorkRetro } from './work-retro';
@@ -64,6 +65,8 @@ export interface CanvasDeps {
   watch?: boolean;
   /** How long a voice command waits for undo. */
   commandDelayMs?: number;
+  /** How long building or starting a card in a new repository waits for undo; NEW_REPO_HOLD_MS when left out. */
+  newRepoHoldMs?: number;
   /** The checkout this Obeya runs from, when it starts again for new code there (self-update.ts). */
   ownCheckout?: string | null;
   /** Obeya's configuration, which the Koordinator reads and changes on the owner's word. */
@@ -95,6 +98,8 @@ export interface CanvasDeps {
   settings?: (repoPath: string) => RepoSettings | undefined;
   /** The canvas stopped while it ran: its home repository no longer starts (`Canvases` leaves it out). */
   stopped?: (c: CanvasRuntime, why: string) => void;
+  /** The canvases that run now, this one among them (`Canvases`): a card goes to another one, or Obeya makes one there. */
+  canvases?: () => CanvasRuntime[];
 }
 
 /**
@@ -343,10 +348,13 @@ export class CanvasRuntime {
       lookUp: (talk) => this.answers.lookUp(talk),
       onOwnerInput: (card, kind, text, reply) => this.koordinator.learn((card && board.item(card)) || null, kind, text, { reply }),
       ...(deps.config ? { config: deps.config } : {}),
+      canvases: () => (deps.canvases?.() ?? []).filter((c) => c !== this).map((c) => ({ id: c.id, name: c.board.canvas.name })),
       agentSetting: () => agents('koordinator'),
       ...(deps.commandDelayMs !== undefined ? { delayMs: deps.commandDelayMs } : {}),
     });
     board.interruptTalk();
+    // the undo window of a new repository is not kept across a restart: the card stays as it was
+    for (const i of board.snapshot().items) if (i.newRepo?.due) board.setNewRepo(i.id, { ...i.newRepo, due: undefined });
     this.commander.resume();
     this.answers.resumeAll();
     this.revisions = new Revisions({
@@ -1343,9 +1351,12 @@ export class CanvasRuntime {
       throw new BadRequest('emptyText', 'text must be a non-empty string');
     switch (a.action) {
       case 'start':
+        if (card?.newRepo) return this.intoNewRepo(cardId);
         // one snoozed to start later starts now
         if (this.board.item(cardId)?.snoozed?.start) return this.wake(cardId, false);
         return this.koordinator.request(cardId);
+      case 'stayHere':
+        return this.stayHere(cardId);
       case 'name':
         return void this.koordinator.name(cardId);
       case 'force':
@@ -1617,8 +1628,150 @@ export class CanvasRuntime {
       this.board.log(cardId, 'state', 'owner', this.board.t.idea.buildAfterReply);
       return;
     }
+    if (card.newRepo) return this.intoNewRepo(cardId);
     this.decided(card, { answer: this.board.t.idea.buildAnswer, log: this.board.t.idea.buildLog });
     this.koordinator.request(cardId);
+  }
+
+  // ---------------------------------------------------------------- a new repository
+
+  /** Cards whose new repository Obeya makes once the undo window is through (`NewRepo.due`). */
+  private newRepos = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /**
+   * „So bauen“ or „Agent starten“ on a card to be built in a repository that does not exist yet:
+   * after a few seconds in which `stayHere` takes it back, Obeya makes that repository and builds or
+   * starts the card there (`makeNewRepo`). What it cannot do is refused at once where it can tell.
+   */
+  private intoNewRepo(cardId: string) {
+    const card = this.board.item(cardId);
+    const target = card?.newRepo;
+    if (!card || !target) throw new BadRequest('invalid', 'the card has no new repository');
+    if (target.due) return;
+    const t = this.board.t.newRepo;
+    const path = newRepoPath(target.path, t);
+    if (this.deps.config && this.deps.config.view().source !== 'file') throw new BadRequest('newRepoPath', t.fromCommandLine);
+    this.taken(path);
+    const due = Date.now() + (this.deps.newRepoHoldMs ?? NEW_REPO_HOLD_MS);
+    this.board.setNewRepo(cardId, { ...target, due: new Date(due).toISOString() });
+    this.newRepos.set(
+      cardId,
+      setTimeout(() => {
+        this.newRepos.delete(cardId);
+        void this.makeNewRepo(cardId);
+      }, due - Date.now()),
+    );
+  }
+
+  /** The owner takes back building or starting the card in its new repository while the undo window runs. */
+  private stayHere(cardId: string) {
+    const timer = this.newRepos.get(cardId);
+    const target = this.board.newRepo(cardId);
+    if (!timer || !target?.due) throw new BadRequest('newRepoGone', 'the new repository is being made already');
+    clearTimeout(timer);
+    this.newRepos.delete(cardId);
+    this.board.setNewRepo(cardId, { ...target, due: undefined });
+    this.board.log(cardId, 'state', 'owner', this.board.t.newRepo.stayed);
+  }
+
+  /** Refuses a folder that is a repository of a canvas already: the card is to be built there instead. */
+  private taken(path: string) {
+    for (const c of this.deps.canvases?.() ?? [this]) {
+      const r = c.repos.find((x) => x.info.path === path);
+      if (r) throw new BadRequest('newRepoPath', this.board.t.newRepo.taken(path, c.board.canvas.name));
+    }
+  }
+
+  /**
+   * Makes the card's new repository and builds or starts the card there, one step after the other:
+   * the folder and git (`makeRepo`), the configuration with a canvas of its own named after it (or
+   * the repository on this canvas), then the card: an idea is decided as „So bauen“ decides it, and
+   * moves, with its history and decisions, to the new canvas, where it starts. A step that fails takes
+   * back those before it, and the card says why.
+   */
+  private async makeNewRepo(cardId: string) {
+    const t = this.board.t.newRepo;
+    const target = this.board.newRepo(cardId);
+    const card = this.board.item(cardId);
+    if (!card || !target?.due) return;
+    const undo: (() => unknown)[] = [];
+    try {
+      const path = newRepoPath(target.path, t);
+      this.taken(path);
+      const config = this.deps.config;
+      if (!config) throw new Error('no configuration to add the repository to');
+      const repo = makeRepo(path, t);
+      undo.push(repo.undo);
+      const before = config.current();
+      const { resolved } = await config.check(before);
+      const here = resolved.findIndex((r) => r?.id === this.id);
+      if (here < 0) throw new Error(`the canvas ${this.id} is not in the configuration`);
+      const after = target.canvas
+        ? [...before, { repos: [{ path: target.path.trim() }] }]
+        : before.map((c, i) => (i === here ? { ...c, repos: [...c.repos, { path: target.path.trim() }] } : c));
+      await config.save(after);
+      undo.push(() => config.save(before));
+      if (!target.canvas) return this.joined(cardId, path, repo.made);
+      const checked = await config.check(after);
+      const id = checked.resolved.at(-1)?.id;
+      const there = id ? this.deps.canvases?.().find((c) => c.id === id) : undefined;
+      if (!there) throw new Error(t.notStarted(checked.problems.filter((p) => p.canvas === after.length - 1).map((p) => p.detail).join('; ') || path));
+      this.moveTo(cardId, there, repo.made);
+    } catch (e) {
+      for (const step of undo.reverse()) {
+        try {
+          await step();
+        } catch (u) {
+          console.error(`Obeya: taking back a step of the new repository of ${cardId}:`, u);
+        }
+      }
+      if (!this.board.item(cardId)) return;
+      this.board.setNewRepo(cardId, { ...target, due: undefined });
+      this.board.log(cardId, 'error', 'obeya', t.failed(messageOf(e)), { code: e instanceof BadRequest ? e.code : undefined });
+    }
+  }
+
+  /** The new repository joined this canvas: the card works in it, an idea built as „So bauen“ builds it. */
+  private joined(cardId: string, path: string, made: boolean) {
+    const r = this.repos.find((x) => x.info.path === path);
+    if (!r) throw new Error(`${path} does not run on the canvas`);
+    const card = this.board.item(cardId)!;
+    const target = this.board.newRepo(cardId)!;
+    this.board.patch(cardId, { repo: r.ref.id });
+    this.board.setNewRepo(cardId, { path: target.path, canvas: false, by: target.by, made: true });
+    this.board.log(cardId, 'state', 'obeya', this.board.t.newRepo.joined(target.path.trim(), made));
+    if (card.state === 'idea') this.decided(card, { answer: this.board.t.newRepo.buildAnswer(target.path.trim()), log: this.board.t.idea.buildLog });
+    this.koordinator.request(cardId);
+  }
+
+  /**
+   * The card leaves for the canvas `there`, whose home repository was made for it: an idea is
+   * decided here first (its agent's session ends, its prototypes are discarded), then the card goes
+   * with its history, decisions and screenshots, out of its group, and starts there. This canvas's
+   * sheet says where it went, and a page that has it open follows it.
+   */
+  private moveTo(cardId: string, there: CanvasRuntime, made: boolean) {
+    const card = this.board.item(cardId)!;
+    const target = this.board.newRepo(cardId)!;
+    const shown = target.path.trim();
+    if (card.state === 'idea') this.decided(card, { answer: this.board.t.newRepo.buildAnswer(shown), log: this.board.t.idea.buildLog });
+    clearTimeout(this.writing.get(cardId)?.timer);
+    this.writing.delete(cardId);
+    this.said.delete(cardId);
+    // the screenshots of the task and of its conversation, which the new canvas keeps under its own name
+    const row = this.board.row(cardId);
+    const shots = [...(row.images ? (JSON.parse(row.images) as string[]) : []), ...this.board.events(cardId).flatMap((e) => e.images ?? [])];
+    this.images.copyTo(there.images, shots);
+    const at = there.board.freeSpot(there.inView);
+    this.deps.store.moveCard(cardId, there.id, at, { new_repo: JSON.stringify({ path: target.path, canvas: true, by: target.by, made: true }) });
+    this.deps.store.dropEmptyGroups(this.id);
+    there.board.log(cardId, 'state', 'obeya', there.board.t.newRepo.movedHere(this.board.canvas.name, shown, made));
+    const moved = { card: cardId, title: card.title, canvas: there.id, canvasName: there.board.canvas.name };
+    this.board.moved(moved);
+    this.commander.tell(`The card "${card.title}" moved to the canvas "${there.board.canvas.name}", in its new repository ${shown}, and is built there.`);
+    this.board.notify({ cardId, text: this.board.t.newRepo.movedAway(card.title, there.board.canvas.name), movedTo: there.id });
+    there.board.changed();
+    there.koordinator.request(cardId);
   }
 
   /**
@@ -1904,6 +2057,30 @@ export class CanvasRuntime {
     return card;
   }
 
+  /**
+   * A new card or idea the owner asked for on another canvas: made there as there, its screenshots
+   * copied over; a follow-up of a card here goes there in no group and names that card. Its id, for
+   * a wait in the same command.
+   */
+  private elsewhere(c: Extract<Command, { do: 'newCard' | 'newIdea' }>): unknown {
+    const there = this.deps.canvases?.().find((x) => x.id === c.canvas);
+    if (!there) throw new Error(`the canvas ${c.canvas} does not run`);
+    if (c.images?.length) this.images.copyTo(there.images, c.images);
+    const { canvas: _, place: __, repo: ___, ...rest } = c;
+    if (rest.do === 'newIdea') return there.run(rest);
+    const { from, ...card } = rest;
+    return from ? there.followUp(card, from) : there.run(card);
+  }
+
+  /** A card the Koordinator of another canvas makes here for the owner, following up on a card of its own. */
+  followUp(c: Extract<Command, { do: 'newCard' }>, from: string): string {
+    const card = this.board.create({ title: c.title, body: c.body, ...(c.images?.length ? { images: c.images } : {}), ...this.board.freeSpot(this.inView) }, from);
+    this.board.log(card.id, 'state', 'owner', this.board.t.voice.created);
+    if (c.until && Date.parse(c.until) > Date.now()) this.snooze(card.id, c.until);
+    else if (c.start || c.until) this.koordinator.request(card.id);
+    return card.id;
+  }
+
   /** An idea to build or plan: not while its agent works on a reply, which will change the brief the owner decides on. */
   private settledIdea(cardId: string): Item {
     const card = this.ideaCard(cardId);
@@ -1913,6 +2090,18 @@ export class CanvasRuntime {
 
   /** A voice (or typed) command, once its undo window has passed; a new card's id, for a wait on it in the same command. */
   run(c: Command) {
+    switch (c.do) {
+      case 'newCard':
+      case 'newIdea':
+        if (c.canvas && c.canvas !== this.id) return this.elsewhere(c);
+        break;
+      case 'newRepo': {
+        const card = this.board.item(c.card);
+        if (!card) throw new BadRequest('unknownCard', 'unknown card');
+        this.board.setNewRepo(c.card, { path: c.path, canvas: c.canvas, by: 'owner' });
+        return this.act(c.card, { action: card.state === 'idea' ? 'build' : 'start' });
+      }
+    }
     switch (c.do) {
       case 'newCard': {
         const at = c.from ? { from: c.from } : this.board.freeSpot(c.place ?? this.inView);
@@ -2150,6 +2339,7 @@ export class Canvases {
         this.down.set(c.id, why);
         this.emit();
       },
+      canvases: () => this.list,
     };
     this.list = this.start(configs);
   }

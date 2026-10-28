@@ -273,6 +273,8 @@ const de = {
     plansNoPrototypes: 'Plant keine Prototypen mehr',
     plansSplit: (task: string) => `Markiert eine Teilaufgabe zum Abtrennen: „${task}“`,
     plansNoSplit: 'Markiert keine Teilaufgabe zum Abtrennen mehr',
+    plansRepo: (path: string) => `Wählt ein neues Repository zum Bauen: ${path}`,
+    plansNoRepo: 'Wählt kein neues Repository mehr',
     decision: (question: string, answer: string) => `Entscheidung: ${question} → ${answer}`,
     becameProject: 'Das Projekt steht jetzt an der Stelle der Idee; die Idee liegt im Archiv.',
     taskBecameProject: 'Das Projekt steht jetzt an der Stelle der Aufgabe; die Aufgabe liegt im Archiv.',
@@ -282,6 +284,25 @@ const de = {
     briefName: 'Stand der Idee',
     prototypeButton: 'Prototyp bauen lassen',
     splitOffButton: 'Teilaufgabe abtrennen',
+  },
+  /** A card built or started in a repository Obeya creates for it. */
+  newRepo: {
+    held: (path: string) => `Legt das Repository ${path} an …`,
+    stayed: 'Neues Repository zurückgenommen: Die Karte bleibt, wie sie war.',
+    failed: (why: string) => `Repository nicht angelegt, die Karte bleibt, wie sie war: ${why}`,
+    noPath: 'Für das neue Repository fehlt der Ordner.',
+    taken: (path: string, canvas: string) => `Das Repository ${path} gibt es auf der Leinwand „${canvas}“ schon; wähl es dort.`,
+    inside: (path: string, repo: string) => `${path} liegt im Repository ${repo}.`,
+    notFolder: (path: string) => `${path} ist kein Ordner.`,
+    fromCommandLine: 'Die Leinwände kommen von der Kommandozeile; eine neue legt nur die Konfiguration an.',
+    notStarted: (why: string) => `Die neue Leinwand startet nicht: ${why}`,
+    /** In the card's conversation, once it is on the new canvas. */
+    movedHere: (from: string, path: string, made: boolean) => `Von der Leinwand „${from}“ hierher umgezogen. Das Repository ${path} ${made ? 'ist neu angelegt' : 'gab es schon'}.`,
+    joined: (path: string, made: boolean) => `Das Repository ${path} ${made ? 'ist neu angelegt und ' : ''}gehört jetzt zu dieser Leinwand; die Karte arbeitet darin.`,
+    /** In Obeya's sheet of the canvas the card left. */
+    movedAway: (title: string, canvas: string) => `„${title}“ ist auf die Leinwand „${canvas}“ umgezogen und wird dort gebaut.`,
+    /** The answer the decision log records when an idea is built in a new repository. */
+    buildAnswer: (path: string) => `So bauen, im neuen Repository ${path}.`,
   },
   proposal: {
     /** `how`: the button clicked, "Übernehmen und starten", "Übernehmen und besprechen" (a proposed idea) or "Als Idee besprechen". */
@@ -685,6 +706,8 @@ const en: Messages = {
     plansNoPrototypes: 'Plans no prototypes any more',
     plansSplit: (task: string) => `Marks a task to split off: “${task}”`,
     plansNoSplit: 'Marks no task to split off any more',
+    plansRepo: (path: string) => `Picks a new repository to build in: ${path}`,
+    plansNoRepo: 'No longer picks a new repository',
     decision: (question: string, answer: string) => `Decision: ${question} → ${answer}`,
     becameProject: 'The project now stands in the idea’s place; the idea is in the archive.',
     taskBecameProject: 'The project now stands in the task’s place; the task is in the archive.',
@@ -692,6 +715,21 @@ const en: Messages = {
     briefName: 'Where the idea stands',
     prototypeButton: 'Have a prototype built',
     splitOffButton: 'Split off a task',
+  },
+  newRepo: {
+    held: (path: string) => `Creating the repository ${path} …`,
+    stayed: 'New repository taken back: the card stays as it was.',
+    failed: (why: string) => `Repository not created, the card stays as it was: ${why}`,
+    noPath: 'The new repository has no folder yet.',
+    taken: (path: string, canvas: string) => `The repository ${path} is on the canvas “${canvas}” already; choose it there.`,
+    inside: (path: string, repo: string) => `${path} lies inside the repository ${repo}.`,
+    notFolder: (path: string) => `${path} is not a folder.`,
+    fromCommandLine: 'The canvases come from the command line; a new one would only go into the configuration.',
+    notStarted: (why: string) => `The new canvas does not start: ${why}`,
+    movedHere: (from: string, path: string, made: boolean) => `Moved here from the canvas “${from}”. The repository ${path} ${made ? 'is new' : 'existed already'}.`,
+    joined: (path: string, made: boolean) => `The repository ${path} ${made ? 'is new and ' : ''}belongs to this canvas now; the card works in it.`,
+    movedAway: (title: string, canvas: string) => `“${title}” moved to the canvas “${canvas}” and is built there.`,
+    buildAnswer: (path: string) => `Build it like this, in the new repository ${path}.`,
   },
   proposal: {
     acceptAfterRevision: (how: 'start' | 'discuss' | 'asIdea') =>

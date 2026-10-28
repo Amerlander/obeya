@@ -33,7 +33,8 @@ under `docs/design/`, with its decisions at its end. Read this index, then the c
 touches, and keep those current in the same change.
 
 - [Ideas](design/ideas.md) — idea cards and their exploration agent: starting an idea, the
-  discussion, the brief, prototypes, deciding what becomes of it, while the agent replies.
+  discussion, the brief, prototypes, deciding what becomes of it, building it in a new repository,
+  while the agent replies.
 - [Card lifecycle](design/card-lifecycle.md) — a card's states from proposal to done: proposals
   (later starts, taking back, reworking by words), at work, waiting for approval (the handover
   report), approval and landing, live and done, archive, how projects end.

@@ -8,7 +8,15 @@ Each repository on a canvas has its own settings, workspaces, workers, project a
 the canvas has one board and one Koordinator, whose collision checks stay within a repository. The
 first repository is the canvas's home; the others' plan docs are referenced as `<repo>:<path>`. The
 owner's cards carry their repository, chosen in the panel before work begins (home by default); on a
-canvas with several repositories every card names its own. A proposal goes to the repository its agent
+canvas with several repositories every card names its own. The picker (on a planned task, and on an
+idea beside „So bauen“; built once for both) lists the canvas's repositories and „Neues Repository
+…“, visible with one repository too: a folder (it starts beside the home repository) and „eigene
+Leinwand“ (on by default; off, the repository joins this canvas). Picked, it reads „super59 (neu)“,
+and starting or building the card creates that repository first (see Building in a new
+repository); it is saved as it is picked, like anything entered on a card. A proposal's picker
+offers only the canvas's repositories. A card leaves its canvas only that way, built in a new
+repository with a canvas of its own; it then refers across canvases to the cards it came from or
+that come from it. A proposal goes to the repository its agent
 names, the one where the change is to be made, and otherwise inherits its card's: a worker in one
 repository often notices what needs changing in another (one drafting posts about the app sees what
 the app lacks), and a proposal filed under the wrong repository would start its worker in the wrong
@@ -475,7 +483,12 @@ Prompts only agents read stay English, with German examples of what the owner ma
 - **A plan doc that disappears ends its project automatically** (2026-10-01); an explicit
   „abschließen“ may sit on top later. Rejected: reading old content from git history (fragile).
 - **The configuration is the file `canvases.json`**, edited in the UI or by the Koordinator
-  (2026-10-01); saving a command-line configuration switches Obeya to the file.
+  (2026-10-01); saving a command-line configuration switches Obeya to the file. Building a card in a
+  new repository adds to it as well (2026-10-28), with the repository's canvas named after its
+  folder.
+- **„Neues Repository …“ is an entry of the card's repository picker** (2026-10-28), shown with one
+  repository too, so the way to a new repository is seen where the repository is chosen. Rejected:
+  a button of its own, and only the Koordinator (neither shows before the owner asks).
 - **A broken canvas or repository leaves the rest running** (2026-10-09).
 - **The configuration shows before its check, whose git calls run in parallel off the server's
   thread** (2026-10-15): run one after another (109 calls for three canvases), they froze the server,

@@ -1,7 +1,7 @@
 // Screenshots the owner adds to what they write on a card: stored once under Obeya's home,
 // shown in the card's log, and handed to the agent as images along with the text.
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '../core/types';
 import { BadRequest } from './board';
@@ -30,6 +30,16 @@ export class Images {
     if (!NAME.test(id)) return null;
     const p = join(this.dir, id);
     return existsSync(p) ? p : null;
+  }
+
+  /** Copies the images (ids) it has into `other`, which then has them under the same ids. */
+  copyTo(other: Images, ids: string[]) {
+    for (const id of new Set(ids)) {
+      const from = this.path(id);
+      if (!from || other.path(id)) continue;
+      mkdirSync(other.dir, { recursive: true });
+      copyFileSync(from, join(other.dir, id));
+    }
   }
 
   /** The files of images a message refers to; an unknown id is refused. */

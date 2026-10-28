@@ -19,12 +19,14 @@ Persistent (SQLite):
   contributor); an approval held until the work can land; landed work whose worker still finishes;
   a waiting card's stopped app; the clone that keeps a card's branch since its workspace was taken
   from it;
-  proposals waiting for the owner; an idea's brief, open questions and picks; a prototype's idea
+  proposals waiting for the owner; the new repository a card is to be built in, and that Obeya made
+  it; an idea's brief, open questions and picks; a prototype's idea
   and outcome; a project's plan doc as last read and the plan docs its landed work added;
 - card events (the conversation log, with the owner's screenshots and agents' mocks), workspaces
   and their leases, what a card changed in a folder without git and its undo there;
 - the Koordinator's conversation with the owner and the threads of looked-up questions (the
-  question, its answer and files, the card it moved onto);
+  question, its answer and files, the card it moved onto), and the cards that left the canvas for
+  another;
 - confirmed commands waiting out their undo window;
 - shared demo pages (slug, link, what the page shows, the change it was published after, whether it
   is publishing or withdrawing) and a running re-share of outdated pages;

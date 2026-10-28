@@ -290,6 +290,16 @@ function Conversation({ talk, fresh, items, onOpen, draft, sheetOf }: { talk: Ta
         // is done (archived) or deleted, its answers stand here again
         const card = x.movedTo ? items.find((i) => i.id === x.movedTo) : undefined;
         const asked = x.askedIn && x.askedIn !== sheetOf ? items.find((i) => i.id === x.askedIn) : undefined;
+        // a card left for another canvas, built there in a new repository: a line with a link to it there
+        if (x.moved)
+          return (
+            <div key={x.id} className="note ev-state">
+              {clock(x.at)} · {t.koordinator.moved(plain(x.moved.title), x.moved.canvasName)}{' '}
+              <a className="link" href={`?c=${encodeURIComponent(x.moved.canvas)}&card=${encodeURIComponent(x.moved.card)}`}>
+                {t.openThere}
+              </a>
+            </div>
+          );
         return (
           <Fragment key={x.id}>
             {/* Obeya took a step up by itself, once a card it waited on got there: no words of the owner's */}

@@ -1441,3 +1441,38 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
     expect(board.snapshot().talk).toHaveLength(4);
   });
 });
+
+describe('other canvases and new repositories', () => {
+  test('a new card or idea goes onto another canvas the owner names; one the Obeya does not have is refused with those it has', async () => {
+    const k = new Commander({ board, runtime, cwd: '/r', execute: (c) => void executed.push(c), delayMs: 20, canvases: () => [{ id: 'super59', name: 'Super 59' }] });
+    const heard = k.hear('leg auf Super 59 eine Aufgabe Termine an', {});
+    await settle();
+    const s = runtime.last;
+    expect(s.inbox.at(-1)).toContain('Other canvases of this Obeya (new_card and new_idea go there with canvas): "Super 59"');
+    expect(s.call('act', { actions: [{ do: 'new_idea', title: 'X', canvas: 'Shop' }], confirm: '…' })).toContain('unknown canvas Shop; the other canvases are "Super 59"');
+    s.call('act', { actions: [{ do: 'new_card', title: 'Termine', body: 'Termine.', canvas: 'Super 59' }, { do: 'new_idea', title: 'Hier', canvas: 'C' }], confirm: 'Lege „Termine“ auf Super 59 an.' });
+    s.emit({ type: 'idle' });
+    k.arm((await heard).token!);
+    await until(() => executed.length === 2);
+    expect(executed[0]).toMatchObject({ do: 'newCard', title: 'Termine', canvas: 'super59' });
+    // this canvas by its name is no other one
+    expect(executed[1]).not.toHaveProperty('canvas');
+  });
+
+  test('„bau das in einem neuen Repo unter …“ builds an idea, or starts a planned task, in a new repository; a card already at work is refused', async () => {
+    const idea = board.create({ idea: true, title: 'Termine', x: 0, y: 0 });
+    const task = board.create({ title: 'Export', x: 0, y: 0 });
+    board.work(task.id, { state: 'working' });
+    const k = commander();
+    const heard = k.hear('bau das in einem neuen Repo unter ~/dev/super59', { card: idea.id });
+    await settle();
+    const s = runtime.last;
+    expect(s.call('act', { actions: [{ do: 'build', card: 'K1', path: 'dev/super59' }], confirm: '…' })).toContain('give it absolute or from ~');
+    expect(s.call('act', { actions: [{ do: 'start', card: 'K2', path: '~/dev/export', own_canvas: false }], confirm: '…' })).toContain('only an idea, or a planned task');
+    s.call('act', { actions: [{ do: 'build', card: 'K1', path: '~/dev/super59' }], confirm: 'Baue es in ~/dev/super59.' });
+    s.emit({ type: 'idle' });
+    k.arm((await heard).token!);
+    await until(() => executed.length);
+    expect(executed[0]).toEqual({ do: 'newRepo', card: idea.id, path: '~/dev/super59', canvas: true });
+  });
+});

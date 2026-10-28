@@ -435,6 +435,20 @@ export class Explorers {
         },
       },
       {
+        name: 'plan_repo',
+        description: `When the owner wants the idea built in a repository that does not exist yet ("in a new repo under ~/dev/super59"): path, its folder (absolute or from ~), and canvas: true for a canvas of its own (the default), false where the owner wants the repository on this canvas beside the others. The card's repository picker then shows it, and its button builds it there: Obeya creates the folder and a local git repository (no remote, nothing published), a canvas named after it, moves this idea there with all it holds (brief, conversation, mocks, decisions) and builds it there; the worker hears the repository is new and sets it up (CLAUDE.md, Obeya's settings). The whole value each time; an empty path when it is to be built in an existing repository again. What the owner picked on the card stands: you do not change it.`,
+        schema: { path: z.string(), canvas: z.boolean().optional() },
+        run: ({ path, canvas }) => {
+          const p = clip(String(path ?? '').trim(), 1000);
+          if (p && !p.startsWith('~') && !/^([a-zA-Z]:)?[/\\]/.test(p)) return `${p} is no folder: give it absolute or from ~.`;
+          const set = this.o.board.setNewRepo(cardId, p ? { path: p, canvas: canvas !== false, by: 'agent' } : null, 'agent');
+          const now = this.o.board.newRepo(cardId);
+          if (!set) return `The owner picked the repository on the card themselves${now?.path ? ` (a new one at ${now.path})` : ''}; it stays as they chose.`;
+          this.o.board.log(cardId, 'activity', 'explorer', p ? t.plansRepo(p) : t.plansNoRepo);
+          return p ? `The card now builds it in a new repository at ${p}${canvas === false ? ' on this canvas' : ', with a canvas of its own'}.` : 'No new repository: it is built where the card says.';
+        },
+      },
+      {
         name: 'record_decision',
         description: `The owner decided something in the conversation: record it in the decision log (question and answer in ${OWNER_LANGUAGE}, short).`,
         schema: { question: z.string(), answer: z.string() },
@@ -471,6 +485,7 @@ export class Explorers {
    */
   private standing(card: Item, said: number[]): string {
     const { brief, mocks = [], variants = [], split } = this.o.board.idea(card.id);
+    const repo = card.newRepo;
     // in the order the agent read them: words it read later stand after the reply it read them at
     const place = (e: CardEvent) => (e.readAfter ? e.readAfter + 0.5 : e.id);
     const talk = this.o.board
@@ -480,7 +495,7 @@ export class Explorers {
       .sort((a, b) => place(a) - place(b) || a.id - b.id);
     const prototypes = card.prototypes ?? [];
     const shown = prototypes.slice(-MAX_VARIANTS);
-    if (!brief.trim() && !mocks.length && !variants.length && !split && !prototypes.length && !talk.some((e) => e.author === 'explorer')) return '';
+    if (!brief.trim() && !mocks.length && !variants.length && !split && !repo && !prototypes.length && !talk.some((e) => e.author === 'explorer')) return '';
     const who = (e: CardEvent) => (e.author === 'owner' ? 'Owner' : e.author === 'explorer' ? 'You' : 'Obeya');
     return [
       'This idea was discussed before, in a session of yours that is gone. Where it stands, as Obeya keeps it; go on from there, and keep in the brief what still holds:',
@@ -488,6 +503,7 @@ export class Explorers {
       mocks.length ? `The brief's mocks, shown under it (update_brief without mocks keeps them): ${mocks.map((m) => `“${m.title}”`).join(', ')}.` : '',
       variants.length ? `The prototypes you planned (plan_prototypes):\n${variants.map((v) => `- ${v.approach}: ${v.show}`).join('\n')}` : '',
       split ? `The part you marked to split off (plan_split): “${split.title}”.\n\n${split.brief}` : '',
+      repo ? `It is to be built in a new repository at ${repo.path || '(no folder named yet)'}${repo.canvas ? ', with a canvas of its own' : ' on this canvas'}, as ${repo.by === 'owner' ? 'the owner picked on the card' : 'you marked with plan_repo'}.` : '',
       shown.length
         ? `The idea's prototypes${prototypes.length > shown.length ? ` (the latest ${shown.length} of ${prototypes.length})` : ''}:\n${shown.map((p) => `- “${p.title}”, ${prototypeState(p)}${p.summary ? `. Its summary: ${clip(p.summary, 2000)}` : ''}`).join('\n')}`
         : '',
@@ -536,11 +552,12 @@ Tools, within a turn in this order:
 - update_brief: keep the brief current whenever the conversation changed it. It has these parts, as short bold-labelled paragraphs or lists: ${goal}, ${today} (what the code does today, when it matters), ${variants} (open and dropped ones, each with why), ${decisions}, ${open}, and ${effort} once you can say. An answered question leaves the open questions; what it decided goes where it belongs. Whoever opens the card later reads only the brief, so it must stand on its own. When the owner builds the idea as it stands, the brief is the worker's task.
 - plan_prototypes: whenever the brief plans prototypes you have not passed to it yet, or the plan changes (which variants are to be seen side by side, and what each is to show). The owner then starts them all with one click, one worker per variant.
 - plan_split: whenever part of the idea is settled while the rest is still open, or that split changes or goes: the part to build now, as one worker's task.
+- plan_repo: whenever the owner says the idea is to be built in a repository that does not exist yet, or where that changes.
 - reply, last: your turn in the conversation. Exactly once per message, then end your turn.
 
 The owner decides on the card whether to build the idea, build its settled part, turn it into a plan doc, have a throwaway prototype built, park it or drop it. With every reply, say through next what you would do in their place if you had to decide, and why; the card marks that click, so the owner sees at a glance where to go on:
 - answer: an open question has to be settled before anything else makes sense. Then give your own pick for each question too, so the owner can follow it or overrule it.
-- build: the brief is clear enough to be one worker's task, and what is still open is a judgement call the worker can make. Building ends this conversation: the brief becomes the task, and the idea's prototypes, planned and running, are dropped.
+- build: the brief is clear enough to be one worker's task, and what is still open is a judgement call the worker can make. Building ends this conversation: the brief becomes the task, and the idea's prototypes, planned and running, are dropped. Where you marked a new repository with plan_repo, building creates it first and the idea moves there.
 - splitOff: part of the idea is settled and part is still open (to be discussed further, or prototyped). The part you marked with plan_split becomes a task of its own, which a worker starts on at once; the idea stays with this conversation, its open part and its prototypes, planned and running. Without a part marked with plan_split, the card has no such click.
 - planDoc: it is too big for one card (several workstreams, or an order to work in). The idea's prototypes stay, for the workstream that builds on them.
 - prototype: only seeing it will settle it (a layout, how it feels, a risky approach), and a throwaway build costs less than guessing.
@@ -550,7 +567,7 @@ Owner-facing text (your replies, the brief, its mocks, prototypes and split-off 
 `.trim();
 };
 
-const OWN_TOOLS = ['reply', 'update_brief', 'plan_prototypes', 'plan_split', 'record_decision', 'to_obeya'];
+const OWN_TOOLS = ['reply', 'update_brief', 'plan_prototypes', 'plan_split', 'plan_repo', 'record_decision', 'to_obeya'];
 
 /** At most this many prototypes are planned for one idea. */
 const MAX_VARIANTS = 6;

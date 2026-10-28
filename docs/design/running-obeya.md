@@ -327,7 +327,9 @@ what stays out, and the default `.gitignore` (build output, dependencies, secret
 git directory of its own in the temp directory, so looking changes nothing; the owner keeps more out
 with a `.gitignore` and "Neu ansehen". Confirming runs `git init` on git's `init.defaultBranch`, else
 `main`, and commits every file not ignored (workers see only committed files) under git's name and
-e-mail (none: it says so and does nothing). A failed step undoes the ones before.
+e-mail (none: it says so and does nothing). A failed step undoes the ones before. Building a card
+in a new repository sets git up the same way, without the preview (see Building in a new
+repository).
 
 ### Self-update
 

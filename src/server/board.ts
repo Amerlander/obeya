@@ -35,6 +35,8 @@ import {
   type Item,
   type Mock,
   type NewCard,
+  type NewRepo,
+  type TalkMoved,
   type PreferenceState,
   type ProposedSetting,
   type SettingProposal,
@@ -1310,6 +1312,7 @@ export class Board {
       items = toItems(rows, docs, this.home);
     }
     items = this.withPrototypes(items);
+    items = this.withElsewhere(items);
     const inTurn = new Map([...this.turns].flatMap((f) => [...f()]));
     if (inTurn.size) items = items.map((i) => {
       const turn = inTurn.get(i.id);
@@ -1351,6 +1354,16 @@ export class Board {
       ...(planDirs.length ? { planDirs } : {}),
     };
     return this.cache;
+  }
+
+  /** Cards that come from a card on another canvas name it, with that canvas. */
+  private withElsewhere(items: Item[]): Item[] {
+    return items.map((i) => {
+      if (!i.from) return i;
+      const from = this.store.card(i.from);
+      if (!from || from.canvas_id === this.canvas.id || from.deleted_at) return i;
+      return { ...i, fromElsewhere: { canvas: from.canvas_id, canvasName: this.store.canvasName(from.canvas_id) ?? from.canvas_id, title: from.title ?? '' } };
+    });
   }
 
   /**
@@ -1807,7 +1820,11 @@ export class Board {
     return n;
   }
 
-  create(n: NewCard): Item {
+  /**
+   * `elsewhere`: the card on another canvas it follows up on (a card Obeya makes here from there); it
+   * goes where `x` and `y` say, in no group.
+   */
+  create(n: NewCard, elsewhere?: string): Item {
     checkText(n.title, 'title', 200);
     if (n.body !== undefined) checkText(n.body, 'body', 20000);
     if (n.repo !== undefined) this.checkRepo(n.repo);
@@ -1830,7 +1847,7 @@ export class Board {
         body: n.body ?? '',
         ...at,
         repo: this.repoColumn(repo),
-        ...(from ? { from_id: from.id, group_id: this.groupOf(from) } : {}),
+        ...(from ? { from_id: from.id, group_id: this.groupOf(from) } : elsewhere ? { from_id: elsewhere } : {}),
         images: n.images?.length ? JSON.stringify(n.images) : null,
         ...(n.idea ? { idea: JSON.stringify({ status: 'open', brief: '' } satisfies StoredIdea) } : {}),
       },
@@ -1841,7 +1858,7 @@ export class Board {
 
   patch(id: string, p: CardPatch) {
     const row = this.own(id);
-    const allowed = row.plan_ref ? (row.kind === 'project' ? ['x', 'y', 'collapsed'] : ['x', 'y', 'state', 'need']) : ['x', 'y', 'title', 'body', 'state', 'need', 'repo', 'images'];
+    const allowed = row.plan_ref ? (row.kind === 'project' ? ['x', 'y', 'collapsed'] : ['x', 'y', 'state', 'need']) : ['x', 'y', 'title', 'body', 'state', 'need', 'repo', 'images', 'newRepo'];
     const bad = Object.keys(p).filter((k) => !allowed.includes(k));
     if (bad.length) throw new BadRequest('invalid', `cannot change ${bad.join(', ')} on this card`);
     if (p.x !== undefined) checkNumber(p.x, 'x');
@@ -1852,21 +1869,57 @@ export class Board {
     if (p.images !== undefined) this.checkImages(p.images);
     if (p.state !== undefined && !STATES.includes(p.state)) throw new BadRequest('invalid', `state must be one of ${STATES.join(', ')}`);
     if (p.need !== undefined && p.need !== null && p.need !== 'demo' && p.need !== 'question') throw new BadRequest('invalid', 'need must be demo, question or null');
-    const { repo, images, collapsed, ...fields } = p;
+    const { repo, images, collapsed, newRepo, ...fields } = p;
+    if (newRepo !== undefined) this.checkNewRepo(row, newRepo);
     // a planned card of the owner's may become an idea again, to be discussed first
     if (p.state === 'idea' && row.state !== 'idea' && (row.plan_ref || (row.state ?? 'planned') !== 'planned' || row.workspace))
       throw new BadRequest('invalid', 'only a planned card of your own that has not been worked on can become an idea');
     if (repo !== undefined) {
       this.checkRepo(repo);
       // its workspace and branch belong to the repository it started in
-      if ((row.state ?? 'planned') !== 'planned' || row.workspace) throw new BadRequest('invalid', 'a card changes repository only before work begins');
+      if ((row.state !== 'idea' && (row.state ?? 'planned') !== 'planned') || row.workspace) throw new BadRequest('invalid', 'a card changes repository only before work begins');
     }
     this.store.update(id, {
       ...fields,
-      ...(repo !== undefined ? { repo: this.repoColumn(repo) } : {}),
+      // a repository of the canvas picked instead of a new one
+      ...(repo !== undefined ? { repo: this.repoColumn(repo), ...(newRepo === undefined ? { new_repo: null } : {}) } : {}),
+      ...(newRepo !== undefined ? { new_repo: newRepo && JSON.stringify({ path: newRepo.path.trim(), canvas: newRepo.canvas, by: 'owner' } satisfies NewRepo) } : {}),
       ...(images !== undefined ? { images: images.length ? JSON.stringify(images) : null } : {}),
       ...(collapsed !== undefined ? { collapsed: collapsed ? 1 : 0 } : {}),
     });
+    this.changed();
+  }
+
+  private checkNewRepo(row: CardRow, n: unknown) {
+    if (n !== null && (typeof n !== 'object' || typeof (n as NewRepo).path !== 'string' || typeof (n as NewRepo).canvas !== 'boolean'))
+      throw new BadRequest('invalid', 'newRepo must be { path, canvas } or null');
+    if (n && (n as NewRepo).path.length > 1000) throw new BadRequest('invalid', 'the path is too long');
+    if (row.prototype_of || (row.state !== 'idea' && (row.state ?? 'planned') !== 'planned') || row.workspace)
+      throw new BadRequest('invalid', 'a card gets a new repository only before work on it begins');
+    if (this.newRepo(row.id)?.due) throw new BadRequest('newRepoDue', 'the new repository is being made');
+  }
+
+  /** The repository to create for a card, as stored (`StoredNewRepo`); none where there is none. */
+  newRepo(id: string): StoredNewRepo | null {
+    const r = this.store.card(id)?.new_repo;
+    return r ? (JSON.parse(r) as StoredNewRepo) : null;
+  }
+
+  /**
+   * The repository to create for a card, as its idea's agent or Obeya sets it; null takes it off.
+   * What the owner chose, the agent does not change: false then.
+   */
+  setNewRepo(id: string, n: StoredNewRepo | null, by: NewRepo['by'] = 'owner'): boolean {
+    const was = this.newRepo(id);
+    if (by === 'agent' && was?.by === 'owner' && !was.made) return false;
+    this.store.update(id, { new_repo: n && JSON.stringify(n) });
+    this.changed();
+    return true;
+  }
+
+  /** The owner's history of the canvas, in Obeya's sheet: the card left for another canvas. */
+  moved(m: TalkMoved) {
+    this.store.addMoved(this.canvas.id, m, this.t.newRepo.movedAway(m.title, m.canvasName));
     this.changed();
   }
 
@@ -2131,6 +2184,7 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
         ...(r.retro ? { retro: r.retro } : {}),
         ...(r.proposal ? (r.state === 'proposal' ? { proposal: storedProposal(r)! } : { proposed: true as const, ...supersededOf(r) }) : {}),
         ...(r.group_id ? { group: r.group_id } : {}),
+        ...newRepoOf(r),
       });
       continue;
     }
@@ -2202,6 +2256,17 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
 
 /** Where a card goes below the card with bounds `b`: the `n`th of those there, each beside the one before. */
 const below = (b: Bounds, n = 0) => ({ x: b.x + 35 + n * (CARD_SIZE.task[0] + GAP), y: b.y + b.h + 60 });
+
+/** What is stored of a repository to create for a card: the target, and once Obeya made it, `made`. */
+export type StoredNewRepo = NewRepo & { made?: true };
+
+/** A card's new repository while it is still to be made, before work on the card begins. */
+function newRepoOf(r: CardRow): Pick<Item, 'newRepo'> {
+  const n = r.new_repo ? (JSON.parse(r.new_repo) as StoredNewRepo) : null;
+  if (!n || n.made || (r.state !== 'idea' && (r.state ?? 'planned') !== 'planned') || r.workspace) return {};
+  const { made: _, ...newRepo } = n;
+  return { newRepo };
+}
 
 /** The fields a worker adds to a card. */
 function work(r: CardRow): Partial<Item> {

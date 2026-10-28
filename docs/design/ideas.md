@@ -97,6 +97,15 @@ prototype. „Verwerfen“ (also approving or deleting it) throws its workspace 
 „So bauen“ makes the brief the card's task and starts it through the Koordinator like „Agent
 starten“ (see Scheduling).
 
+Beside it stands the repository picker of a card before work begins (see Canvases and
+repositories), with „Neues Repository …“: an idea to be built in a repository that does not exist
+yet. Its agent picks that target from the conversation („bau es in ~/dev/super59, eigene Leinwand“)
+with `plan_repo` (a folder and whether it gets a canvas of its own; the whole value each time, an
+empty folder for none); the picker shows it, and what the owner picks there instead stands, the
+agent does not change it. The button then names the target („So bauen in super59 (neu)“), with a
+line under it on what the click does, and the click builds the idea there (see Building in a new
+repository).
+
 „Diesen Prototyp bauen“ does the same on that prototype's branch: its workspace and branch become
 the idea's, and the worker hears that the branch holds a throwaway prototype, to take over what
 carries and bring it to production quality (tests, checks, docs, shortcuts removed), with the
@@ -129,6 +138,34 @@ dropped idea can be archived (in it, or its archive button on the canvas; not wh
 it is on the canvas, and then the button is not shown): in the archive it shows its brief and
 conversation read-only and can go back to its place. Decisions from the conversation go into the
 decision log; lasting preferences are learned by the Koordinator (see Learning the owner's rules).
+
+### Building in a new repository
+
+„So bauen“ or „Agent starten“ on a card whose target is a new repository (or the Koordinator,
+„bau das in einem neuen Repo unter ~/dev/super59“) waits a few seconds in which „Rückgängig“, in
+the button's place („Legt super59 an …“), leaves everything as it was; the window does not outlive
+a restart of Obeya. What can be told at once is refused at once: no folder, a relative one, one that
+is a repository of a canvas already, canvases from the command line (nothing could start live). Then
+Obeya, one step after the other:
+
+1. creates the folder where there is none and sets git up in it as „Hier ein git-Repository
+   einrichten“ does (see Setting up git in a folder): local only, no remote, nothing published. A
+   folder that is a repository already is taken as it is; one inside another repository is refused.
+2. adds it to the configuration: a canvas of its own, unnamed, so named after the folder, which
+   starts at once (see Live configuration); without „eigene Leinwand“ the repository joins the
+   card's canvas instead and the card stays there, in it.
+3. decides an idea as „So bauen“ does (its agent's session ends, its prototypes are discarded, the
+   decision log records the new repository), then moves the card to the new canvas whole: its
+   task, conversation, mocks, screenshots and decisions, into the canvas's repository, out of its
+   group (groups belong to a canvas). Nothing of it stays on the old canvas, whose sheet says where it went
+   with a link there; a card that follows from it, or it from one, names the other with its canvas
+   and „Dort öffnen“. A page that has the card open follows it to the new canvas.
+4. starts it there through the Koordinator. Its worker hears that the repository is new and sets it
+   up beside the task: a CLAUDE.md with what the task says about working in it, and its settings with
+   the `settings` skill (see Writing the settings).
+
+A step that fails takes back those before it (the configuration, the folder or the git it made),
+and the card says why.
 
 ### While the agent replies
 
@@ -187,3 +224,13 @@ when Obeya stopped.
   HTML, and the owner sees simple options without a prototype.
 - **A project links the idea it came from** by what the idea's landed work added to the plan
   directory, not by title or time.
+- **An idea to be built in a repository that does not exist yet gets it, and a canvas, from one
+  click, and moves there whole** (2026-10-28). Its agent picks the target from the conversation;
+  the card's repository picker shows and changes it, and the button names it. Obeya sets up git
+  itself (as for a folder without git) and moves the card with its brief, conversation and
+  decisions, since its exploration agent's session ends with the building anyway. It was found on
+  an idea where Obeya made a task to create the repository, its worker searched other repositories
+  and the database for how, copied the brief into `docs/` and waited for approval, the canvas then
+  came without the card, and a card made for it on the old canvas could not start there. Rejected: a
+  worker setting up the repository and copying the brief (searching, an approval, context only as a
+  copy); only instructing the agents better (the detour would stay).
