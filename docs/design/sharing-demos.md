@@ -69,6 +69,12 @@ supplements the one before (`supplements`), the demo skill asks for it, and a se
 buttons repeats it („Laut Agent ergänzt dieses Video Demo 1.“); without it, replacing comes first.
 Nothing goes out without the owner's click.
 
+A supplement never goes on a page without what it supplements: shared on a new page, added, or put
+there by an approval, it takes along the demo before it, and that one the demo before it while it
+supplements too, back to the first or one recorded afresh, also where those were never shared. Before
+a page exists, a line under "Teilen" names them („Kommt mit Demo 1 auf die Seite, die diese Demo laut
+Agent ergänzt.“). „Auf der Seite ersetzen“ puts the demo there alone, as the owner chose.
+
 #### A shared artifact
 
 An artifact's page shows the title and text above the artifact in a sandboxed frame that grows to
@@ -168,7 +174,8 @@ which then reads „Jetzt teilen“. Unticked, approving shares nothing and the 
 stays with the card and takes effect at once.
 
 On approval, before landing, the latest demo goes on the page as the owner's click would: a new page,
-or beside the versions where its worker said it supplements, else in their place, after any share
+or beside the versions where its worker said it supplements (with what it supplements, see Several
+versions on one page), else in their place, after any share
 still going out; a log line says so. It goes through the queue, so landing does not wait; a failed
 deploy is logged and the card keeps "Teilen". The same holds for approved PR work, work closed
 without a change, and a held approval landed by the worker's next handover (the newer demo goes).
@@ -282,6 +289,10 @@ another machine withdrew loses its link here, with a line naming the machine.
   (owner, 2026-10-16): a later demo often only corrects a detail and is read after what it corrects.
   Rejected: replacing the page with each demo, newest first, one player with a version switcher (a
   colleague might never find the other), a page per version (several links for one change).
+- **A supplement takes along what it supplements** (owner, 2026-10-28): a page showing only a
+  short correction leaves colleagues without the change it corrects; approval had published a card's
+  second demo alone, its first never shared. Rejected: always every demo of the card (one recorded
+  afresh would sit beside the one it replaces).
 - **"Teilen" sits on the demo's own line** (2026-10-14). Rejected: a full-width button under the
   chapters, out of sight under many chapters or a tall artifact.
 - **A shared artifact's pages load no file beside them** (2026-10-16, 2026-10-20): behind Cloudflare

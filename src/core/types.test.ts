@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CLONES, type FilledClones, type Item, openPerGroup, type ResolvedCanvas, stoppedArchivable, withClones } from './types';
+import { CLONES, type FilledClones, type Item, openPerGroup, type ResolvedCanvas, stoppedArchivable, withClones, withSupplemented } from './types';
 
 const card = (over: Partial<Item>): Item => ({ id: 'x', kind: 'task', state: 'planned', title: '', body: '', x: 0, y: 0, source: 'manual', repo: 'r', ...over });
 
@@ -85,4 +85,18 @@ test('a stopped task goes into the archive while nothing waits to start it and i
   expect(stoppedArchivable({ ...stoppedTask, queue: { checking: true, since: '' } })).toBe(false);
   expect(stoppedArchivable({ ...stoppedTask, source: 'plan' })).toBe(false);
   expect(stoppedArchivable({ ...stoppedTask, prototypeOf: 'idea' })).toBe(false);
+});
+
+describe('withSupplemented', () => {
+  const demos = [{ n: 1 }, { n: 2, follows: 'supplements' as const }, { n: 3, follows: 'replaces' as const }, { n: 4, follows: 'supplements' as const }, { n: 5, follows: 'supplements' as const }, { n: 6 }];
+  const along = (i: number) => withSupplemented(demos, i).map((d) => d.n);
+  test('a demo takes along the ones it supplements, back to one recorded afresh', () => {
+    expect(along(1)).toEqual([1, 2]);
+    expect(along(4)).toEqual([3, 4, 5]);
+  });
+  test('a demo that supplements nothing goes alone', () => {
+    expect(along(0)).toEqual([1]);
+    expect(along(2)).toEqual([3]);
+    expect(along(5)).toEqual([6]);
+  });
 });

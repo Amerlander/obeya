@@ -2,7 +2,7 @@
 
 import { createContext, type CSSProperties, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, type ChangeRoute, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, type PageTags, openQuestions, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type Finding, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor } from '../core/types';
+import { agentListens, answering, askable, type BackgroundTask, buildableOn, type CardAction, type ChangeRoute, chapterAt, prototypeWorkstream, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, type PageTags, openQuestions, pausable, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type Finding, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor, withSupplemented } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
@@ -2249,6 +2249,9 @@ function ShareBox({ item, demo, act, onApproval, vocabulary }: { item: Item; dem
   // the versions on the page, by their numbers in the line above
   const numbers = all.flatMap((d, i) => (d.handover !== undefined && s?.on?.includes(d.handover) ? [i + 1] : []));
   const onPage = numbers.length ? t.share.demos(numbers) : null;
+  // the earlier demos this one supplements go on a new page with it
+  const mine = all.indexOf(demo);
+  const along = mine < 0 ? [] : withSupplemented(all, mine).slice(0, -1).map((d) => all.indexOf(d) + 1);
   // a latest demo from before handovers were kept is on the page unless the page shows an earlier one
   const here = !!s?.url && (demo.handover !== undefined ? !!s.on?.includes(demo.handover) : latest && !s.stale);
   // approving would put this demo on the page: the owner may opt out, or share it now
@@ -2287,6 +2290,7 @@ function ShareBox({ item, demo, act, onApproval, vocabulary }: { item: Item; dem
         <span className="share-busy">{s.state === 'publishing' ? t.share.publishing : t.share.withdrawing}</span>
       ) : !s?.url ? (
         <div className="share-row">
+          {along.length > 0 && <p className="hint">{t.share.along(t.share.demos(along))}</p>}
           {approval}
           <button className="btn share-go" title={later ? t.share.shareNowHint : demo.kind === 'html' ? t.share.shareHintHtml : t.share.shareHint} onClick={() => go({ action: 'share', ...which })}>
             <ShareIcon />

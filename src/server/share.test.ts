@@ -521,6 +521,14 @@ describe('several demo versions on one page', () => {
     expect(page(c.id)).toContain('src="2/demo.mp4"');
   });
 
+  test('"Teilen" on a supplement with no page yet puts the demo it supplements above it', async () => {
+    const c = first();
+    later(c.id, 2, { follows: 'supplements' });
+    await shared(c.id, () => sharing.share(c.id));
+    expect(share(c.id)).toMatchObject({ on: [1, 2] });
+    expect(meta(c.id)).toMatchObject({ title: 'CSV-Export', more: [{ title: 'Ergänzung 2' }] });
+  });
+
   test('"Auf der Seite ersetzen" takes the shared ones off the page', async () => {
     const c = first();
     await shared(c.id, () => sharing.share(c.id));
@@ -887,6 +895,25 @@ describe('publishing on approval', () => {
     await until(() => share(c.id)?.state === 'shared' && on(c.id)[0] === 4);
     expect(on(c.id)).toEqual([4]);
     expect(log(c.id)).toContain('Mit der Freigabe auf der Seite ersetzt: Die Seite zeigt jetzt die neueste Demo statt der geteilten.');
+  });
+
+  test('a supplement goes out with the demos it supplements, though they were never shared', async () => {
+    const c = card('Filter bleiben', { handover: 1 });
+    later(c.id, 2, { follows: 'supplements' });
+    later(c.id, 3, { follows: 'supplements' });
+    sharing.approved(c.id);
+    expect(log(c.id).at(-1)).toBe('Mit der Freigabe geteilt: Die Seite geht online.');
+    await until(() => share(c.id)?.state === 'shared');
+    expect(on(c.id)).toEqual([1, 2, 3]);
+    expect(meta(c.id)).toMatchObject({ title: 'CSV-Export', more: [{ title: 'Demo 2' }, { title: 'Demo 3' }] });
+    // a demo recorded afresh ends what a later supplement takes along
+    later(c.id, 4, { follows: 'replaces' });
+    later(c.id, 5, { follows: 'supplements' });
+    sharing.unshare(c.id);
+    await until(() => !share(c.id));
+    sharing.approved(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(on(c.id)).toEqual([4, 5]);
   });
 
   test('a share under way goes out first, the latest demo after it', async () => {

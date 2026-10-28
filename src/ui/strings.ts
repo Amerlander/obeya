@@ -785,6 +785,7 @@ const de = {
     demos: (ns: number[]) => `Demo ${ns.length > 1 ? `${ns.slice(0, -1).join(', ')} und ${ns.at(-1)}` : ns[0]}`,
     pageShows: (demos: string | null) => `Die geteilte Seite zeigt ${demos ?? 'eine frühere Demo'}.`,
     onPage: (demos: string) => `Auf der Seite: ${demos}`,
+    along: (demos: string) => `Kommt mit ${demos} auf die Seite, die diese Demo laut Agent ergänzt.`,
     onPageMark: 'Auf der geteilten Seite',
     /** What the worker said of the latest demo beside the one before (`Demo.follows`). */
     agentSays: (follows: 'replaces' | 'supplements', before: number) => (follows === 'supplements' ? `Laut Agent ergänzt dieses Video Demo ${before}.` : `Laut Agent ist dieses Video neu aufgenommen und ersetzt Demo ${before}.`),
@@ -2578,6 +2579,7 @@ const en: Strings = {
     demos: (ns: number[]) => `${ns.length > 1 ? 'demos' : 'demo'} ${ns.length > 1 ? `${ns.slice(0, -1).join(', ')} and ${ns.at(-1)}` : ns[0]}`,
     pageShows: (demos: string | null) => `The shared page shows ${demos ?? 'an earlier demo'}.`,
     onPage: (demos: string) => `On the page: ${demos}`,
+    along: (demos: string) => `Goes on the page with ${demos}, which the agent says this demo supplements.`,
     onPageMark: 'On the shared page',
     agentSays: (follows: 'replaces' | 'supplements', before: number) => (follows === 'supplements' ? `The agent says this video supplements demo ${before}.` : `The agent says this video is recorded afresh and replaces demo ${before}.`),
     stop: 'Stop sharing',

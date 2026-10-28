@@ -779,6 +779,17 @@ export interface Demo {
 /** A demo a later handover replaced: `n` is its place among the card's earlier demos, for its files. */
 export type EarlierDemo = Demo & { n: number };
 
+/**
+ * What goes on a shared page with the card's demo `i` (of its demos, the oldest first): that demo
+ * and, while one supplements the demo before it (`follows`), that one too, the oldest first. A page
+ * never shows a supplement without what it supplements.
+ */
+export function withSupplemented<T extends Pick<Demo, 'follows'>>(demos: T[], i: number): T[] {
+  let first = i;
+  while (first > 0 && demos[first]!.follows === 'supplements') first--;
+  return demos.slice(first, i + 1);
+}
+
 /** Which of the demo's chapters plays at `at` seconds (the first before any starts); a seek lands a little before a chapter's start. */
 export const chapterAt = (chapters: Demo['chapters'], at: number) => chapters.reduce((cur, [start], i) => (start <= at + 0.05 ? i : cur), 0);
 

@@ -13,7 +13,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
-import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item, type PageTags } from '../core/types';
+import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item, type PageTags, withSupplemented } from '../core/types';
 import { BadRequest, type Board, cardDemos, contributionOf, type DemoRef, pageTagsOf, type PrState, reshareable, sameDemo, type SharedDemo, sharedDemos, type StoredDemo, type StoredReshare, type StoredShare } from './board';
 import { PAGE_CHANGES, pagesVersion } from '../core/page-changes';
 import { dimensions, shownTags, tagsOf, untagged } from '../core/page-tags';
@@ -151,7 +151,8 @@ export class Sharing {
   /**
    * "Teilen", "Auf der Seite ersetzen" or "Zur Seite dazunehmen": one of the card's demos (by its handover; the latest
    * without) is published right away, on the card's page in place of the versions there, or beside
-   * them in its place by handover (`add`). A demo on the page already goes out again with the rest.
+   * them in its place by handover (`add`). A supplement on a new page or added takes along the demos
+   * it supplements. A demo on the page already goes out again with the rest.
    * There is no hold to take it back: "Nicht mehr teilen" withdraws it just as easily.
    */
   share(cardId: string, { demo: handover, add = false }: { demo?: number | undefined; add?: boolean } = {}) {
@@ -163,7 +164,8 @@ export class Sharing {
     const now: DemoRef[] = s?.url ? sharedDemos(s) : [];
     const ref = refOf(demo);
     const on = now.some((d) => sameDemo(d, ref));
-    const next = on ? now : add ? inOrder([...now, ref]) : [ref];
+    // with no page yet or beside the versions there, it takes along the demos it supplements
+    const next = on ? now : add || !now.length ? this.beside(cardId, now, ref) : [ref];
     this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing', next: next.map(refOf) });
     const t = this.o.board.t.share;
     const said = !s?.url ? t.share : on ? t.again : add ? t.added : t.newDemo;
@@ -174,7 +176,8 @@ export class Sharing {
   /**
    * The owner approved the card's work. Where its repository's site publishes on approval
    * (`demo.site.publish`), its latest demo goes on its page unless it is there: beside the versions
-   * there where its worker said it only supplements them, else in their place. It goes out through
+   * there where its worker said it only supplements them (with the demos it supplements), else in
+   * their place. It goes out through
    * the queue like any share, so the landing does not wait for it; a failure goes into the card's
    * log. Returns the trailer for the commit that lands, for a card with a page (`Demo-Video: <url>`,
    * `Demo-Page:` for an artifact): its URL is known before the deploy is done.
@@ -277,8 +280,8 @@ export class Sharing {
     const now: DemoRef[] = s?.url ? sharedDemos(s) : [];
     const ref = refOf(demo);
     if (now.some((d) => sameDemo(d, ref))) return;
-    const add = now.length > 0 && demo.follows === 'supplements';
-    this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing', next: (add ? inOrder([...now, ref]) : [ref]).map(refOf) });
+    const add = demo.follows === 'supplements';
+    this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing', next: (add ? this.beside(cardId, now, ref) : [ref]).map(refOf) });
     this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.approved(!now.length ? 'share' : add ? 'add' : 'replace'));
     void serial(() => this.publish(cardId));
   }
@@ -912,6 +915,14 @@ export class Sharing {
   }
 
   /** One of the card's demos a page may show (`cardDemos`), by its handover, else by its directory. */
+  /** The versions on the page, the demo and the ones it supplements (`withSupplemented`), in order of handover. */
+  private beside(cardId: string, now: DemoRef[], ref: DemoRef): DemoRef[] {
+    const all = cardDemos(this.o.board.row(cardId));
+    const i = all.findLastIndex((d) => sameDemo(d, ref));
+    const along = i < 0 ? [ref] : withSupplemented(all, i).map(refOf);
+    return inOrder([...now, ...along.filter((d) => !now.some((n) => sameDemo(n, d)))]);
+  }
+
   private cardDemo(cardId: string, ref: DemoRef): StoredDemo | null {
     return cardDemos(this.o.board.row(cardId)).findLast((d) => sameDemo(d, ref)) ?? null;
   }
