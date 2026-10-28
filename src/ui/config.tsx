@@ -253,10 +253,11 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
             <WishLink onOpen={onClose} />
           </div>
         </nav>
+        {/* on the box, not in the scrolling column, so it stays in view however far that scrolls */}
+        <button className="cfg-close" title={t.close} onClick={onClose}>
+          ✕
+        </button>
         <div className="cfg-main">
-          <button className="cfg-close" title={t.close} onClick={onClose}>
-            ✕
-          </button>
           <section className="cfg-sec" hidden={section !== 'canvases'}>
             {!view ? (
               <>
