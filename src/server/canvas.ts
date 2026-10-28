@@ -180,6 +180,9 @@ const BOARD_ONLY: CardAction['action'][] = ['name', 'dequeue', 'reorder', 'start
 /** The card's repository does not run on the canvas: nothing goes to its agents (`Item.repoDown`). */
 const repoDown = (card: Item) => new BadRequest('repoDown', `the repository ${card.repo} of the card does not run on this canvas`);
 
+/** New repositories being made, one after the other (`makeNewRepo`). */
+let making: Promise<unknown> = Promise.resolve();
+
 export class CanvasRuntime {
   readonly board: Board;
   readonly koordinator: Koordinator;
@@ -1513,6 +1516,7 @@ export class CanvasRuntime {
   remove(cardId: string) {
     clearTimeout(this.writing.get(cardId)?.timer);
     this.writing.delete(cardId);
+    this.keepHere(cardId);
     const { state, landed, workspace, prototype_of } = this.board.row(cardId);
     if (prototype_of) return this.repoOf(cardId).workers.endPrototype(cardId, 'discarded');
     if ((state === 'working' || state === 'waiting' || (landed && workspace)) && this.runs(cardId)) void this.repoOf(cardId).workers.stop(cardId);
@@ -1658,20 +1662,27 @@ export class CanvasRuntime {
       cardId,
       setTimeout(() => {
         this.newRepos.delete(cardId);
-        void this.makeNewRepo(cardId);
+        // one after the other, on any canvas: each adds to the configuration as the one before left it
+        making = making.then(() => this.makeNewRepo(cardId));
       }, due - Date.now()),
     );
   }
 
   /** The owner takes back building or starting the card in its new repository while the undo window runs. */
   private stayHere(cardId: string) {
+    if (!this.keepHere(cardId)) throw new BadRequest('newRepoGone', 'the new repository is being made already');
+    this.board.log(cardId, 'state', 'owner', this.board.t.newRepo.stayed);
+  }
+
+  /** Building or starting the card in its new repository does not happen after all, if its undo window still runs; whether it did. */
+  private keepHere(cardId: string): boolean {
     const timer = this.newRepos.get(cardId);
     const target = this.board.newRepo(cardId);
-    if (!timer || !target?.due) throw new BadRequest('newRepoGone', 'the new repository is being made already');
+    if (!timer || !target?.due) return false;
     clearTimeout(timer);
     this.newRepos.delete(cardId);
     this.board.setNewRepo(cardId, { ...target, due: undefined });
-    this.board.log(cardId, 'state', 'owner', this.board.t.newRepo.stayed);
+    return true;
   }
 
   /** Refuses a folder that is a repository of a canvas already: the card is to be built there instead. */
@@ -1963,6 +1974,8 @@ export class CanvasRuntime {
   /** Parked or dropped, the idea stays on the canvas with its brief; what its agent has not answered yet waits for the conversation to go on. */
   private shelve(cardId: string, how: 'park' | 'drop') {
     const card = this.ideaCard(cardId);
+    // parked or dropped in the undo window of its new repository: it is not built there
+    this.keepHere(cardId);
     this.explorers.interrupt(cardId, how === 'park' ? 'parked' : 'dropped');
     this.board.setIdea(cardId, { status: how === 'park' ? 'parked' : 'dropped', buildAfterReply: false });
     const t = this.board.t.idea;
