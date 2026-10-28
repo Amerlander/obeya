@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Notice } from '../core/types';
@@ -180,6 +180,42 @@ describe('building an idea in a new repository', () => {
     expect(refused(() => docsCanvas().act(card.id, { action: 'build' }))).toBe('newRepoPath');
   });
 
+  test('in the undo window the card takes no other way on, and its agent does not change the target', () => {
+    const card = idea(join(dir, 'super59'));
+    docsCanvas().act(card.id, { action: 'build' });
+    expect(refused(() => docsCanvas().act(card.id, { action: 'planDoc' }))).toBe('newRepoDue');
+    expect(docsCanvas().board.setNewRepo(card.id, { path: join(dir, 'other'), canvas: true, by: 'agent' }, 'agent')).toBe(false);
+    expect(docsCanvas().board.item(card.id)!.newRepo?.due).toBeTruthy();
+    docsCanvas().act(card.id, { action: 'stayHere' });
+  });
+
+  test('a failed step removes only the folders Obeya created, not what came beside them', async () => {
+    mkdirSync(join(dir, 'parent'));
+    const sibling = join(dir, 'parent', 'beta');
+    mkdirSync(sibling);
+    // named like the canvas it would leave: the configuration refuses it
+    const card = idea(join(dir, 'parent', 'new', 'docs'));
+    docsCanvas().act(card.id, { action: 'build' });
+    await until(() => docsCanvas().board.events(card.id).some((e) => e.kind === 'error'));
+    expect(existsSync(join(dir, 'parent', 'new'))).toBe(false);
+    expect(existsSync(sibling)).toBe(true);
+  });
+
+  test('a link to a repository of a canvas counts as that repository; a path neither absolute nor from ~ is refused', () => {
+    symlinkSync(join(dir, 'docs'), join(dir, 'link'));
+    expect(refused(() => docsCanvas().act(idea(join(dir, 'link')).id, { action: 'build' }))).toBe('newRepoPath');
+    expect(refused(() => docsCanvas().act(idea('~someone/project').id, { action: 'build' }))).toBe('newRepoPath');
+  });
+
+  test('a task snoozed to start later makes its new repository when it starts', async () => {
+    const path = join(dir, 'later');
+    const task = docsCanvas().board.create({ title: 'Later', body: 'Later.', x: 0, y: 0 });
+    docsCanvas().board.patch(task.id, { newRepo: { path, canvas: true } });
+    docsCanvas().act(task.id, { action: 'snooze', until: new Date(Date.now() + 60_000).toISOString() });
+    docsCanvas().act(task.id, { action: 'wake' });
+    await until(() => set.get('later')?.board.item(task.id));
+  });
+
   test("what the owner picked on the card, the idea's agent does not change; the owner's pick of an existing repository takes the new one off", () => {
     const c = docsCanvas();
     const card = c.board.create({ idea: true, title: 'X', x: 0, y: 0 });
@@ -189,6 +225,8 @@ describe('building an idea in a new repository', () => {
     expect(c.board.item(card.id)!.newRepo).toEqual({ path: '~/dev/b', canvas: false, by: 'owner' });
     c.board.patch(card.id, { repo: 'docs' });
     expect(c.board.item(card.id)!.newRepo).toBeUndefined();
+    // and stands too
+    expect(c.board.setNewRepo(card.id, { path: '~/dev/d', canvas: true, by: 'agent' }, 'agent')).toBe(false);
   });
 });
 

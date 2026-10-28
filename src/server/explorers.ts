@@ -16,6 +16,7 @@ import { imageNote } from './images';
 import { describeTool, SPOKEN } from './workers';
 import { TO_OBEYA, toObeyaTool } from './to-obeya';
 import { clip } from '../core/text';
+import { folderPath } from './new-repo';
 
 export interface ExplorerOptions {
   board: Board;
@@ -440,7 +441,7 @@ export class Explorers {
         schema: { path: z.string(), canvas: z.boolean().optional() },
         run: ({ path, canvas }) => {
           const p = clip(String(path ?? '').trim(), 1000);
-          if (p && !p.startsWith('~') && !/^([a-zA-Z]:)?[/\\]/.test(p)) return `${p} is no folder: give it absolute or from ~.`;
+          if (p && !folderPath(p)) return `${p} is no folder: give it absolute or from ~.`;
           const set = this.o.board.setNewRepo(cardId, p ? { path: p, canvas: canvas !== false, by: 'agent' } : null, 'agent');
           const now = this.o.board.newRepo(cardId);
           if (!set) return `The owner picked the repository on the card themselves${now?.path ? ` (a new one at ${now.path})` : ''}; it stays as they chose.`;

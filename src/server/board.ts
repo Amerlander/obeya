@@ -1882,8 +1882,11 @@ export class Board {
     this.store.update(id, {
       ...fields,
       // a repository of the canvas picked instead of a new one
-      ...(repo !== undefined ? { repo: this.repoColumn(repo), ...(newRepo === undefined ? { new_repo: null } : {}) } : {}),
-      ...(newRepo !== undefined ? { new_repo: newRepo && JSON.stringify({ path: newRepo.path.trim(), canvas: newRepo.canvas, by: 'owner' } satisfies NewRepo) } : {}),
+      // a repository of the canvas picked instead of a new one: the owner's pick, which the idea's agent leaves
+      ...(repo !== undefined ? { repo: this.repoColumn(repo) } : {}),
+      ...(newRepo !== undefined || repo !== undefined
+        ? { new_repo: JSON.stringify(newRepo ? ({ path: newRepo.path.trim(), canvas: newRepo.canvas, by: 'owner' } satisfies NewRepo) : ({ path: '', canvas: true, by: 'owner', none: true } satisfies StoredNewRepo)) }
+        : {}),
       ...(images !== undefined ? { images: images.length ? JSON.stringify(images) : null } : {}),
       ...(collapsed !== undefined ? { collapsed: collapsed ? 1 : 0 } : {}),
     });
@@ -1911,7 +1914,8 @@ export class Board {
    */
   setNewRepo(id: string, n: StoredNewRepo | null, by: NewRepo['by'] = 'owner'): boolean {
     const was = this.newRepo(id);
-    if (by === 'agent' && was?.by === 'owner' && !was.made) return false;
+    // what the owner picked stands, and a repository about to be made stays as it was clicked
+    if (by === 'agent' && ((was?.by === 'owner' && !was.made) || was?.due)) return false;
     this.store.update(id, { new_repo: n && JSON.stringify(n) });
     this.changed();
     return true;
@@ -2258,12 +2262,12 @@ export function toItems(rows: CardRow[], docs: PlanDoc[], home: string): Item[] 
 const below = (b: Bounds, n = 0) => ({ x: b.x + 35 + n * (CARD_SIZE.task[0] + GAP), y: b.y + b.h + 60 });
 
 /** What is stored of a repository to create for a card: the target, and once Obeya made it, `made`. */
-export type StoredNewRepo = NewRepo & { made?: true };
+export type StoredNewRepo = NewRepo & { made?: true; none?: true };
 
 /** A card's new repository while it is still to be made, before work on the card begins. */
 function newRepoOf(r: CardRow): Pick<Item, 'newRepo'> {
   const n = r.new_repo ? (JSON.parse(r.new_repo) as StoredNewRepo) : null;
-  if (!n || n.made || (r.state !== 'idea' && (r.state ?? 'planned') !== 'planned') || r.workspace) return {};
+  if (!n || n.made || n.none || (r.state !== 'idea' && (r.state ?? 'planned') !== 'planned') || r.workspace) return {};
   const { made: _, ...newRepo } = n;
   return { newRepo };
 }

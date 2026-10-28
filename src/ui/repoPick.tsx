@@ -31,14 +31,18 @@ export interface RepoChoice {
 export function useRepoChoice(item: Item, onEdit: (p: CardPatch) => void): RepoChoice {
   const [repo, setRepo] = useState(item.repo);
   const [fresh, setFreshState] = useState<FreshRepo | null>(item.newRepo ? { path: item.newRepo.path, canvas: item.newRepo.canvas } : null);
-  const touched = useRef(false);
-  const stored = item.newRepo ? JSON.stringify([item.newRepo.path, item.newRepo.canvas]) : '';
+  // what the owner picked here and the server does not have yet: until it does, the card keeps showing it
+  const mine = useRef<string | null>(null);
+  const key = (r: string, f: FreshRepo | null) => JSON.stringify([r, f?.path.trim() ?? null, f?.canvas ?? null]);
+  const stored = key(item.repo, item.newRepo ? { path: item.newRepo.path, canvas: item.newRepo.canvas } : null);
   useEffect(() => {
-    if (touched.current) return;
+    if (mine.current !== null && mine.current !== stored) return;
+    mine.current = null;
+    setRepo(item.repo);
     setFreshState(item.newRepo ? { path: item.newRepo.path, canvas: item.newRepo.canvas } : null);
   }, [stored]);
   const setFresh = (f: FreshRepo) => {
-    touched.current = true;
+    mine.current = key(repo, f);
     setFreshState(f);
     onEdit({ newRepo: f });
   };
@@ -47,7 +51,7 @@ export function useRepoChoice(item: Item, onEdit: (p: CardPatch) => void): RepoC
     fresh,
     name: fresh ? newRepoName(fresh.path) : '',
     pickRepo: (id) => {
-      touched.current = true;
+      mine.current = key(id, null);
       setRepo(id);
       setFreshState(null);
       onEdit({ repo: id, newRepo: null });

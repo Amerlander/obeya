@@ -23,7 +23,7 @@ import type { Store } from './db';
 import { Explorers } from './explorers';
 import { Files } from './files';
 import { Images, MAX_IMAGES } from './images';
-import { makeRepo, newRepoPath } from './new-repo';
+import { makeRepo, newRepoPath, realPath } from './new-repo';
 import { type ContributionInfo, type Forge, parsePrUrl, sameRepo } from './forge';
 import { Koordinator } from './koordinator';
 import { WorkRetro } from './work-retro';
@@ -175,6 +175,9 @@ const HOST_RETRY_MS = 2 * 60_000;
 const WAKE_EVERY_MS = 15_000;
 
 /** The owner's actions on a card that change only the board: they go also while its repository does not run on the canvas. */
+/** What waits while a card's new repository is about to be made (`NewRepo.due`): every other way on. */
+const DUE_REFUSES: CardAction['action'][] = ['start', 'force', 'build', 'planDoc', 'splitOff', 'prototype', 'snooze', 'startAt', 'accept'];
+
 const BOARD_ONLY: CardAction['action'][] = ['name', 'dequeue', 'reorder', 'startAt', 'dismiss', 'keep', 'park', 'drop'];
 
 /** The card's repository does not run on the canvas: nothing goes to its agents (`Item.repoDown`). */
@@ -458,6 +461,8 @@ export class CanvasRuntime {
     if (card.snoozed.waiting) return void this.board.unsnooze(cardId, timeUp ? 'time' : 'owner');
     if (card.snoozed.start) {
       this.repoOf(cardId).workers.startsNow(cardId, timeUp);
+      // one to be started in a new repository makes it first
+      if (card.newRepo) return this.intoNewRepo(cardId);
       return this.koordinator.request(cardId);
     }
     this.repoOf(cardId).workers.wake(cardId, timeUp, met);
@@ -1343,6 +1348,8 @@ export class CanvasRuntime {
     // the card's agents work in its repository: while that does not run, only the board changes
     const card = this.board.item(cardId);
     if (card?.repoDown && !BOARD_ONLY.includes(a.action)) throw repoDown(card);
+    // while its new repository is about to be made, the card is not decided otherwise
+    if (card?.newRepo?.due && DUE_REFUSES.includes(a.action)) throw new BadRequest('newRepoDue', 'the card is about to be built in its new repository; take that back first');
     const text = 'text' in a ? (a.text ?? '') : '';
     const images = this.images.resolve('images' in a ? a.images : undefined);
     // a reply to anything but a message of this card's conversation is the words alone
@@ -1687,8 +1694,9 @@ export class CanvasRuntime {
 
   /** Refuses a folder that is a repository of a canvas already: the card is to be built there instead. */
   private taken(path: string) {
+    const real = realPath(path);
     for (const c of this.deps.canvases?.() ?? [this]) {
-      const r = c.repos.find((x) => x.info.path === path);
+      const r = c.repos.find((x) => realPath(x.info.path) === real);
       if (r) throw new BadRequest('newRepoPath', this.board.t.newRepo.taken(path, c.board.canvas.name));
     }
   }
@@ -1713,15 +1721,20 @@ export class CanvasRuntime {
       if (!config) throw new Error('no configuration to add the repository to');
       const repo = makeRepo(path, t);
       undo.push(repo.undo);
-      const before = config.current();
-      const { resolved } = await config.check(before);
+      const { resolved } = await config.check(config.current());
       const here = resolved.findIndex((r) => r?.id === this.id);
       if (here < 0) throw new Error(`the canvas ${this.id} is not in the configuration`);
-      const after = target.canvas
-        ? [...before, { repos: [{ path: target.path.trim() }] }]
-        : before.map((c, i) => (i === here ? { ...c, repos: [...c.repos, { path: target.path.trim() }] } : c));
+      // on the configuration as it is now, and taken back from it as it is then: changes meanwhile stay
+      const added = { path: target.path.trim() };
+      const now = config.current();
+      const after = target.canvas ? [...now, { repos: [added] }] : now.map((c, i) => (i === here ? { ...c, repos: [...c.repos, added] } : c));
       await config.save(after);
-      undo.push(() => config.save(before));
+      const without = () =>
+        config.current().flatMap((c) => {
+          const repos = c.repos.filter((r) => r.path !== added.path);
+          return repos.length ? [{ ...c, repos }] : [];
+        });
+      undo.push(() => config.save(without()));
       if (!target.canvas) return this.joined(cardId, path, repo.made);
       const checked = await config.check(after);
       const id = checked.resolved.at(-1)?.id;
@@ -1765,14 +1778,14 @@ export class CanvasRuntime {
     const card = this.board.item(cardId)!;
     const target = this.board.newRepo(cardId)!;
     const shown = target.path.trim();
-    if (card.state === 'idea') this.decided(card, { answer: this.board.t.newRepo.buildAnswer(shown), log: this.board.t.idea.buildLog });
-    clearTimeout(this.writing.get(cardId)?.timer);
-    this.writing.delete(cardId);
-    this.said.delete(cardId);
     // the screenshots of the task and of its conversation, which the new canvas keeps under its own name
     const row = this.board.row(cardId);
     const shots = [...(row.images ? (JSON.parse(row.images) as string[]) : []), ...this.board.events(cardId).flatMap((e) => e.images ?? [])];
     this.images.copyTo(there.images, shots);
+    if (card.state === 'idea') this.decided(card, { answer: this.board.t.newRepo.buildAnswer(shown), log: this.board.t.idea.buildLog });
+    clearTimeout(this.writing.get(cardId)?.timer);
+    this.writing.delete(cardId);
+    this.said.delete(cardId);
     const at = there.board.freeSpot(there.inView);
     this.deps.store.moveCard(cardId, there.id, at, { new_repo: JSON.stringify({ path: target.path, canvas: true, by: target.by, made: true }) });
     this.deps.store.dropEmptyGroups(this.id);

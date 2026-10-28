@@ -9,6 +9,7 @@ import { BadRequest, type Board, excerpt, replyNote } from './board';
 import type { Place } from '../core/layout';
 import { type Config, configShape } from './config';
 import { parsePrUrl } from './forge';
+import { folderPath } from './new-repo';
 import type { Mark, Moment, TalkWaitRow } from './db';
 import { type AgentRuntime, type AgentSession, failureReason, limitLifts } from './runtime';
 import { type Language, LANGUAGES, ownersLanguage } from '../core/locale';
@@ -1028,7 +1029,7 @@ export class Commander {
     // built or started in a repository that does not exist yet
     if ((a.do === 'build' || a.do === 'start') && a.path?.trim()) {
       const path = a.path.trim();
-      if (!path.startsWith('~') && !/^([a-zA-Z]:)?[/\\]/.test(path)) return `${path} is no folder: give it absolute or from ~`;
+      if (!folderPath(path)) return `${path} is no folder: give it absolute or from ~`;
       if (card.state !== 'idea' && (card.state !== 'planned' || card.source !== 'manual' || card.prototypeOf || card.queue || card.workspace || card.branch))
         return `only an idea, or a planned task of the owner's nobody has worked on yet and not with Obeya, is built in a new repository (${is})`;
       return { do: 'newRepo', card: card.id, path, canvas: a.own_canvas !== false };
