@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { lineDiff } from '../core/diff';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
@@ -335,6 +335,7 @@ export function ConfigDialog({ on, onClose, onSetup, onAsk, onTalk, onProblems, 
             <Head title={c.sections.general} />
             <LanguageBlock on={on} />
             <ThemeBlock on={on} />
+            <UsageBlock on={on} />
             {view && <ServerBlock server={view.server} />}
           </section>
         </div>
@@ -705,6 +706,37 @@ function ThemeBlock({ on }: { on: boolean }) {
             </button>
           ))}
         </div>
+      </Field>
+      {status && <p className="hint c-status">{status}</p>}
+    </>
+  );
+}
+
+/** Whether the bar shows the plan's usage limits: saved on its own, and the bar follows at once. */
+function UsageBlock({ on }: { on: boolean }) {
+  const [view, setView] = useState<UsageMeterView | null>(null);
+  const [status, setStatus] = useState('');
+  useEffect(() => {
+    if (on) api.usageMeter().then(setView, console.error);
+  }, [on]);
+  if (!view) return null;
+  const l = t.usage.setting;
+  const choose = async (shown: boolean) => {
+    setStatus('');
+    try {
+      setView(await api.saveUsageMeter(shown));
+    } catch (e) {
+      setStatus(failText(e));
+    }
+  };
+  return (
+    <>
+      <Head sub title={l.title} hint={l.hint} file={view.file} />
+      <Field label={l.title}>
+        <label className="c-check">
+          <input type="checkbox" checked={view.on} onChange={(e) => choose(e.target.checked)} />
+          {l.label}
+        </label>
       </Field>
       {status && <p className="hint c-status">{status}</p>}
     </>

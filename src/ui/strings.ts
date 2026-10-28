@@ -1606,6 +1606,25 @@ const de = {
       `In \`${checkout}\` hast du nicht committete Änderungen an Dateien, die die neuen Commits ändern: ${files}. Committe sie oder lege sie mit \`git stash\` beiseite; dann holt „git pull“ hier die Commits.`,
     failed: (error: string) => `„git pull“ ging nicht: ${error}`,
   },
+  /** The plan's usage limits in the bar (src/ui/usage.tsx), and the setting that shows or hides them. */
+  usage: {
+    /** The bar's short names of the two groups of limits. */
+    groups: { session: 'Sitzung', weekly: 'Woche' } as Record<string, string>,
+    title: 'Nutzungslimits deines Claude-Abos',
+    /** A limit by its kind, in the list under the bar's button. */
+    kinds: { session: 'Sitzung (5 Stunden)', weekly_all: 'Woche, alle Modelle' } as Record<string, string>,
+    /** A limit for one model or surface only. */
+    scoped: (scope: string) => `Woche, nur ${scope}`,
+    resets: (when: string) => `neu ab ${when}`,
+    source: (time: string) => `Von Claude Code auf diesem Rechner, jede Minute neu; Stand ${time}.`,
+    hide: 'Ausblenden',
+    hideHint: 'Wieder einblenden unter Konfiguration → Allgemein.',
+    setting: {
+      title: 'Nutzungslimits in der Menüzeile',
+      label: 'Anzeigen',
+      hint: 'Wie viel vom Sitzungs- und vom Wochenlimit des Claude-Abos verbraucht ist, mit dem Claude Code auf diesem Rechner angemeldet ist: jede Minute neu, solange eine Seite von Obeya offen ist. Mit einem API-Schlüssel gibt es keine Limits zu zeigen. Gilt sofort.',
+    },
+  },
   workspaces: {
     label: 'Workspaces',
     free: (n: number, total: number, blocked = 0) => (total === 0 ? 'keine eingerichtet' : n > 0 ? `${n} frei` : blocked ? 'keiner frei' : 'alle belegt'),
@@ -3317,6 +3336,21 @@ const en: Strings = {
     local: (checkout: string, files: string) =>
       `\`${checkout}\` has uncommitted changes to files the new commits change: ${files}. Commit them or put them aside with \`git stash\`; then "git pull" here brings in the commits.`,
     failed: (error: string) => `"git pull" failed: ${error}`,
+  },
+  usage: {
+    groups: { session: 'Session', weekly: 'Week' },
+    title: 'Usage limits of your Claude plan',
+    kinds: { session: 'Session (5 hours)', weekly_all: 'Week, all models' },
+    scoped: (scope: string) => `Week, ${scope} only`,
+    resets: (when: string) => `resets ${when}`,
+    source: (time: string) => `From Claude Code on this machine, every minute; as of ${time}.`,
+    hide: 'Hide',
+    hideHint: 'Show it again under Configuration → General.',
+    setting: {
+      title: 'Usage limits in the bar',
+      label: 'Show',
+      hint: 'How much of the session and the weekly limit is used of the Claude plan that Claude Code on this machine is logged in with: every minute, while a page of Obeya is open. With an API key there are no limits to show. Applies at once.',
+    },
   },
   workspaces: {
     label: 'Workspaces',

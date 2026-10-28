@@ -1,7 +1,7 @@
 // Obeya's own settings, in `settings.json` under its home beside `canvases.json` and `demo.json`:
 // the language of Obeya's interface and the one its agents talk to the owner in, light or dark, the model and effort of each group of
 // agents, the key that records a command from anywhere on the machine (heard by the app's shell),
-// and how other devices reach Obeya (remote.ts). The owner chooses them in the settings sheet;
+// how other devices reach Obeya (remote.ts), and whether the bar shows the plan's usage limits (usage.ts). The owner chooses them in the settings sheet;
 // until then the system's language and look apply, the agents run as `AGENT_DEFAULTS` says, and
 // no other device reaches Obeya. Saving restarts nothing: the page loads again in the new
 // language, takes the new look at once, and the server reads the file whenever it needs the
@@ -11,7 +11,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chosenConversationLanguage, chosenLanguage, conversationLanguageIn, OWNER_SETTINGS_FILE as SETTINGS_FILE, ownerLanguageIn, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
 import { type Language, LANGUAGES } from '../core/locale';
-import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentRole, type AgentSetting, type AgentsView, type LanguageView, type RemoteSetting, type Theme, THEMES, type ThemeView } from '../core/types';
+import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentRole, type AgentSetting, type AgentsView, type LanguageView, type RemoteSetting, type Theme, THEMES, type ThemeView, type UsageMeterView } from '../core/types';
 import { defaultPushKey, parsePushKey } from '../core/push-key';
 import { BadRequest } from './board';
 
@@ -28,6 +28,8 @@ interface Settings {
   pushKey?: string;
   /** How other devices reach Obeya; absent, they do not. */
   remote?: RemoteSetting;
+  /** `false`: the bar does not show the plan's usage limits; absent, it does. */
+  usageMeter?: false;
 }
 
 function read(home: string): Settings {
@@ -37,7 +39,7 @@ function read(home: string): Settings {
     const conversationLanguage = LANGUAGES.find((l) => l === o.conversationLanguage);
     const theme = THEMES.find((x) => x === o.theme);
     const pushKey = parsePushKey(o.pushKey) ?? undefined;
-    return { ...o, language, conversationLanguage, theme, agents: agentsOf(o.agents), pushKey, remote: remoteOf(o.remote) ?? undefined };
+    return { ...o, language, conversationLanguage, theme, agents: agentsOf(o.agents), pushKey, remote: remoteOf(o.remote) ?? undefined, usageMeter: o.usageMeter === false ? false : undefined };
   } catch {
     return {};
   }
@@ -82,8 +84,18 @@ export function saveTheme(home: string, input: unknown): ThemeView {
   return themeView(home);
 }
 
+export const usageMeterView = (home: string): UsageMeterView => ({ file: join(home, SETTINGS_FILE), on: read(home).usageMeter !== false });
+
+/** Saves whether the bar shows the plan's usage limits (`{ on }`). Other settings in the file stay. */
+export function saveUsageMeter(home: string, input: unknown): UsageMeterView {
+  const on = (input as { on?: unknown } | null)?.on;
+  if (typeof on !== 'boolean') throw new BadRequest('invalid', 'on must be true or false');
+  save(home, 'usageMeter', on ? null : false, `usage limits ${on ? 'shown' : 'not shown'} in the bar,`);
+  return usageMeterView(home);
+}
+
 /** Saves one of the owner's choices, or with `null` takes it out; the other settings in the file stay. */
-function save<K extends 'language' | 'conversationLanguage' | 'theme' | 'pushKey' | 'remote'>(home: string, key: K, value: Settings[K] | null, what: string) {
+function save<K extends 'language' | 'conversationLanguage' | 'theme' | 'pushKey' | 'remote' | 'usageMeter'>(home: string, key: K, value: Settings[K] | null, what: string) {
   write(home, { ...read(home), [key]: value ?? undefined });
   console.log(`Obeya: ${what} saved to ${join(home, SETTINGS_FILE)}`);
 }

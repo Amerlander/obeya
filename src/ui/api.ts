@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
 import { type Place, placeParam } from '../core/layout';
-import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoTrust, ServerMessage, SettingsShared, SourceUpdate, SpotInput, TalkRef, AppUpdate, Theme, ThemeView } from '../core/types';
+import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoTrust, ServerMessage, SettingsShared, SourceUpdate, SpotInput, TalkRef, AppUpdate, Theme, ThemeView, Usage, UsageMeterView } from '../core/types';
 import type { Wish } from '../core/wish';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
@@ -153,6 +153,9 @@ export const api = {
   push: () => call<{ key: string; on: boolean }>('GET', '/api/push'),
   subscribe: (subscription: PushSubscriptionJSON) => call<void>('PUT', '/api/push', subscription),
   saveTheme: (theme: Theme | null) => call<ThemeView>('PUT', '/api/theme', { theme }),
+  /** Whether the bar shows the plan's usage limits. */
+  usageMeter: () => call<UsageMeterView>('GET', '/api/usage-meter'),
+  saveUsageMeter: (on: boolean) => call<UsageMeterView>('PUT', '/api/usage-meter', { on }),
   /** The model and effort of each group of agents. */
   agents: () => call<AgentsView>('GET', '/api/agents'),
   /** Saves the model or the effort of one group. */
@@ -466,6 +469,8 @@ export function useCanvas(id = canvasId): {
   update: AppUpdate | null;
   /** New commits on the upstream of the checkout Obeya runs from. */
   source: SourceUpdate | null;
+  /** The plan's usage limits, while the bar shows them. */
+  usage: Usage | null;
   waiting: Record<string, number>;
   oldBun: string | null;
   /** The canvases as they changed while the page is open (one started, stopped or renamed); null until they do. */
@@ -478,6 +483,7 @@ export function useCanvas(id = canvasId): {
   const [restart, setRestart] = useState<PendingRestart | null>(null);
   const [update, setUpdate] = useState<AppUpdate | null>(null);
   const [source, setSource] = useState<SourceUpdate | null>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
   const [waiting, setWaiting] = useState<Record<string, number>>({});
   const [oldBun, setOldBun] = useState<string | null>(null);
   const [canvases, setCanvases] = useState<CanvasInfo[] | null>(null);
@@ -523,6 +529,7 @@ export function useCanvas(id = canvasId): {
         else if (msg.type === 'restart') setRestart(msg.restart);
         else if (msg.type === 'update') setUpdate(msg.update);
         else if (msg.type === 'source') setSource(msg.source);
+        else if (msg.type === 'usage') setUsage(msg.usage);
         else if (msg.type === 'waiting') setWaiting(msg.waiting);
         else if (msg.type === 'canvases') setCanvases(msg.canvases);
         else if (msg.type === 'event') for (const fn of eventListeners) fn(msg.event);
@@ -576,5 +583,5 @@ export function useCanvas(id = canvasId): {
       ws.close();
     };
   }, [id]);
-  return { snapshot, online, offlineSince, restart, update, source, waiting, oldBun, canvases };
+  return { snapshot, online, offlineSince, restart, update, source, usage, waiting, oldBun, canvases };
 }

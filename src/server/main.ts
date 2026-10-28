@@ -58,6 +58,7 @@ import { ShellReports } from './push-key';
 import { headOf, installDependencies, ownCheckout, RESTART, RESTART_FROM_FILE, RESTART_PATIENCE_MS, Restarter, UPDATE, watchOwnCode } from './self-update';
 import { AppUpdates } from './app-update';
 import { SourceUpdates } from './source-update';
+import { claudeUsage, UsageMeter } from './usage';
 import { COMPILED, resource, SELF, VERSION } from './resources';
 import { oldLinuxBun, onGitHub } from './repo';
 import { Access } from './remote';
@@ -69,7 +70,7 @@ import { VoiceSetup } from './voice-setup';
 import { useLib } from '../../plugin/skills/demo/lib/here.ts';
 import { expandHome } from '../../plugin/skills/demo/lib/settings.ts';
 import { qwen3Serve } from '../../plugin/skills/demo/lib/voices.ts';
-import { agentSetting, conversationLanguage, ownerLanguage } from './settings';
+import { agentSetting, conversationLanguage, ownerLanguage, usageMeterView } from './settings';
 import { loginLink } from './owner';
 
 const { values, positionals } = parseArgs({
@@ -296,11 +297,14 @@ const shells = new ShellReports();
 const updates = new AppUpdates();
 // run from a clone of Obeya's repository: new commits on its upstream, for the owner to pull
 const sources = own ? new SourceUpdates(own) : undefined;
+// the plan's usage limits in the bar, while the owner has it show them and a page is open
+const usage = new UsageMeter(() => claudeUsage(home), { on: usageMeterView(home).on });
 const machine = new MachineSetup({ home, config, voice: voiceSetup, shells });
 // the canvas the assistant created gets a first card that says what to try
 welcome(home, canvases.all());
 const shutdown = (code: number) => {
   canvases?.shutdown();
+  usage.stop();
   endAgentsHere();
   awake.stop();
   access.release();
@@ -334,7 +338,7 @@ const access = new Access({ store, home, language: () => ownerLanguage(home) });
 const push = new Push({ store, home, language: () => ownerLanguage(home) });
 // while other devices may reach Obeya, the machine stays awake as long as a worker works, or the whole time
 const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.awake() === 'works' && busy().length > 0) }).start();
-server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access, push, sources);
+server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access, push, sources, usage);
 claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, app: !!process.env.OBEYA_APP });
 // the address as a one-time link that signs a browser in (owner.ts)
 const link = access.owner.link(`http://127.0.0.1:${server.port}`);

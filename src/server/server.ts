@@ -35,7 +35,8 @@ import icon180 from '../ui/logo/apple-touch-icon.png' with { type: 'file' };
 import icon512 from '../ui/logo/icon-512.png' with { type: 'file' };
 import { servePdfjs } from './pdfjs';
 import { Tailscale } from './tailscale';
-import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, themeView } from './settings';
+import { agentsView, languageView, pushKeyChoice, saveAgents, saveLanguage, savePushKey, saveTheme, saveUsageMeter, themeView, usageMeterView } from './settings';
+import type { UsageMeter } from './usage';
 import { nonEmpty } from '../core/text';
 import { VERSION } from './resources';
 import { footerOf } from './wish';
@@ -129,6 +130,8 @@ export function serve(
   push = new Push({ store: access.store }),
   /** New commits on the upstream of the checkout Obeya runs from; none for the app or the compiled binary. */
   sources?: SourceUpdates,
+  /** The plan's usage limits for the bar, fetched while the owner has it show them and a page is open. */
+  usage?: UsageMeter,
 ) {
   const canvases = Array.isArray(served) ? { all: () => served } : served;
   const byId = new Map<string, CanvasRuntime>();
@@ -176,6 +179,9 @@ export function serve(
   });
   updates.onChange(() => everyone(JSON.stringify({ type: 'update', update: updates.current() } satisfies ServerMessage)));
   sources?.onChange(() => everyone(JSON.stringify({ type: 'source', source: sources.current() } satisfies ServerMessage)));
+  usage?.onChange(() => everyone(JSON.stringify({ type: 'usage', usage: usage.current() } satisfies ServerMessage)));
+  /** What tells the usage meter a page closed, by page. */
+  const unwatch = new Map<string, () => void>();
   /** What stops sending each canvas's changes to its pages. */
   const detach = new Map<string, () => void>();
   const attach = (c: CanvasRuntime) => {
@@ -475,6 +481,15 @@ export function serve(
       '/api/theme': {
         GET: needs(config, (c) => themeView(c.home)),
         PUT: needs(config, async (c, req) => saveTheme(c.home, await req.json())),
+      },
+      // whether the bar shows the plan's usage limits: the meter fetches them from then on, or stops
+      '/api/usage-meter': {
+        GET: needs(config, (c) => usageMeterView(c.home)),
+        PUT: needs(config, async (c, req) => {
+          const view = saveUsageMeter(c.home, await req.json());
+          usage?.setOn(view.on);
+          return view;
+        }),
       },
       // the model and effort of each group of agents, read whenever one starts
       '/api/agents': {
@@ -910,12 +925,16 @@ export function serve(
         ws.send(JSON.stringify({ type: 'restart', restart: pending(c.id) } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'update', update: updates.current() } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'source', source: sources?.current() ?? null } satisfies ServerMessage));
+        ws.send(JSON.stringify({ type: 'usage', usage: usage?.current() ?? null } satisfies ServerMessage));
+        if (usage) unwatch.set(ws.data.page, usage.watch());
         ws.send(waitingMessage());
         // a page that reloads within a command's undo window offers "Rückgängig" again
         for (const n of c.commander.undoable()) ws.send(JSON.stringify({ type: 'notice', ...n } satisfies ServerMessage));
       },
       close: (ws: ServerWebSocket<Socket>) => {
         sockets.get(ws.data.canvas)?.delete(ws);
+        unwatch.get(ws.data.page)?.();
+        unwatch.delete(ws.data.page);
         restarter?.hold(ws.data.page);
         focused.delete(ws.data.page);
         // a phone's last page closed: it no longer holds pushes off

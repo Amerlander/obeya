@@ -5,7 +5,7 @@
 // what was typed but not sent survives a reload. It holds one WebSocket per canvas.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type Item, needsYou, openQuestions, unreadAnswers } from '../core/types';
+import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type Item, needsYou, openQuestions, unreadAnswers, type Usage } from '../core/types';
 import { api, beforeReload, cardsOn, onNotice, phoneInUse, setCanvas, useCanvas, type Where } from './api';
 import { enterBreaksLines } from './composer';
 import { type ActDone, Detail, type Pending, TalkElsewhere, useEvents } from './detail';
@@ -19,6 +19,7 @@ import { glide, type Mark, settle, speed, THROWN, thrown } from './panelHeight';
 import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
+import { UsagePill } from './usage';
 import { agentWorks, cardTalk, koordinatorReads, obeyaWorks, opensWithTalk, runs, unseen } from './talk';
 import { seenOf } from './seen';
 import { tellers, useAck } from './tell';
@@ -173,7 +174,10 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   const snapsRef = useRef(snaps);
   snapsRef.current = snaps;
   const [offline, setOffline] = useState<Record<string, number | null>>({});
+  // the plan's usage limits, the same over every canvas's connection
+  const [usage, setUsage] = useState<Usage | null>(null);
   const feed = (id: string, live: ReturnType<typeof useCanvas>) => {
+    setUsage(live.usage);
     if (live.snapshot) setSnaps((s) => (s[id] === live.snapshot ? s : { ...s, [id]: live.snapshot! }));
     setOffline((o) => (o[id] === live.offlineSince ? o : { ...o, [id]: live.offlineSince }));
     if (live.canvases) setCanvases(live.canvases);
@@ -585,6 +589,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
         <header className="ph-bar ph-home">
           <Sign size={26} />
           <span className="ph-word">Obeya</span>
+          {usage && <UsagePill usage={usage} />}
         </header>
         {banner}
         <Notify />
@@ -649,7 +654,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
 /** One canvas's live snapshot, handed up as it changes. */
 function Feed({ id, onChange }: { id: string; onChange: (id: string, live: ReturnType<typeof useCanvas>) => void }) {
   const live = useCanvas(id);
-  useEffect(() => onChange(id, live), [live.snapshot, live.offlineSince, live.canvases]);
+  useEffect(() => onChange(id, live), [live.snapshot, live.offlineSince, live.canvases, live.usage]);
   return null;
 }
 

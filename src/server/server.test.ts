@@ -10,6 +10,7 @@ import { Store } from './db';
 import { AppUpdates } from './app-update';
 import { Restarter } from './self-update';
 import { SourceUpdates } from './source-update';
+import { UsageMeter } from './usage';
 import type { NarrationHost } from './narration';
 import { serve, serveNarration } from './server';
 import { artifact, asOwner, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
@@ -955,6 +956,25 @@ describe('new commits on the upstream of the checkout Obeya runs from', () => {
   test('an Obeya that runs from no checkout has none', async () => {
     expect((await post('/api/source-update/pull', '')).status).toBe(404);
     expect(await (await fetch(new URL('/api/source-update', server.url))).json()).toBeNull();
+  });
+});
+
+describe('the usage limits in the bar', () => {
+  test('a page gets them once fetched for it, and its closing ends the session that fetched them', async () => {
+    let closed = 0;
+    const usage = new UsageMeter(() => ({ fetch: async () => ({ at: '2026-10-28T08:00:00.000Z', limits: [{ kind: 'session', group: 'session', percent: 7, severity: 'normal' }] }), close: () => void closed++ }), { on: true });
+    server.stop(true);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, usage);
+    const messages: ServerMessage[] = [];
+    const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
+    ws.onmessage = (e) => messages.push(JSON.parse(e.data));
+    const shown = () => messages.filter((m): m is Extract<ServerMessage, { type: 'usage' }> => m.type === 'usage');
+    await until(() => shown().length === 2);
+    expect(shown()[0]!.usage).toBeNull();
+    expect(shown()[1]!.usage?.limits[0]?.percent).toBe(7);
+    ws.close();
+    await until(() => closed === 1);
+    expect(usage.current()).toBeNull();
   });
 });
 

@@ -13,13 +13,27 @@ waits for, buttons to move it and a × that takes it out of the queue at once, a
 undo, starting it again is the way back); a row opens its card. Obeya's button is the rightmost (see
 Sheets).
 
+Right, before the workspace pool: the usage limits of the Claude plan that Claude Code on this
+machine is logged in with, the session's (five hours) and the week's, each a short meter with its
+percentage, the most used limit of each group, coloured in the grade the plan's usage endpoint gives
+it (warning, critical). Hovering or a click lists every limit (the session, the week for all models,
+the week for a single model) with when it starts anew, where the numbers come from and as of when,
+and „Ausblenden“, which turns the setting off; „Nutzungslimits in der Menüzeile“ under Konfiguration →
+Allgemein turns it on again (on until then). The phone view shows the same at the right of its bar.
+The numbers come from the data behind Claude Code's `/usage`: one idle Claude Code session, which
+sends no prompt and so uses none of the limits, is asked a little over every minute (it keeps an
+answer for a minute) while the setting is on and a page of Obeya is open, and closed once neither
+holds. Nothing shows for a login without plan limits (an API key, a cloud provider), a Claude Code
+too old to answer, or numbers that could not be fetched again for five minutes. The workers on other
+machines may use other logins; the bar shows this machine's.
+
 The bar has no hint line. `?` (or the round `?` button) shows the legend of mouse and keys, ending
 with the link „Wunsch oder Fehler melden“ (see Wishes for Obeya's makers). The button only teaches
 the key: the legend says so, and once the key has been used the button is gone for good (per
 browser).
 
 The buttons always fit: when the contents outgrow the bar (a wide sheet, a narrow window), it gives
-up in steps the wordmark and branch, then labels a few at a time, then the workspace pool and `?`,
+up in steps the wordmark and branch, then labels a few at a time, then the workspace pool, the usage limits and `?`,
 then all but the sheets' buttons. The step is measured from the actual contents, since the same
 width may hold a short or a long branch, one clone or three.
 
@@ -220,6 +234,12 @@ code, a generic one otherwise.
   cards with their text.
 - **Archive, queue and "Neue Aufgabe" sit left in the bar** (2026-10-09). Rejected: the queue inside
   the Koordinator's sheet.
+- **The usage limits come from Claude Code's `/usage` data** (2026-10-28), asked through the
+  Agent SDK of an idle session. Rejected: calling the plan's usage endpoint directly with the OAuth
+  token read from the keychain or Claude Code's credentials file, which ties Obeya to where and how
+  Claude Code keeps its login; and the rate-limit events of running agents alone, which say little
+  until a limit is close and nothing while no agent runs. The SDK marks the call experimental: when
+  it changes, the bar shows nothing until Obeya follows.
 - **The bar measures what fits** (2026-10-12). Rejected: container queries on the bar's width, which
   let a long branch or a large pool push buttons under the sheet.
 - **An unfolded card is as large as its content, up to the room it has** (2026-10-08, 2026-10-21).

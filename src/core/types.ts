@@ -2007,6 +2007,40 @@ export interface ThemeView {
 }
 
 /**
+ * One of the usage limits of the Claude plan Claude Code is logged in with on this machine, as the
+ * plan's usage endpoint reports it (src/server/usage.ts): how much of its window is used, and when
+ * the window starts anew.
+ */
+export interface UsageLimit {
+  /** The endpoint's kind of meter: `session` (five hours), `weekly_all`, `weekly_scoped` (one model's), or one Obeya does not know yet. */
+  kind: string;
+  /** The endpoint's group of the meter: `session` or `weekly`. */
+  group: string;
+  /** What a scoped meter is for, as the endpoint names it: a model (`Fable`) or a surface. */
+  scope?: string;
+  /** Share of the window used, 0–100. */
+  percent: number;
+  /** When the window starts anew (ISO time), when the endpoint says. */
+  resetsAt?: string;
+  /** The endpoint's grade of the meter: `normal`, `warning` or `critical`. */
+  severity: string;
+}
+
+/** The plan's usage limits as last fetched, for the bar while the owner has it show them. */
+export interface Usage {
+  limits: UsageLimit[];
+  /** When they were fetched (ISO time). */
+  at: string;
+}
+
+/** Whether the bar shows the plan's usage limits (`src/server/settings.ts`); on until the owner turns it off. */
+export interface UsageMeterView {
+  /** The file it is saved in, under Obeya's home. */
+  file: string;
+  on: boolean;
+}
+
+/**
  * How other devices reach Obeya, when the owner lets them (`src/server/remote.ts`): through
  * `tailscale serve`, which gives an HTTPS address in the tailnet, or on an address of this machine
  * the owner picks (another VPN's interface), in plain HTTP.
@@ -2356,6 +2390,8 @@ export type ServerMessage =
   | { type: 'update'; update: AppUpdate | null }
   /** On connect and whenever it changes: new commits on the upstream of the checkout Obeya runs from, if any. */
   | { type: 'source'; source: SourceUpdate | null }
+  /** On connect and whenever it changes: how much of its usage limits the account Claude Code runs with here has used, while the bar shows it. */
+  | { type: 'usage'; usage: Usage | null }
   /** On connect and whenever it changes: how many cards on each canvas need the owner, by canvas id. */
   | { type: 'waiting'; waiting: Record<string, number> }
   /** Whenever a canvas starts, stops, or changes its name or repositories while Obeya runs. */

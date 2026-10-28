@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { type Bounds, boundsOf, CARD_SIZE, centre, onCanvas, type Place, PROJECT_HEAD, PROJECT_PAD, unionBounds } from '../core/layout';
-import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type ConfigProblem, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, EVICT_HOLD_MS, START_ALL_HOLD_MS, titleFrom, type AppUpdate, type SourceUpdate, unreadAnswers } from '../core/types';
+import { type CanvasInfo, type CanvasSnapshot, type CardPatch, type ConfigProblem, finished, type Group, type Item, nameless, needsYou, openPerGroup, type PendingRestart, type PlanDir, EVICT_HOLD_MS, START_ALL_HOLD_MS, titleFrom, type AppUpdate, type SourceUpdate, unreadAnswers, type Usage } from '../core/types';
 import { api, ApiError, beforeReload, onNotice, quietAtStart, reportFocus, setCanvas, useCanvas } from './api';
 import { GroupNames, growFrom, inside, Lasso, MarkHint, Marked, Ring, TerritoryLayer, useTerritories } from './groups';
 import { besideSheet, BOTTOM, type Cam, camFor, centreOn, chase, dragLimit, edgeScroll, FAR, flying, flyTo, keepInView, MAX_ZOOM, MIN_ZOOM, overviewCam, placeIn, shows, stopFlight, TOP, toWorld } from './camera';
@@ -14,6 +14,7 @@ import type { Heard, Where } from './api';
 import { replyOn, setReply } from './reply';
 import { ArchivePill } from './archive';
 import { useBarFit } from './barFit';
+import { UsagePill } from './usage';
 import { ConfigDialog, Problem, showCanvasesSection, showDevicesSection, showRepoClones } from './config';
 import { PhoneDialog } from './access';
 import { Setup } from './setup';
@@ -126,10 +127,10 @@ function Splash({ offline }: { offline: boolean }) {
 }
 
 function Live({ canvases: loaded }: { canvases: CanvasInfo[] }) {
-  const { snapshot, online, restart, update, source, waiting, oldBun, canvases } = useCanvas();
+  const { snapshot, online, restart, update, source, usage, waiting, oldBun, canvases } = useCanvas();
   if (!snapshot) return <Splash offline={!online} />;
   // a canvas started, stopped or renamed while the page is open: the switcher follows
-  return <Canvas snapshot={snapshot} online={online} restart={restart} update={update} source={source} canvases={canvases ?? loaded} waiting={waiting} oldBun={oldBun} />;
+  return <Canvas snapshot={snapshot} online={online} restart={restart} update={update} source={source} usage={usage} canvases={canvases ?? loaded} waiting={waiting} oldBun={oldBun} />;
 }
 
 /** What is open, and the view to go back to: `prevCam` laid out beside a sheet `prevSide` wide. */
@@ -160,6 +161,7 @@ function Canvas({
   restart,
   update,
   source,
+  usage,
   canvases,
   waiting,
   oldBun,
@@ -169,6 +171,8 @@ function Canvas({
   restart: PendingRestart | null;
   update: AppUpdate | null;
   source: SourceUpdate | null;
+  /** The plan's usage limits, while the bar shows them. */
+  usage: Usage | null;
   canvases: CanvasInfo[];
   waiting: Record<string, number>;
   /** The Bun the server runs on, when it is too old for it (docs/design/distribution.md, Builds). */
@@ -1570,6 +1574,7 @@ function Canvas({
             {online && restart && <RestartPill restart={restart} items={items} />}
             {online && update && restart?.reason !== 'update' && <UpdatePill update={update} />}
             {online && source && <SourcePill source={source} />}
+            {online && usage && <UsagePill usage={usage} />}
             {snapshot.workspaces && <WorkspacesPill pools={snapshot.workspaces} canvas={snapshot.canvas} canvases={canvases} items={items} onOpen={(i) => void openFresh(i)} onElsewhere={(c, card) => location.assign(`?c=${encodeURIComponent(c)}&card=${encodeURIComponent(card)}`)} onTake={takeWorkspace} onKeep={keepWorkspace} />}
             <button className={cOn ? 'pill kpill config on' : 'pill kpill config'} title={t.config.button} onClick={toggleConfig}>
               <BarIcon d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
