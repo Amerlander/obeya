@@ -2354,13 +2354,17 @@ function ShareTags({ tags, vocabulary, set }: { tags: PageTags | undefined; voca
   return (
     <div className="share-row share-tags" ref={box} title={t.share.tagsHint}>
       <span className="share-label">{t.share.tags}</span>
-      {!shown.length && <span className="hint">{t.share.noTags}</span>}
+      {!shown.length && <span className="hint t">{t.share.noTags}</span>}
       {shown.flatMap(([d, values]) =>
         values.map((v) => (
           <span key={`${d}\n${v}`} className="tag-chip">
-            <span className="dim">{d}:</span> {v}
+            <span className="t">
+              <span className="dim">{d}:</span> {v}
+            </span>
             <button className="x" title={t.share.removeTag(d, v)} aria-label={t.share.removeTag(d, v)} onClick={() => set(d, values.filter((x) => x !== v))}>
-              ×
+              <svg viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M2 2l6 6M8 2l-6 6" />
+              </svg>
             </button>
           </span>
         )),
@@ -2368,7 +2372,9 @@ function ShareTags({ tags, vocabulary, set }: { tags: PageTags | undefined; voca
       {rest.length > 0 && (
         <span className="menu-pill">
           <button className={open ? 'tag-add on' : 'tag-add'} title={t.share.addTag} aria-label={t.share.addTag} aria-expanded={open} onClick={() => setOpen(!open)}>
-            +
+            <svg viewBox="0 0 10 10" aria-hidden="true">
+              <path d="M5 1.5v7M1.5 5h7" />
+            </svg>
           </button>
           {open && (
             <div className="bar-menu tag-menu">

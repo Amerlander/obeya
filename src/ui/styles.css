@@ -672,16 +672,19 @@ textarea.p-body:focus { border-color: var(--muted); }
 .share-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--approved); font-weight: 600; }
 .share-link { flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .share-busy { color: var(--muted); }
-/* the page's tags: chips with their ×, and „+“ with the vocabulary's other values in a list under it */
+/* the page's tags: chips with their ×, and „+“ with the vocabulary's other values in a list under it. Every
+   part is 24px high and centred on its capitals (text-box trims the line to them), × and + are drawn, not glyphs */
 .share-tags { gap: 6px; }
 .share-tags > .share-label { color: var(--muted); }
-.tag-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--chip); font-size: 12.5px; line-height: 20px; white-space: nowrap; }
+.share-tags > .share-label, .share-tags .t, .tag-chip.pick { text-box: trim-both cap alphabetic; }
+.tag-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 3px 0 10px; border-radius: 12px; background: var(--chip); font-size: 12.5px; line-height: 1; white-space: nowrap; box-sizing: border-box; }
 .tag-chip .dim { color: var(--muted); }
-.tag-chip .x { all: unset; cursor: pointer; width: 18px; height: 18px; border-radius: 50%; text-align: center; line-height: 18px; color: var(--muted); font-size: 14px; }
+.tag-chip .x { all: unset; cursor: pointer; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; color: var(--muted); }
+.tag-chip .x svg, .tag-add svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; }
 .tag-chip .x:hover { background: var(--line); color: var(--ink); }
-.tag-chip.pick { all: unset; cursor: pointer; padding: 2px 10px; border-radius: 999px; background: var(--chip); font-size: 12.5px; line-height: 20px; }
+.tag-chip.pick { all: unset; cursor: pointer; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background: var(--chip); font-size: 12.5px; line-height: 1; box-sizing: border-box; }
 .tag-chip.pick:hover { background: var(--line); }
-.tag-add { all: unset; cursor: pointer; width: 24px; height: 24px; border-radius: 50%; border: 1px dashed var(--muted); color: var(--muted); text-align: center; line-height: 22px; font-size: 15px; box-sizing: border-box; }
+.tag-add { all: unset; cursor: pointer; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px dashed var(--muted); color: var(--muted); box-sizing: border-box; }
 .tag-add:hover, .tag-add.on { border-style: solid; color: var(--ink); }
 .bar-menu.tag-menu { left: auto; right: 0; width: min(340px, calc(100vw - 28px)); padding: 10px 12px; display: grid; gap: 10px; }
 .tag-dim { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
