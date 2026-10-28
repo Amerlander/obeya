@@ -439,6 +439,7 @@ const de = {
   adapterSetup: {
     title: (repo: string) => `Obeya für ${repo} einrichten`,
     body: 'Füll mit dem Skill `obeya:settings` die Einstellungen dieses Repositorys für alle aus (`.obeya/settings.json`, in der Konfiguration unter „Einstellungen“ als „aus dem Repository“ zu sehen): welche Prüfungen laufen, wie Arbeit landet, wie ein Agent die App betreibt (starten, nach einer Änderung, für eine Demo), wie Obeya sie stoppt, und wo die Plan-Docs liegen, die Obeya als Projekte zeigt. Hat das Repository noch ein `.obeya/adapter/`, übernimm, was darin steht, in die Einstellungen und lösch es. Was du im Repository nicht herausfindest (Login, Testdaten), frag mich.',
+    reason: (repo: string) => `Obeya weiß noch nicht, wie die App von ${repo} startet, welche Prüfungen laufen und wie ein Agent sie für eine Demo betreibt.`,
   },
   /** The card that turns a doc in the plan directory that is not a project into one. */
   preparePlanDoc: {
@@ -857,6 +858,7 @@ const en: Messages = {
   adapterSetup: {
     title: (repo: string) => `Set up Obeya for ${repo}`,
     body: "With the skill `obeya:settings`, fill in this repository's settings for everyone (`.obeya/settings.json`, shown in the configuration under “Settings” as “from the repository”): which checks run, how work lands, how an agent runs the app (starting it, after a change, for a demo), how Obeya stops it, and where the plan docs are that Obeya shows as projects. If the repository still has a `.obeya/adapter/`, move what it says into the settings and delete it. Ask me what you cannot find out in the repository (login, test data).",
+    reason: (repo: string) => `Obeya does not know yet how the app of ${repo} starts, which checks run or how an agent runs it for a demo.`,
   },
   preparePlanDoc: {
     title: (file: string) => `Prepare ${file.slice(file.lastIndexOf('/') + 1)} as a project`,

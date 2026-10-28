@@ -13,7 +13,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, SHARED_FIELDS, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
 import { inQueue } from '../core/queue';
 import { BadRequest, Board, pathOfRef, replyNote, type StoredContribution } from './board';
 import type { ChangeRoute } from '../core/types';
@@ -63,6 +63,8 @@ export interface CanvasDeps {
   permissionMode?: PermissionMode;
   /** Watch plan docs and pull requests; off in tests. */
   watch?: boolean;
+  /** Propose the card that fills in a repository's settings where it has none (`proposeSetup`); off in tests not about it. */
+  setupProposals?: boolean;
   /** How long a voice command waits for undo. */
   commandDelayMs?: number;
   /** How long building or starting a card in a new repository waits for undo; NEW_REPO_HOLD_MS when left out. */
@@ -730,6 +732,7 @@ export class CanvasRuntime {
     this.repos.push(r);
     this.board.canvas.repos.push(r.ref);
     this.watch(r);
+    this.proposeSetup(r);
   }
 
   /** Stops what the repository set up: its Lesestand, the watchers, its workers' sessions. Its cards stay. */
@@ -1056,6 +1059,8 @@ export class CanvasRuntime {
       // the page reads the configuration's problems again
       r.problemSources = sources;
       r.ref.configRev = (r.ref.configRev ?? 0) + 1;
+      // the settings may be there now, or gone
+      this.proposeSetup(r);
     }
     const workIn = r.info.folder ? 'folder' : namesClones(r.config) ? 'clones' : (layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)())?.workspaces ?? defaultsFor(r.info).workspaces);
     if (workIn !== r.workspaces.mode) {
@@ -1074,9 +1079,11 @@ export class CanvasRuntime {
   /**
    * What the configuration's problems of the repository are read from on its default branch: its
    * `.obeya/settings.json` as the file has it (a field that does not count included), and whether a
-   * leftover `.obeya/adapter/` is there (`adapterModule`, where it was just read).
+   * leftover `.obeya/adapter/` is there (`adapterModule`, where it was just read), noted for
+   * `proposeSetup`.
    */
   private problemSources(path: string, adapterModule = hasAdapterModule(path)): string {
+    this.adapterModules.set(path, adapterModule);
     const read = this.shared.get(path);
     return JSON.stringify([read?.raw, read?.problems, read?.claude, this.heldOf(path), adapterModule]);
   }
@@ -1542,18 +1549,27 @@ export class CanvasRuntime {
   /**
    * The card whose worker fills in a repository's settings for everyone (`.obeya/settings.json`)
    * with the `settings` skill, for one that has none yet or still has an adapter module; one still
-   * open for it is returned rather than a second made. It goes right of everything on the canvas,
-   * at the top.
+   * open for it is returned rather than a second made, Obeya's proposal of it taken on as planned.
+   * It goes right of everything on the canvas, at the top.
    */
   adapterSetupCard(repo: string): Item {
     const r = this.repos.find((x) => x.ref.id === repo);
     if (!r) throw new BadRequest('invalid', 'unknown repository');
-    const { title, body } = this.board.t.adapterSetup;
-    const items = this.board.snapshot().items;
-    const open = items.find((i) => i.kind === 'task' && i.repo === repo && i.title === title(r.ref.name) && !finished(i.state) && !i.archivedAt);
-    if (open) return open;
-    const at = items.length ? { x: Math.max(...items.map((i) => i.x)) + 560, y: Math.min(...items.map((i) => i.y)) } : { x: 0, y: 0 };
-    return this.board.create({ title: title(r.ref.name), body, repo, ...at });
+    const open = this.board.openSetupCard(repo, r.ref.name);
+    if (open?.state === 'proposal') this.accept(open.id, [], false);
+    return open ? this.board.card(open.id)! : this.board.setupCard(repo, r.ref.name);
+  }
+
+  /**
+   * Obeya proposes the card that fills in a repository's settings where it knows them not (nothing
+   * of the repository's own in `.obeya/settings.json`, or an adapter module left on its main branch),
+   * as the Konfiguration dialog offers it; a folder without git is left alone.
+   */
+  private proposeSetup(r: Repo) {
+    if (!this.deps.setupProposals || r.info.folder) return;
+    const settings = this.shared.get(r.info.path)?.settings ?? {};
+    const own = SHARED_FIELDS.some((k) => settings[k] !== undefined);
+    this.board.proposeSetup(r.ref.id, r.ref.name, !own || !!this.adapterModules.get(r.info.path));
   }
 
   /**

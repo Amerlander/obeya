@@ -330,10 +330,20 @@ current also when a repository's settings change on its main branch.
 
 A repository with nothing in its own `.obeya/settings.json`, or with `adapterGone`, says that Obeya
 does not yet know how its app starts, which checks run and how to demo it, and offers „Von einem
-Agenten ausfüllen lassen“: the card „Obeya für <repo> einrichten“ (or the one still open) at the top
-right of that canvas, opened there. Its worker uses `obeya:settings` and settles the plan directory:
-it looks for plans the repository already keeps (`docs/`, `rfcs/`, `adr/`, `PLAN*.md`, `TODO.md`) and
-asks the owner in its one question whether that directory or a new `docs/plan/` holds them.
+Agenten ausfüllen lassen“ as soon as its path is checked, before the canvas is saved: the card
+„Obeya für <repo> einrichten“ (or the one still open) at the top right of that canvas, opened there.
+Unsaved changes are saved first, as the hint says; only where saving restarts Obeya is the button
+off. Its worker uses `obeya:settings` and settles the plan directory: it looks for plans the
+repository already keeps (`docs/`, `rfcs/`, `adr/`, `PLAN*.md`, `TODO.md`) and asks the owner in its
+one question whether that directory or a new `docs/plan/` holds them.
+
+The canvas proposes the same card by itself: once a repository without settings of its own (a git
+repository, not a folder) runs on it, the card waits there as „Vorschlag von Obeya“, with the same
+title and text and the dialog's reason beside it. Accepted, it is the owner's card as the button
+makes it (no mark of an agent's proposal); the button, pressed while the proposal is open, accepts it
+as planned and opens it. Obeya proposes it once per repository and canvas: dismissed, accepted or made
+from the dialog, it does not come back. A proposal still open goes by itself once the settings are on
+the main branch, withdrawn rather than dismissed.
 
 #### Saving
 
@@ -506,6 +516,11 @@ Prompts only agents read stay English, with German examples of what the owner ma
 - **The takeover into `.obeya/settings.json` saves pending changes itself** (2026-10-15), rather than
   being off with „Erst speichern“, which read as if saving were the takeover; the setup button says
   an agent fills in the settings.
+- **A repository without settings gets the setup card offered before saving and proposed on its
+  canvas** (2026-10-28, the owner): shown only once the canvas was saved and only in the dialog, the
+  button went unnoticed, and canvases ran with guessed settings. Once per repository, since a
+  proposal that comes back after a dismissal would nag. Rejected: a banner on the canvas (a second
+  form of the same offer beside the proposal, which already has accept and dismiss).
 - **Interface, conversation and repository each have a language** (2026-10-20, the owner): with one
   setting, switching the UI to English turned every agent English. Rejected: two machine-wide
   settings (they follow neither the owner's spoken language nor keep git English); a per-canvas

@@ -1284,7 +1284,7 @@ function CanvasBlock({ n, canvas, resolved, running, pin, saved, problems, focus
             repo={r}
             home={i === 0}
             resolved={resolved?.repos[i]}
-            canvasId={saved && resolved && running.includes(resolved.id) ? resolved.id : undefined}
+            {...(resolved ? { canvasId: resolved.id } : {})}
             problems={problems.filter((p) => p.repo === i)}
             {...(focus && resolved?.id === focus.canvas && resolved.repos[i]?.id === focus.repo ? { focus } : {})}
             where={`${here}, ${t.config.repoAt(r.path)}`}
@@ -1311,7 +1311,7 @@ interface RepoProps {
   repo: RepoConfig;
   home: boolean;
   resolved?: ResolvedCanvas['repos'][number];
-  /** The running canvas the repository is on, as saved; where a card for it can go. */
+  /** The canvas the repository is on, as checked: where a card for it goes, once the dialog's changes are saved. */
   canvasId?: string;
   problems: ConfigProblem[];
   /** Its clone count or slots to scroll to and focus: the dialog was opened from a card waiting for a free clone or slot. */
@@ -1480,10 +1480,10 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
           {p.code === 'untrusted' && resolved?.trust && <TrustCommands path={repo.path} trust={resolved.trust} onDone={onRecheck} />}
         </div>
       ))}
-      {/* a repository without settings of its own, or with an adapter module that said them: a card on its canvas writes them */}
+      {/* a repository without settings of its own, or with an adapter module that said them: a card on its canvas writes them, also before the canvas is saved */}
       {canvasId && resolved && !folder && (resolved.adapterGone || !fromRepository(resolved.values)) && (
         <div className="cfg-span">
-          <AdapterSetup canvas={canvasId} repo={resolved.id} />
+          <AdapterSetup canvas={canvasId} repo={resolved.id} takeover={takeover} />
         </div>
       )}
     </div>
@@ -2037,13 +2037,19 @@ const blankOnly = (trust: RepoTrust) =>
     return was && was.id !== f.id && was.text === f.text ? [file] : [];
   });
 
-/** Creates the card that writes the repository's settings for everyone, and opens it on its canvas. */
-function AdapterSetup({ canvas, repo }: { canvas: string; repo: string }) {
+/**
+ * Creates the card that writes the repository's settings for everyone, and opens it on its canvas;
+ * the dialog's changes are saved first, so the canvas runs with the repository on it.
+ */
+function AdapterSetup({ canvas, repo, takeover }: { canvas: string; repo: string; takeover: Takeover }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const { saved, prepare } = takeover;
   const go = async () => {
     setBusy(true);
+    setError('');
     try {
+      if (!saved && !(await prepare?.())) return setBusy(false);
       const card = await api.adapterSetup(canvas, repo);
       // the canvas loads with the card open, as after a restart
       keep(sessionStorage, canvas, { at: Date.now(), card: card.id, scroll: [], drafts: [] });
@@ -2055,8 +2061,11 @@ function AdapterSetup({ canvas, repo }: { canvas: string; repo: string }) {
   };
   return (
     <div className="c-row">
-      <span className="hint">{t.config.adapterSetupHint}</span>
-      <button className="btn small" disabled={busy} onClick={go}>
+      <span className="hint">
+        {t.config.adapterSetupHint}
+        {!saved && <> {prepare ? t.config.adapterSetupSaves : t.config.adapterSetupSaveFirst}</>}
+      </span>
+      <button className="btn small" disabled={busy || (!saved && !prepare)} onClick={go}>
         {t.config.adapterSetup}
       </button>
       {error && <p className="p-error">{error}</p>}

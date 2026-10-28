@@ -144,6 +144,8 @@
 // runs (`card` a key), read by its next retrospective; `settingProposals` are values for a
 // repository's settings it proposed (`field`: checks, setup, softPaths or run; `cards` keys;
 // `repo` defaults to the canvas's home repository); both need code that has them.
+// Obeya proposes a card that fills in the settings of a repository without any („Obeya für …
+// einrichten“); staging dismisses it on every canvas, unless `"setupProposals": true` keeps it.
 
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
@@ -198,6 +200,8 @@ interface StageCard {
 interface Stage {
   /** No canvas: Obeya's first start, with the setup assistant. */
   setup?: boolean;
+  /** Keeps Obeya's proposal to fill in the settings of a repository that has none. */
+  setupProposals?: boolean;
   /** Names the canvas the cards go on. */
   name?: string;
   /** The language of the scratch Obeya's interface; the demos' where the script runs without it. */
@@ -539,6 +543,12 @@ const api = async (method: string, path: string, body?: unknown, on = canvas) =>
   if (!r.ok) fail(`${method} ${path} ${JSON.stringify(body)}: ${r.status} ${text}`);
   return text ? JSON.parse(text) : undefined;
 };
+
+// Obeya's proposal to fill in a repository's settings, on every canvas, unless the stage keeps it
+if (!stage.setupProposals)
+  for (const c of allCanvases)
+    for (const i of ((await api('GET', '/canvas', undefined, c.id)) as CanvasSnapshot).items)
+      if (i.state === 'proposal' && i.proposal?.setup) await api('POST', `/cards/${i.id}/act`, { action: 'dismiss' }, c.id);
 
 // the cards: created through the API, the plan doc's looked up, then their fields written directly
 const snapshot = (await api('GET', '/canvas')) as CanvasSnapshot;

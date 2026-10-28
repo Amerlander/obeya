@@ -1108,6 +1108,8 @@ const de = {
     adapterSetupHint:
       'Obeya weiß noch nicht, wie diese App startet, welche Prüfungen laufen und wie ein Agent sie für eine Demo startet. Trag es in den Einstellungen selbst ein, oder lass einen Agenten das Repository lesen, die Einstellungen für alle ausfüllen und eine Demo damit ausprobieren.',
     adapterSetup: 'Von einem Agenten ausfüllen lassen',
+    adapterSetupSaves: 'Obeya speichert vorher die Änderungen in diesem Dialog, alle auf einmal wie „Speichern“ ganz unten.',
+    adapterSetupSaveFirst: 'Speichere dafür zuerst die Änderungen in diesem Dialog, ganz unten.',
     details: 'Details',
     info: 'Mehr dazu',
     problemCount: (n: number) => (n === 1 ? 'Ein Problem in der Konfiguration' : `${n} Probleme in der Konfiguration`),
@@ -2863,6 +2865,8 @@ const en: Strings = {
     adapterSetupHint:
       'Obeya does not know yet how this app starts, which checks run or how an agent runs it for a demo. Fill it in under Settings yourself, or let an agent read the repository, fill in the settings for everyone and try a demo with them.',
     adapterSetup: 'Have an agent fill them in',
+    adapterSetupSaves: 'Obeya first saves the changes in this dialog, all of them at once like “Save” at the very bottom.',
+    adapterSetupSaveFirst: 'For that, save the changes in this dialog first, at the very bottom.',
     details: 'Details',
     info: 'More about this',
     problemCount: (n: number) => (n === 1 ? 'One problem in the configuration' : `${n} problems in the configuration`),
@@ -3654,7 +3658,7 @@ const longDay = (d: Date, today: Date) =>
 /** A number, with `digits` decimals at most. */
 const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
-export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; contribution?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; snoozed?: Snooze; prototypeEnd?: 'discarded' | 'built'; retro?: string; branch?: string }) =>
+export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; contribution?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; snoozed?: Snooze; prototypeEnd?: 'discarded' | 'built'; retro?: string; proposal?: { setup?: true }; branch?: string }) =>
   i.snoozed
     ? i.snoozed.on
       ? t.snooze.on(i.snoozed.on.title, i.snoozed.on.state, i.snoozed.until && snoozeWhen(i.snoozed.until))
@@ -3703,7 +3707,7 @@ export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; 
         ? t.review.waits
       : i.state === 'inPr' && !i.pr
         ? t.openingPr
-        : i.state === 'proposal' && i.retro
+        : i.state === 'proposal' && (i.retro || i.proposal?.setup)
           ? t.proposalByObeya
           : stopped(i)
             ? t.stoppedState

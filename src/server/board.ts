@@ -278,6 +278,9 @@ const SHEET_TALK = 30;
 /** The setting that names the card collecting accepted rules for a repository's CLAUDE.md, per repository. */
 const CLAUDE_MD_SETTING = 'claude_md_card:';
 
+/** The setting that names the card filling in a repository's settings, proposed by Obeya or made in the Konfiguration dialog, per repository: Obeya proposes it once. */
+const SETUP_CARD_SETTING = 'setup_card:';
+
 /** How long an empty card of the owner's (no title, text or screenshots) may exist before Obeya drops it on start. */
 const UNTITLED_GRACE_MS = 10 * 60_000;
 
@@ -724,6 +727,62 @@ export class Board {
     return this.itemOf(row!);
   }
 
+  /**
+   * The card that fills in a repository's settings for everyone while it is open: the one made for
+   * it (`setupCard`), else one of its title made before Obeya noted which it was.
+   */
+  openSetupCard(repo: string, name: string): Item | undefined {
+    const id = this.setting(`${SETUP_CARD_SETTING}${repo}`);
+    const title = this.t.adapterSetup.title(name);
+    return this.snapshot().items.find((i) => i.kind === 'task' && i.repo === repo && (i.id === id || i.title === title) && !finished(i.state) && !i.archivedAt);
+  }
+
+  /**
+   * Makes the card that fills in a repository's settings for everyone, right of everything on the
+   * canvas, at the top: the owner's, or Obeya's proposal (`propose`) with why. Either way Obeya
+   * proposes it no more.
+   */
+  setupCard(repo: string, name: string, propose = false): Item {
+    this.checkRepo(repo);
+    const { title, body, reason } = this.t.adapterSetup;
+    // clear of the note on the plan directory, as on a canvas that has nothing else yet
+    const { items, planDirs = [] } = this.snapshot();
+    const box = unionBounds([...items.filter((i) => !i.parent).map((i) => boundsOf(i, items)), ...planDirs.flatMap((d) => planDirNoteBox(d) ?? [])]);
+    const at = box ? { x: box.x + box.w + 2 * GAP, y: box.y } : { x: 0, y: 0 };
+    const [row] = this.store.insert([
+      {
+        canvas_id: this.canvas.id,
+        kind: 'task',
+        state: propose ? 'proposal' : 'planned',
+        title: title(name),
+        body,
+        ...at,
+        repo: this.repoColumn(repo),
+        ...(propose ? { proposal: JSON.stringify({ ...proposalOf({ reason: reason(name) }), setup: true } satisfies Proposal) } : {}),
+      },
+    ]);
+    this.setSetting(`${SETUP_CARD_SETTING}${repo}`, row!.id);
+    this.changed();
+    return this.itemOf(row!);
+  }
+
+  /**
+   * Obeya proposes the setup card (`setupCard`) for a repository whose settings it does not know
+   * (`unknown`), once: dismissed, accepted or made in the dialog, it does not come back. Its
+   * proposal still open goes once the settings are there, withdrawn rather than dismissed.
+   */
+  proposeSetup(repo: string, name: string, unknown: boolean) {
+    const id = this.setting(`${SETUP_CARD_SETTING}${repo}`);
+    if (!id) {
+      if (unknown && !this.openSetupCard(repo, name)) this.setupCard(repo, name, true);
+      return;
+    }
+    const row = this.store.card(id);
+    if (unknown || !row || row.deleted_at || row.state !== 'proposal') return;
+    this.store.update(id, { proposal: JSON.stringify({ ...storedProposal(row)!, superseded: {} } satisfies Proposal), deleted_at: new Date().toISOString() });
+    this.changed();
+  }
+
   /** The cards the Arbeitsrückschau proposed for a repository, with what became of them. */
   retroProposals(repo: string) {
     return this.store.retroProposals(this.canvas.id, this.repoColumn(repo));
@@ -1046,9 +1105,9 @@ export class Board {
     if (row.state !== 'proposal') throw new BadRequest('notProposal', 'not a proposal');
     const proposal = storedProposal(row);
     if (proposal?.revising) throw new BadRequest('revising', 'the proposal is being reworked');
-    // an agent's proposal keeps that it was one: its task is not the owner's words
-    const kept = proposal && JSON.stringify({ ...(proposal.idea ? { idea: true } : {}), questions: [] } satisfies Proposal);
-    this.store.update(id, { state: asIdea ? 'idea' : 'planned', body: withQuestions(row.body ?? '', proposal?.questions ?? [], picks, this.t), proposal: kept ?? null });
+    // an agent's proposal keeps that it was one: its task is not the owner's words; Obeya's setup card is as if the owner made it
+    const kept = proposal && !proposal.setup && JSON.stringify({ ...(proposal.idea ? { idea: true } : {}), questions: [] } satisfies Proposal);
+    this.store.update(id, { state: asIdea ? 'idea' : 'planned', body: withQuestions(row.body ?? '', proposal?.questions ?? [], picks, this.t), proposal: kept || null });
     this.changed();
   }
 
@@ -1118,7 +1177,7 @@ export class Board {
     // what the owner said meanwhile is the next rework's
     const next = done?.next?.length ? { revising: merged(done.next) } : {};
     // when it starts is the owner's to change, not the reviser's
-    const proposal: Proposal = p ? { ...proposalOf({ ...p, startAt: was.startAt }), ...(was.acceptAfterRevision ? { acceptAfterRevision: was.acceptAfterRevision } : {}) } : was;
+    const proposal: Proposal = p ? { ...proposalOf({ ...p, startAt: was.startAt }), ...(was.acceptAfterRevision ? { acceptAfterRevision: was.acceptAfterRevision } : {}), ...(was.setup ? { setup: was.setup } : {}) } : was;
     this.store.update(id, {
       ...(p ? { title: p.title.slice(0, 200), body: p.task.slice(0, 20000) } : {}),
       ...(p?.images ? { images: p.images.length ? JSON.stringify(p.images) : null } : {}),

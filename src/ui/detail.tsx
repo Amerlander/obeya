@@ -992,6 +992,7 @@ function ProposalView({
             {!idea && <StartAt item={item} act={act} />}
             {from && <p className="hint">{t.proposedBy(plain(from.title))}{item.proposal?.reason && <> {item.proposal.reason}</>}</p>}
             {item.retro && <p className="hint">{t.proposedByRetro(item.retro)}</p>}
+            {item.proposal?.setup && item.proposal.reason && <p className="hint">{item.proposal.reason}</p>}
           </>
         }
         talk={

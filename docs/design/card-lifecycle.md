@@ -16,6 +16,9 @@ Koordinator; „Übernehmen“ only plans it. Accepting writes the questions int
 under „Entschieden:“, the rest under „Offene Fragen:“, so the new worker reads what is settled and
 asks the rest.
 
+Obeya proposes cards of its own too („Vorschlag von Obeya“): the Arbeitsrückschau's, and the card
+that fills in the settings of a repository that has none (see Leinwände).
+
 A proposed idea ("✦ Vorschlag · Idee") is for something to think through first: „Übernehmen und
 besprechen“ makes it an open idea whose exploration agent opens the discussion with the text and its
 questions; „Als Aufgabe übernehmen“ plans it as a task. „Als Idee besprechen“ on a proposed task

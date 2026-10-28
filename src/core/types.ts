@@ -491,6 +491,12 @@ export interface Proposal {
    * `start_at`): accepted, it is planned and snoozed until then, and starts at the time.
    */
   startAt?: string;
+  /**
+   * Obeya's own proposal of the card that fills in a repository's settings, while it knows them not
+   * yet (design: Repositories and configuration): accepted, it is the owner's card like the one the
+   * Konfiguration dialog makes.
+   */
+  setup?: true;
 }
 
 /**

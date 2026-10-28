@@ -265,6 +265,7 @@ canvases = new Canvases(
     forge,
     permissionMode: values['permission-mode'] as 'auto',
     watch: true,
+    setupProposals: true,
     ownCheckout: own,
     config,
     workerEnv: { OBEYA_URL: narrationUrl, OBEYA_NARRATION_URL: narrationUrl },

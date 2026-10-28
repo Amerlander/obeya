@@ -499,6 +499,56 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     expect(rev()).toBe(2);
   });
 
+  test("where a repository has none, Obeya proposes the card that fills them in, once; the dialog's button takes it on as the owner's card", () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n' });
+    const done = gitRepo(join(dir, 'done'), { 'README.md': 'Done\n', '.obeya/settings.json': '{ "checks": ["bun test"] }\n' });
+    canvas.shutdown();
+    const store = new Store(':memory:');
+    const start = () => new CanvasRuntime({ repos: [{ path: shop }, { path: done }] }, { store, home: dir, runtime, forge: noForge, setupProposals: true });
+    canvas = start();
+    const setup = () => canvas.board.snapshot().items.filter((i) => i.title.endsWith('einrichten'));
+    expect(setup()).toMatchObject([{ state: 'proposal', title: 'Obeya für shop einrichten', repo: 'shop', proposal: { setup: true, reason: expect.stringContaining('shop') } }]);
+    const id = setup()[0]!.id;
+    // a restart proposes no second one
+    canvas.shutdown();
+    canvas = start();
+    expect(setup().map((i) => i.id)).toEqual([id]);
+    // the dialog's button takes it on, planned, as if it had made it
+    const card = canvas.adapterSetupCard('shop');
+    expect(card).toMatchObject({ id, state: 'planned' });
+    expect(card.proposal).toBeUndefined();
+    expect(card.proposed).toBeUndefined();
+    expect(canvas.adapterSetupCard('shop').id).toBe(id);
+  });
+
+  test('dismissed, the proposal does not come back; still open, it goes once the repository has settings', () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n' });
+    const web = gitRepo(join(dir, 'web'), { 'README.md': 'Web\n' });
+    identify(web);
+    canvas.shutdown();
+    const store = new Store(':memory:');
+    const start = () => new CanvasRuntime({ repos: [{ path: shop }, { path: web }] }, { store, home: dir, runtime, forge: noForge, setupProposals: true });
+    canvas = start();
+    const setup = (repo: string) => canvas.board.snapshot().items.find((i) => i.repo === repo && i.proposal?.setup);
+    canvas.act(setup('shop')!.id, { action: 'dismiss' });
+    canvas.shutdown();
+    canvas = start();
+    expect(setup('shop')).toBeUndefined();
+    // settings committed on the main branch take the open one away
+    expect(setup('web')).toBeDefined();
+    mkdirSync(join(web, '.obeya'));
+    writeFileSync(join(web, '.obeya/settings.json'), '{ "checks": ["bun test"] }\n');
+    git(web, 'add', '.obeya/settings.json');
+    git(web, 'commit', '--quiet', '-m', 'Settings');
+    canvas.settingsChanged();
+    expect(setup('web')).toBeUndefined();
+    canvas.shutdown();
+    canvas = start();
+    expect(setup('web')).toBeUndefined();
+  });
+
   test("a demo site set in them is shared on once it is complete, without a restart", () => {
     fresh();
     const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n' });
