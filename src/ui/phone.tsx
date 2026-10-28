@@ -769,7 +769,7 @@ function Done({ entries, several, open, onToggle, onOpen }: { entries: { item: I
           }}
         >
           <span className="arrow" aria-hidden="true" />
-          {t.phone.done}
+          <span className="label">{t.phone.done}</span>
           <span className="n">{entries.length}</span>
         </button>
       </h2>

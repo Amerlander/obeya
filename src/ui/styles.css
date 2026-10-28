@@ -1865,7 +1865,9 @@ button.link:hover { text-decoration: underline; }
 .ph-done.open h2 button { color: var(--ink); }
 .ph-done .arrow { width: 9px; height: 9px; margin: 0 3px; flex: none; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform .15s; }
 .ph-done.open .arrow { transform: rotate(45deg); margin-top: -4px; }
-.ph-done .n { font: 600 13px/1 var(--cond); padding: 4px 8px; border-radius: 3px; background: var(--chip); color: var(--muted); }
+/* the word and the count trimmed to their capitals, so arrow, word and count centre on what the eye sees */
+.ph-done .label { text-box: trim-both cap alphabetic; }
+.ph-done .n { font: 600 13px/1 var(--cond); padding: 6px 8px; border-radius: 3px; background: var(--chip); color: var(--muted); text-box: trim-both cap alphabetic; }
 /* the cards snoozed while they waited stand under it, as far off as the cards from each other */
 .ph-none + .ph-list { margin-top: 14px; }
 /* the button for Obeya's conversation (the canvas's talk pill, a finger's size), left of the microphone in
