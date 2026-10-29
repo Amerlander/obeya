@@ -267,8 +267,11 @@ a line naming the missing file; once placed, it counts when the owner comes back
 
 #### Setting up a repository's site
 
-Where a repository has no site, its settings offer „Demo-Seite einrichten …“: the owner picks the
-host, Obeya creates the site there in the background (the dialog shows its last line, a login in the
+Where a repository has no site, its settings offer „Demo-Seite einrichten …“, and the site's fields
+(title, URL, deploy command, env file and the rest) only behind „Anderer Hoster, von Hand eingetragen
+…“: the personal site has no such fields, as Obeya sets it up itself, and a repository's site needs
+them only for a host Obeya does not set up. The owner picks the host (GitHub first, then Cloudflare,
+as for the personal site), Obeya creates the site there in the background (the dialog shows its last line, a login in the
 browser may take minutes) and fills in `demo.site`, which „Speichern“ then takes over. Such a site is
 listed, like any repository's. Cloudflare Pages: a project `<repository>-demos` (with a suffix where
 the name is taken), through wrangler in the account of a site this machine deploys to already, as the
@@ -359,7 +362,8 @@ protected shows only for the two unlisted hosts.
 Another machine of the owner's joins with a connection code: „Verbindungscode kopieren“ (under
 „Weitere Rechner“, with a line saying where to paste it) on one gives
 `obeya-site:` and the site, its secret directory and the env file's values, base64url-encoded;
-„Mit vorhandener Seite verbinden“ on the other takes it and writes them under its home. Without
+„Mit vorhandener Seite verbinden“ on the other (with a line beside it saying where the code comes
+from) takes it and writes them under its home. Without
 credentials in it (a site deploying with the machine's own login), the other machine deploys with its
 own `wrangler login` or `gh auth login`. Its first share pulls the pages from the live site as any
 machine's does (see Several machines on one site). „Von diesem Rechner entfernen“ asks once more: the

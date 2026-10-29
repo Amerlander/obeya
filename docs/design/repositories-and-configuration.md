@@ -312,7 +312,8 @@ auto-merge, accounts without review, soft paths), app and checks (setup, checks,
 App“ in a large text field, „Stoppen, solange eine Karte wartet“, the keep condition once there is
 one), plans and language (plan docs, „Sprache des Repositorys“), demos („Sprache der Demos“,
 „Demo-Site“ with title, URL, deploy command, env file, headers, largest file, tags and when a demo
-goes on it, and „Demo-Seite einrichten …“ while it has no URL), then „Für alle ins Repository übernehmen“. A folder without git has no workspace or
+goes on it, all behind „Anderer Hoster, von Hand eingetragen …“ beside „Demo-Seite einrichten …“ while it has
+no site), then „Für alle ins Repository übernehmen“. A folder without git has no workspace or
 branch group.
 
 Klonen shows the existing clones („Vorhandene Klone, einer pro Zeile“), then the ones Obeya makes on top of them („Dazu neue Klone

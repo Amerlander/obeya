@@ -2084,3 +2084,6 @@ button.link:hover { text-decoration: underline; }
 .site-account label:first-child { flex-direction: row; align-items: center; gap: 8px; }
 .site-account select { font: inherit; font-size: 13px; }
 .cfg-narrow > button.link { display: block; margin-top: 10px; font-size: 13px; }
+.personal-connect { margin-top: 12px; }
+.personal-connect button.link { font-size: 13px; }
+.cfg-sub > .site-manual { justify-self: start; font-size: 13px; }

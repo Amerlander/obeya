@@ -1357,9 +1357,12 @@ function PersonalSiteBlock({ on }: { on: boolean }) {
           )}
           {host !== 'github-public' && <p className="hint">{p.unlistedNote}</p>}
           {!connecting ? (
-            <button className="link" onClick={() => setConnecting(true)}>
-              {p.connect}
-            </button>
+            <p className="hint personal-connect">
+              <button className="link" onClick={() => setConnecting(true)}>
+                {p.connect}
+              </button>{' '}
+              · {p.connectIntro}
+            </p>
           ) : (
             <Field label={p.connect} hint={p.connectHint}>
               <textarea className="c-path" rows={3} spellCheck={false} placeholder="obeya-site:…" aria-label={p.connect} value={code} onChange={(e) => setCode(e.target.value)} />
@@ -1962,6 +1965,9 @@ function RepoSettingsBlock({
   const demoLanguage = value<NarrationLanguage | null>('demoLanguage');
   const site = value<DemoSite | null>('site') ?? { title: '', url: '', deploy: '' };
   const setSite = (patch: Partial<DemoSite>) => set('site', { ...site, ...patch });
+  // a repository without a site: Obeya sets one up; the fields are for another host, entered by hand
+  const [manualSite, setManualSite] = useState(false);
+  const siteFields = manualSite || folder || !!(site.url.trim() || site.title.trim() || site.deploy.trim());
   // a part of a setting with several fields: its label above it; a wide one takes the whole row
   const sub = (label: string, control: ReactNode, wide = false) => (
     <label className={wide ? 'wide' : undefined}>
@@ -2062,6 +2068,12 @@ function RepoSettingsBlock({
           c.site,
           <div className="cfg-sub">
             {!folder && <SiteSetupRow path={repo.path} name={repo.path.trim().split(/[\\/]/).filter(Boolean).pop() ?? ''} empty={!site.url.trim()} onSite={(made) => set('site', made)} />}
+            {!siteFields ? (
+              <button type="button" className="link wide site-manual" onClick={() => setManualSite(true)}>
+                {c.siteManual}
+              </button>
+            ) : (
+              <>
             {sub(c.siteTitle, <input className="c-path" aria-label={c.siteTitle} spellCheck={false} value={site.title} onChange={(e) => setSite({ title: e.target.value })} />)}
             {sub(c.siteUrl, <input className="c-path" aria-label={c.siteUrl} placeholder="https://demos.example.com" spellCheck={false} value={site.url} onChange={(e) => setSite({ url: e.target.value })} />)}
             {sub(c.siteDeploy, <input className="c-path" aria-label={c.siteDeploy} placeholder="bunx wrangler@4 pages deploy {dir} --project-name demos" spellCheck={false} value={site.deploy} onChange={(e) => setSite({ deploy: e.target.value })} />, true)}
@@ -2107,6 +2119,8 @@ function RepoSettingsBlock({
                 })}
               </div>
             </div>
+              </>
+            )}
           </div>,
           c.siteHint,
         )}
@@ -2125,7 +2139,8 @@ function RepoSettingsBlock({
  */
 function SiteSetupRow({ path, name, empty, onSite }: { path: string; name: string; empty: boolean; onSite: (site: DemoSite) => void }) {
   const [open, setOpen] = useState(false);
-  const [host, setHost] = useState<'cloudflare' | 'github'>('cloudflare');
+  // in the order of the personal site's hosts: GitHub first
+  const [host, setHost] = useState<'cloudflare' | 'github'>('github');
   const [accounts, setAccounts] = useState<string[]>([]);
   const [way, setWay] = useState<CloudflareWay | null>(null);
   const [job, setJob] = useState<SiteSetupJob | null>(null);
@@ -2166,7 +2181,7 @@ function SiteSetupRow({ path, name, empty, onSite }: { path: string; name: strin
         <>
           <p className="hint">{c.siteSetupHint}</p>
           <div className="seg" role="radiogroup" aria-label={c.siteSetup}>
-            {(['cloudflare', 'github'] as const).map((h) => (
+            {(['github', 'cloudflare'] as const).map((h) => (
               <button key={h} type="button" role="radio" aria-checked={host === h} className={host === h ? 'on' : undefined} disabled={running} onClick={() => setHost(h)}>
                 {c.siteSetupHosts[h]}
               </button>
