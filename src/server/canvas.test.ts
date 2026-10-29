@@ -1295,3 +1295,63 @@ describe('plan docs that are not projects, and projects whose work is done', () 
     expect(canvas.board.archived()).toEqual([]);
   });
 });
+
+test("pausing a canvas's agents pauses each at work, holds the cards let start meanwhile, and resuming lets all go on", async () => {
+  const c = new CanvasRuntime({ name: 'Pause', repos: [{ path: repo('solo', 'Solo'), clones: 2 }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge });
+  try {
+    const a = c.board.create({ title: 'A', x: 0, y: 0 });
+    await c.repos[0]!.workers.start(a.id);
+    const worker = runtime.sessions.at(-1)!;
+    worker.emit({ type: 'session', id: 's-a' });
+    worker.emit({ type: 'text', text: 'Arbeite.' });
+    expect(c.board.canvas.agents).toEqual({ running: 1, paused: 0 });
+    c.pauseAgents();
+    // as the card's own pause: its session ends at once
+    expect(worker.closed).toBe(true);
+    expect(c.board.item(a.id)!.paused).toBe(true);
+    expect(c.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
+    // a card started meanwhile: the Koordinator judges it as ever, and it waits in the queue
+    const workers = () => runtime.sessions.filter((s) => s.spec.role === 'worker').length;
+    const before = workers();
+    const b = c.board.create({ title: 'B', x: 0, y: 0 });
+    c.act(b.id, { action: 'start' });
+    await until(() => runtime.sessions.some((s) => s.spec.tools.some((t) => t.name === 'scope')));
+    const estimate = runtime.sessions.find((s) => s.spec.tools.some((t) => t.name === 'scope'))!;
+    estimate.call('scope', { files: ['b.ts'], conflicts_with: [], reason: '' });
+    estimate.emit({ type: 'idle' });
+    await until(() => !!c.board.item(b.id)!.queue && 'paused' in c.board.item(b.id)!.queue!);
+    expect(workers()).toBe(before);
+    c.resumeAgents();
+    expect(c.board.canvas.paused).toBeUndefined();
+    const resumed = runtime.sessions.find((s) => s.spec.resume === 's-a')!;
+    expect(resumed.inbox[0]).toContain('The owner paused you');
+    await until(() => c.board.item(b.id)!.state === 'working');
+  } finally {
+    c.shutdown();
+  }
+}, 30_000);
+
+test("a canvas's pause ends once none of its agents is paused any more, and lasts over a restart until then", async () => {
+  const store = new Store(':memory:');
+  const config = { name: 'Pause', repos: [{ path: repo('solo', 'Solo'), clones: 2 }] };
+  let c = new CanvasRuntime(config, { store, home: dir, runtime, forge: noForge });
+  const a = c.board.create({ title: 'A', x: 0, y: 0 });
+  try {
+    await c.repos[0]!.workers.start(a.id);
+    const worker = runtime.sessions.at(-1)!;
+    worker.emit({ type: 'session', id: 's-a' });
+    worker.emit({ type: 'text', text: 'Arbeite.' });
+    c.pauseAgents();
+  } finally {
+    c.shutdown();
+  }
+  c = new CanvasRuntime(config, { store, home: dir, runtime, forge: noForge });
+  try {
+    expect(c.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
+    // the owner resumes the card on its own: nothing on the canvas is paused any more
+    c.act(a.id, { action: 'resume' });
+    expect(c.board.canvas.paused).toBeUndefined();
+  } finally {
+    c.shutdown();
+  }
+}, 30_000);

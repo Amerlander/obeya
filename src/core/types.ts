@@ -746,11 +746,12 @@ export const EVICT_HOLD_MS = 8000;
  * leased or none set up; `dirty`: every free one has uncommitted changes); it starts once one is.
  * `behind`: the cards it waits for; `buildsOn`: those of them it builds on (workstreams of its
  * project), which hold it until they have landed, also while not started or stopped.
+ * `paused`: the Koordinator let it start, but the owner paused its canvas's agents; it starts once they resume them.
  */
 export type Queue = Wait & { since: string };
 
 /** What a card in the queue waits for (`Queue`). */
-export type Wait = { checking: true; together?: string } | { behind: string[]; reason: string; buildsOn?: string[] } | { workspace: WorkspaceShortage };
+export type Wait = { checking: true; together?: string } | { behind: string[]; reason: string; buildsOn?: string[] } | { workspace: WorkspaceShortage } | { paused: true };
 
 /** Why a card waits to start: no clone free (`none`), the free ones dirty, or every machine with a clean free one busy to its slots (`slots`). */
 export type WorkspaceShortage = 'none' | 'dirty' | 'slots';
@@ -932,6 +933,10 @@ export interface CanvasInfo {
   repos: RepoRef[];
   /** How many times which of its repositories do not run as the configuration has them changed: the page reads the configuration's problems again when it changes. */
   configRev?: number;
+  /** The owner paused the canvas's agents: cards the Koordinator lets start wait in the queue until they resume them. */
+  paused?: true;
+  /** Its agents at work now (`pausable`) and those the owner paused, for the canvas switcher; absent while none is either. */
+  agents?: { running: number; paused: number };
 }
 
 export interface RepoRef {

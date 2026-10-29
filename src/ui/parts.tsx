@@ -1,9 +1,9 @@
 // Presentational pieces of the canvas. State and camera live in App.tsx.
 
-import { memo, type ReactNode, useEffect, useRef, useState } from 'react';
+import { memo, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { type Bounds, dependencyOrder, shapeOf } from '../core/layout';
 import { clip } from '../core/text';
-import { answering, type AppUpdate, type CanvasInfo, type BlockedClone, type ClonePool, finished, finishedArchivable, finishingUp, handedOver, type Item, needsYou, openQuestions, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
+import { answering, type AppUpdate, type CanvasInfo, type BlockedClone, type ClonePool, finished, finishedArchivable, finishingUp, handedOver, type Item, needsYou, openQuestions, pausable, type PendingRestart, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
 import { ProjectTalk } from './koordinator';
 import { api } from './api';
 import type { Cam } from './camera';
@@ -65,6 +65,44 @@ interface CardProps {
 /** A card's title as it shows: its own, else the start of its text. */
 export const shownTitle = (i: Item) => (i.title ? <Inline md={i.title} /> : titleFrom(i.body) || t.titlePlaceholder);
 
+/** The marks on the buttons that pause an agent and let it go on. */
+export const PauseMark = () => (
+  <svg className="btn-mark" viewBox="0 0 12 12" width="11" height="11" aria-hidden>
+    <rect x="2" y="1.5" width="2.6" height="9" rx=".6" fill="currentColor" />
+    <rect x="7.4" y="1.5" width="2.6" height="9" rx=".6" fill="currentColor" />
+  </svg>
+);
+export const PlayMark = () => (
+  <svg className="btn-mark" viewBox="0 0 12 12" width="11" height="11" aria-hidden>
+    <path d="M3 1.5v9l7.5-4.5z" fill="currentColor" />
+  </svg>
+);
+
+/**
+ * On a card on the canvas, the pause of its agent at work, or the resume of its paused one, as the
+ * bubble in its conversation has them: in its state line in place of the moving line, while the
+ * pointer is on the card.
+ */
+function CardTurn({ item }: { item: Item }) {
+  const paused = !!item.paused;
+  if (!paused && !pausable(item)) return null;
+  return (
+    <button
+      className={paused ? 'card-turn resume' : 'card-turn'}
+      title={paused ? t.pause.resumeHint : t.pause.hint}
+      aria-label={paused ? t.pause.resume : t.pause.button}
+      // the canvas would take the press as the start of a drag or a click that opens the card
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        void api.act(item.id, { action: paused ? 'resume' : 'pause' }).catch(() => {});
+      }}
+    >
+      {paused ? <PlayMark /> : <PauseMark />}
+    </button>
+  );
+}
+
 /** The play mark on the buttons that start a card or a project's workstreams. */
 const PlayIcon = ({ size }: { size: number }) => (
   <svg width={size} height={size} viewBox="0 0 12 12">
@@ -115,7 +153,7 @@ export const cardClass = (item: Item, underway?: string) =>
  * state's colour (`since` after it) and the pin while it needs the owner. A `chip`, a delivered
  * workstream, shows only its title, after its label, so it still reads as its workstream.
  */
-export function CardFace({ item, where, underway, since, chip }: { item: Item; where?: string; underway?: string; since?: string; chip?: boolean }) {
+export function CardFace({ item, where, underway, since, chip, turn }: { item: Item; where?: string; underway?: string; since?: string; chip?: boolean; turn?: ReactNode }) {
   const kind =
     item.label ??
     (item.contribution ? t.review.kind(item.contribution.number, item.contribution.author) : item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
@@ -145,6 +183,7 @@ export function CardFace({ item, where, underway, since, chip }: { item: Item; w
     (asked === undefined ? undefined : excerpt(asked)) ??
     (item.queue && 'behind' in item.queue ? excerpt(item.queue.reason) : undefined) ??
     (item.queue && 'workspace' in item.queue ? t.queue.workspaceWhy[item.queue.workspace] : undefined) ??
+    (item.queue && 'paused' in item.queue ? t.queue.pausedWhy : undefined) ??
     status ??
     (item.idea ? firstLine(item.idea.brief) || firstLine(item.body) : firstLine(item.body));
   return (
@@ -172,6 +211,7 @@ export function CardFace({ item, where, underway, since, chip }: { item: Item; w
           {item.idea?.next && needsYou(item) && ` · ${t.idea.suggests[item.idea.next.step]}`}
           {since && <span className="since"> · {since}</span>}
         </span>
+        {turn}
       </div>
       {needsYou(item) && !underway && <div className="badge pulse">{item.state === 'proposal' ? '✦' : '!'}</div>}
     </>
@@ -203,7 +243,7 @@ export const CardView = memo(
         onPointerLeave={() => onHover(null)}
       >
         {(dep === 'before' || dep === 'after') && <div className="dep-tag">{t.deps[dep]}</div>}
-        <CardFace item={item} where={showRepo ? item.repo : undefined} underway={underway} chip={shape === 'chip'} />
+        <CardFace item={item} where={showRepo ? item.repo : undefined} underway={underway} chip={shape === 'chip'} turn={!underway && <CardTurn item={item} />} />
         {startable && (
           <button
             className="play"
@@ -283,12 +323,42 @@ export function CanvasPill({ canvas, canvases, waiting }: { canvas: CanvasInfo; 
                   <span className="hint">{c.repos.map((r) => r.name).join(', ')}</span>
                   {n > 0 && <span className="waits">{n}</span>}
                 </a>
+                <CanvasAgents canvas={c} />
               </li>
             );
           })}
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * A canvas's agents on its row in the switcher (design: Pausing a canvas's agents): while one works
+ * there, the moving line of a card at work, which turns into a pause for all of them while the
+ * pointer is on the row; with none at work but some paused, a play that resumes them, on the same
+ * hover. Where nothing hovers (touch), the button shows throughout; `labelled` (the phone) says
+ * what it does beside its mark.
+ */
+export function CanvasAgents({ canvas, labelled }: { canvas: CanvasInfo; labelled?: boolean }) {
+  const [asked, setAsked] = useState(false);
+  const a = canvas.agents;
+  if (!a) return null;
+  const pause = a.running > 0;
+  const label = pause ? t.canvasPause.pause(a.running) : t.canvasPause.resume(a.paused);
+  const click = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setAsked(true);
+    (pause ? api.pauseAgents(canvas.id) : api.resumeAgents(canvas.id)).catch(console.error).finally(() => setAsked(false));
+  };
+  return (
+    <span className={pause ? 'canvas-agents running' : 'canvas-agents'}>
+      <button type="button" className="agents-turn" aria-label={`${label}: ${canvas.name}`} disabled={asked} onClick={click}>
+        {pause ? <PauseMark /> : <PlayMark />}
+        {labelled ? <span>{label}</span> : <span className="tip">{label}</span>}
+      </button>
+    </span>
   );
 }
 

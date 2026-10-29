@@ -13,7 +13,7 @@ import { know, known } from './known';
 import { Branch } from './diff';
 import { ResultFiles } from './files';
 import { DiscardChanges, FolderBox, FolderLine, useFolderDiff } from './folder';
-import { landedRef, shownTitle } from './parts';
+import { landedRef, PauseMark, PlayMark, shownTitle } from './parts';
 import { inQueue } from '../core/queue';
 import { QueueList, scrollerOf, useMenuClose, useQueueMove, useQueueSort, waitedOn } from './queue';
 import { dimensions, shownTags } from '../core/page-tags';
@@ -358,6 +358,16 @@ export function Detail(p: Props) {
     <div className="question queue">
       {'checking' in item.queue ? (
         <div className="q-text">{t.queue.checkingLong}</div>
+      ) : 'paused' in item.queue ? (
+        <>
+          <div className="q-text">{t.queue.pausedLong}</div>
+          <QueuePlace item={item} items={all} />
+          <div className="actions">
+            <button className="btn" onClick={() => act({ action: 'dequeue' }, { close: false })}>
+              {t.queue.dequeue}
+            </button>
+          </div>
+        </>
       ) : 'workspace' in item.queue ? (
         <>
           <div className="q-text">
@@ -681,19 +691,6 @@ const Limited = ({ item }: { item: Item }) => (item.limitedUntil ? <span classNa
 
 /** When the card went into the archive, after its state. */
 const archivedOn = (i: Item) => i.archivedAt && <span className="p-status"> · {t.archive.when(new Date(i.archivedAt))}</span>;
-
-/** The marks on the buttons that pause an agent and let it go on. */
-const PauseMark = () => (
-  <svg className="btn-mark" viewBox="0 0 12 12" width="11" height="11" aria-hidden>
-    <rect x="2" y="1.5" width="2.6" height="9" rx=".6" fill="currentColor" />
-    <rect x="7.4" y="1.5" width="2.6" height="9" rx=".6" fill="currentColor" />
-  </svg>
-);
-const PlayMark = () => (
-  <svg className="btn-mark" viewBox="0 0 12 12" width="11" height="11" aria-hidden>
-    <path d="M3 1.5v9l7.5-4.5z" fill="currentColor" />
-  </svg>
-);
 
 /** „Später …“ in a card's action row, on any card the owner can snooze that is not snoozed yet (a snoozed one changes its time on its line in the conversation). */
 function Later({ item, act }: { item: Item; act: (a: CardAction, done: ActDone) => Promise<void> }) {

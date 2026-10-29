@@ -178,6 +178,20 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 /* its agent paused by the owner: the line stands still, in pencil grey */
 .card.paused .state, .p-state.paused { --c: var(--muted); }
 .card.paused .state::after { display: none; }
+/* the pause of its agent at work, or the resume of its paused one: in the state line in place of the
+   moving line, while the pointer is on the card (where nothing hovers, throughout) */
+.card .state .card-turn { flex: none; display: inline-grid; place-items: center; width: 24px; height: 18px; margin: -3px 0; padding: 0;
+  border: 1px solid var(--line); border-radius: 3px; background: var(--card); color: var(--c); cursor: pointer; }
+.card .state .card-turn .btn-mark { margin: 0; }
+.card .state .card-turn:hover, .card .state .card-turn:focus-visible { color: var(--ink); border-color: var(--muted); }
+@media (hover: hover) {
+  .card:not(:hover) .state .card-turn:not(:focus-visible) { display: none; }
+  .card:is(:hover, :focus-within) .state:has(.card-turn)::after { display: none; }
+}
+@media (hover: none) {
+  .card .state:has(.card-turn)::after { display: none; }
+}
+.card:is(.dragging, .lifted) .state .card-turn { display: none; }
 .card .landed-part { color: var(--approved); border: 1px solid color-mix(in srgb, var(--approved) 45%, transparent); border-radius: 2px; padding: 0 5px; font-weight: 500; }
 .card.s-live .ttl, .card.s-done .ttl { font-weight: 500; }
 /* a proposal is a card only pencilled in: no stock yet, a dashed outline */
@@ -278,6 +292,37 @@ button.pill:hover { box-shadow: var(--lift); }
 @keyframes pulse-in { 0% { box-shadow: 0 0 0 0 rgba(var(--waiting-rgb),.55); } 70%, 100% { box-shadow: 0 0 0 10px rgba(var(--waiting-rgb),0); } }
 .canvas-menu a { position: relative; padding-right: 40px; }
 .canvas-menu a .waits { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); }
+/* a canvas's agents on its row: the moving line while one works there, which turns into a pause for
+   all of them while the pointer is on the row; with only paused ones, a play on the same hover */
+.canvas-menu li { position: relative; }
+.canvas-menu li:has(.canvas-agents) a { padding-right: 46px; }
+.canvas-menu li:has(.waits):has(.canvas-agents) a { padding-right: 74px; }
+.canvas-agents { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); width: 26px; height: 20px;
+  display: flex; align-items: center; justify-content: center; --c: var(--working); }
+.canvas-menu li:has(.waits) .canvas-agents { right: 38px; }
+.canvas-agents.running::before { content: ""; width: 26px; height: 2px;
+  background: linear-gradient(90deg, var(--c) 0 50%, transparent 50%) 0 0 / 200% 100% no-repeat, color-mix(in srgb, var(--c) 22%, transparent);
+  animation: draw 1.6s cubic-bezier(.5,0,.3,1) infinite; }
+.agents-turn { display: none; place-items: center; width: 26px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: 3px;
+  background: var(--panel); color: var(--c); cursor: pointer; }
+.agents-turn .btn-mark { margin: 0; }
+.agents-turn:hover, .agents-turn:focus-visible { color: var(--ink); border-color: var(--muted); }
+/* what it does, at once while the pointer is on it, beside the menu */
+.agents-turn { position: relative; }
+.agents-turn .tip { display: none; position: absolute; left: calc(100% + 16px); top: 50%; transform: translateY(-50%); padding: 6px 10px; border-radius: 3px;
+  background: var(--panel); color: var(--ink); box-shadow: var(--lift); white-space: nowrap; font-size: 13px; font-weight: 400; pointer-events: none; z-index: 31; }
+.agents-turn:is(:hover, :focus-visible) .tip { display: block; }
+.canvas-menu li:is(:hover, :focus-within) .agents-turn { display: grid; }
+.canvas-menu li:is(:hover, :focus-within) .canvas-agents::before { display: none; }
+@media (hover: none) {
+  .agents-turn { display: grid; }
+  .canvas-agents::before { display: none; }
+}
+.ph-canvases { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ph-canvases li { display: flex; align-items: center; gap: 10px; }
+.ph-canvases .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ph-canvases .canvas-agents { position: static; transform: none; width: auto; height: auto; }
+.ph-canvases .agents-turn { display: flex; align-items: center; gap: 6px; width: auto; height: auto; min-height: 40px; padding: 0 12px; font: inherit; font-size: 14px; }
 .pill:is(.workspaces, .usage) { position: relative; padding: 0; }
 #bar .pill:is(.workspaces, .usage) { padding: 0; }
 .pill:is(.workspaces, .usage) .face { display: flex; align-items: center; gap: 8px; height: 100%; padding: 7px 14px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; border-radius: inherit; }
