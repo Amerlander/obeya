@@ -256,12 +256,17 @@ interface RunningTask extends BackgroundTask {
  * serves it (the dev server it started, then checked); work from an earlier turn (a test run it
  * waits for) does not. The SDK links no task to the app, so this is what tells the two apart.
  */
-function appRunning(live: Live, runs: boolean) {
+function appRunning(live: Live, url: string) {
+  // an address app_running refuses changes nothing
+  if (url && !APP_URL.test(url)) return;
   for (const t of live.tasks.values()) {
-    if (!runs) delete t.app;
+    if (!url) delete t.app;
     else if (!t.earlier) t.app = true;
   }
 }
+
+/** An app's address as app_running takes it. */
+const APP_URL = /^https?:\/\/[^\s/]+/i;
 
 /** Whether all the worker's background work that runs serves its app. */
 function onlyApp(live: Live): boolean {
@@ -2705,7 +2710,7 @@ export class Workers {
         if (live.held !== undefined) this.o.board.log(cardId, 'say', 'worker', live.held);
         live.held = undefined;
         if (!e.name.startsWith('mcp__obeya__')) this.o.board.log(cardId, 'activity', 'worker', describeTool(e.name, e.input, this.o.board.t));
-        else if (e.name === 'mcp__obeya__app_running') appRunning(live, String(e.input.url ?? '').trim() !== '');
+        else if (e.name === 'mcp__obeya__app_running') appRunning(live, String(e.input.url ?? '').trim());
         break;
       case 'denied': {
         const t = this.o.board.t;
@@ -3673,7 +3678,7 @@ export class Workers {
             this.o.board.work(cardId, { app: null });
             return 'Recorded: the card no longer offers the app.';
           }
-          if (!/^https?:\/\/[^\s/]+/i.test(u)) return 'Not recorded: give the address as http(s)://host:port/….';
+          if (!APP_URL.test(u)) return 'Not recorded: give the address as http(s)://host:port/….';
           this.o.board.work(cardId, { app: u });
           return 'Recorded: the card offers the app to the owner while it answers there.';
         },
