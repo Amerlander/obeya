@@ -649,6 +649,21 @@ describe('handing over with a demo', () => {
     expect(board.item(c.id)!.demo).toMatchObject({ kind: 'html', page, single: true });
   });
 
+  test('a session whose tools took no page when it started is not asked for one once the repository shares', async () => {
+    let shares = false;
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, shares: () => shares }));
+    const c = manual();
+    await workers.start(c.id);
+    // the forge says only now that the repository is public: it shares on the owner's personal site
+    shares = true;
+    const tool = runtime.last.spec.tools!.find((t) => t.name === 'ready_for_review')!;
+    const page = { title: 'Zählerstände als CSV', text: 'Vermieter laden die Zählerstände jetzt als CSV herunter.' };
+    // the agent's runtime checks the call against the tool's schema, which drops the page it does not know
+    const args = z.object(tool.schema as z.ZodRawShape).parse({ summary: 'S', demo: { ...demo(demoDir()), page } });
+    expect(await tool.run(args)).toContain('End your turn');
+    expect(state(c.id)).toBe('waiting:demo');
+  });
+
   test("where the site names tags, the page comes with them, each dimension's from its values alone", async () => {
     rmSync(dir, { recursive: true, force: true });
     const tags = { Area: ['Billing', 'Reports'], Audience: ['Admins', 'Customers'] };

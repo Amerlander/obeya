@@ -3272,8 +3272,11 @@ export class Workers {
     const language = "the owner's language";
     // the page goes to colleagues: in the language of the repository's demos where it names one
     const pageLanguage = LANGUAGE_NAMES[this.demoLanguage()];
+    // whether the repository shares, as the session's tools have it from their start on: the schema drops a page they do not
+    // take, so the handover asks for one only where they take it (where sharing began since, the page is written once shared)
+    const shares = this.shares;
     // the vocabulary the page's tags come from, where the repository's site names one
-    const vocabulary = this.shares ? dimensions(this.o.adapter.demo?.site?.tags) : [];
+    const vocabulary = shares ? dimensions(this.o.adapter.demo?.site?.tags) : [];
     // on a canvas with several repositories a proposal may go to another one than the card's
     const repos = this.o.board.canvas.repos;
     const ownRepo = this.o.repo ?? this.o.board.home;
@@ -3514,7 +3517,7 @@ export class Workers {
                 .describe(
                   `only when something needs the owner beyond approve or feedback; the owner can answer it on the card before approving. As with ask: up to four short answer options when they exist, which the owner picks with a click (several when multiple is true) or answers in their own words; pick and pick_why: the options you would choose and why, in one short sentence in ${language}`,
                 ),
-              ...(this.shares
+              ...(shares
                 ? {
                     page: z
                       .object({
@@ -3603,7 +3606,7 @@ export class Workers {
               const tags = vocabulary.length && d.page?.tags && typeof d.page.tags === 'object' ? (d.page.tags as PageTags) : undefined;
               const page =
                 d.page && d.page.title.trim() && d.page.text.trim() ? { title: clip(d.page.title.trim(), 200), text: clip(d.page.text.trim(), 2000), ...(tags ? { tags: tagsOf(tags, Object.fromEntries(vocabulary)) } : {}) } : undefined;
-              if (this.shares && !page)
+              if (shares && !page)
                 return 'Not handed over: a demo here needs its page (title and text) for colleagues, in case the owner shares it. Call ready_for_review again with demo.page.';
               if (vocabulary.length) {
                 const wrong = tags ? outside(tags, Object.fromEntries(vocabulary)) : [];

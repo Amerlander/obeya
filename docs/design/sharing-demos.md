@@ -23,7 +23,10 @@ failure is logged as an error and leaves the card as it was.
 The page has a title and two to five sentences for colleagues who have never seen Obeya, which
 `ready_for_review` takes with every demo where the repository has a site (`demo.page`); for a demo
 without them, a short read-only session writes them from the worker's last summary when the owner
-shares, kept with the demo from then on.
+shares, kept with the demo from then on. Whether `ready_for_review` takes and requires the page is
+fixed when the worker's session starts: where sharing begins only later (the forge answers after a
+restart that the repository is public, a site is set up), the session hands over without one, since
+its tools' schema drops a page it does not know.
 
 #### Tags
 
@@ -484,6 +487,10 @@ another machine withdrew loses its link here, with a line naming the machine.
   (the host decides it).
 - **A private repository shares on the personal site only once ticked** (owner, 2026-10-28), so
   nothing of a private project goes out unasked; one whose forge cannot tell counts as private.
+- **A handover asks for the page only where the session's tools take one** (2026-10-29): a session
+  resumed after a restart got its tools before the forge said the repository was public, so the
+  page the worker sent was dropped and every handover refused for lacking it. Rejected: the page in
+  every repository's tools (workers without a site would write pages nobody reads).
 - **Three hosts for the personal site: a public GitHub repository first, a private one, Cloudflare**
   (owner, 2026-10-29): it works without GitHub Pro, and public demo repositories make Obeya known.
   A public repository's site is listed, without random parts (they would hide nothing). Rejected
