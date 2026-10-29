@@ -228,6 +228,13 @@ export const makeForgejoForge = (api: Api, origin: (cwd: string) => Promise<stri
         return undefined;
       }
     },
+    async visibility(cwd) {
+      const remote = await origin(cwd);
+      const at = remote ? remoteRepo(remote) : null;
+      if (!at) return null;
+      const r = (await api(cwd, at.base, 'GET', at.repo)) as { private?: boolean; internal?: boolean } | undefined;
+      return r && typeof r.private === 'boolean' ? (r.private || r.internal ? 'private' : 'public') : null;
+    },
     async urlOf(cwd, n) {
       const remote = await origin(cwd);
       const at = remote ? remoteRepo(remote) : null;

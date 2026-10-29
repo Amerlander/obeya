@@ -38,6 +38,7 @@ import { commandsOf, heldGroups, withoutHeld } from './trust';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
+import { allowedHere, personalDemoSite, readPersonal } from './personal-site';
 import { dimensions } from '../core/page-tags';
 import { type DueRestart, Workers } from './workers';
 import { branchSetting, type CardWorkspaces, defaultBranch, type FileAt, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, markFolder, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
@@ -131,8 +132,10 @@ export interface RepoRuntime {
   ref: RepoRef;
   info: RepoInfo;
   adapter: RepoAdapter;
-  /** The demo site of its settings, where its demos are shared; null where they are exported. */
+  /** The demo site of its settings, where its demos are shared; null where they go to the owner's personal site, or are exported. */
   site: DemoSite | null;
+  /** Its forge says it is public: its demos may go to the owner's personal site without the owner's tick. */
+  isPublic?: boolean;
   /** Its Lesestand: the default branch, where plan docs are read and the agents that only read work. */
   read: ReadTree;
   workspaces: CardWorkspaces;
@@ -384,7 +387,7 @@ export class CanvasRuntime {
       // the site of a repository not running is not known meanwhile
       sourceFor: (card) => {
         const r = this.runs(card) ? this.repoOf(card) : undefined;
-        return r?.site ? { site: r.site, repo: r.info.path } : null;
+        return r ? { site: r.site, repo: r.info.path, ...(r.isPublic ? { isPublic: true } : {}) } : null;
       },
       languageFor: (card) => (this.runs(card) ? this.repoOf(card).adapter.demo?.language : undefined),
       onPage: (cardId, r) => {
@@ -605,7 +608,7 @@ export class CanvasRuntime {
     for (const p of this.shared.get(info.path)?.problems ?? []) console.warn(`Obeya: ${info.path}: ${p} (ignored)`);
     const site = siteOf(adapter);
     // whether the repository shares here, which the UI shows
-    Object.assign(ref, shareRef(site, deps.home));
+    Object.assign(ref, shareRef(site, deps.home, info.path, false));
     const stops: (() => void)[] = [];
     // filled in below; what is set up here reaches it once it is
     const repo = { config: rc, stops, from: { resolved, index } } as Repo;
@@ -695,7 +698,7 @@ export class CanvasRuntime {
       workspaces,
       adapter,
       machineSettings: this.settingsOf(rc),
-      shares: () => !!repo.site,
+      shares: () => !!repo.ref.share,
       repo: ref.id,
       preferences: this.preferences,
       onOwnerInput: (card, kind, text, context) => this.koordinator.learn(card, kind, text, context),
@@ -730,7 +733,24 @@ export class CanvasRuntime {
       demoDirectory: () => demoDirectory(readDemoSettings(deps.home)),
       ...(deps.parkGrace !== undefined ? { parkGrace: deps.parkGrace } : {}),
     });
-    return Object.assign(repo, { ref, info, adapter, site, read, workspaces, workers, projectAgents });
+    Object.assign(repo, { ref, info, adapter, site, read, workspaces, workers, projectAgents });
+    void this.lookVisibility(repo);
+    return repo;
+  }
+
+  /**
+   * Asks the repository's forge whether it is public: a public one shares on the owner's personal
+   * site without a tick. Until the answer, and where the forge cannot tell, it counts as private.
+   */
+  private async lookVisibility(r: Repo) {
+    if (r.info.folder || !this.deps.forge.visibility) return;
+    let v: 'public' | 'private' | null = null;
+    try {
+      v = await this.deps.forge.visibility(r.info.path);
+    } catch {}
+    if ((v === 'public') === !!r.isPublic) return;
+    r.isPublic = v === 'public';
+    this.siteCredentials();
   }
 
   /** Puts a repository set up by `startRepo` on the canvas, last. */
@@ -1076,7 +1096,7 @@ export class CanvasRuntime {
     const site = siteOf(r.adapter);
     if (JSON.stringify(site) !== JSON.stringify(r.site)) {
       r.site = site;
-      setShare(r.ref, shareRef(site, this.deps.home));
+      setShare(r.ref, shareRef(site, this.deps.home, r.info.path, !!r.isPublic));
       return 'follow';
     }
     return shared || problems || held ? 'follow' : 'same';
@@ -2304,12 +2324,17 @@ export class CanvasRuntime {
     this.siteCredentials();
   }
 
-  /** A site's env file placed or removed on this machine since: its repository's cards share again, or export. */
+  /** The owner's personal demo site was set up, connected, removed, or a private repository ticked for it: the cards share there, or export. */
+  personalSiteChanged() {
+    this.siteCredentials();
+  }
+
+  /** A site's env file placed or removed on this machine since, or the personal site changed: its repository's cards share again, or export. */
   private siteCredentials() {
     let changed = false;
     for (const r of this.repos) {
-      const next = shareRef(r.site, this.deps.home);
-      if (r.ref.share !== next.share || r.ref.shareNeeds?.file !== next.shareNeeds?.file) {
+      const next = shareRef(r.site, this.deps.home, r.info.path, !!r.isPublic);
+      if (JSON.stringify(SHARE_FIELDS.map((f) => r.ref[f])) !== JSON.stringify(SHARE_FIELDS.map((f) => next[f]))) {
         setShare(r.ref, next);
         changed = true;
       }
@@ -2631,20 +2656,33 @@ function siteOf(adapter: RepoAdapter): DemoSite | null {
   return site && !siteIncomplete(site) ? site : null;
 }
 
-/** What the canvas tells the UI about it: a site to share on here, or the env file the site lacks on this machine. */
-function shareRef(site: DemoSite | null, home: string): Pick<RepoRef, 'share' | 'shareNeeds' | 'shareOnApproval' | 'shareTags'> {
-  if (!site) return {};
-  const missing = siteMissing(home, site);
-  const tags = dimensions(site.tags).length ? { shareTags: Object.fromEntries(dimensions(site.tags)) } : {};
-  return missing ? { shareNeeds: { site: siteName(site), file: missing } } : { share: true, ...(site.publish === 'approved' ? { shareOnApproval: true as const } : {}), ...tags };
+/** What the UI is told about sharing a repository's demos. */
+const SHARE_FIELDS = ['share', 'shareNeeds', 'shareOnApproval', 'shareTags', 'shareUnlisted', 'sharePersonal'] as const;
+type ShareRef = Pick<RepoRef, (typeof SHARE_FIELDS)[number]>;
+
+/**
+ * What the canvas tells the UI about it: a site to share on here (its own, where this machine has
+ * its credentials, else the owner's personal one, where the repository may go there), the env file
+ * its site lacks on this machine, and why the personal site does not take it (none set up, or the
+ * repository is private and not ticked).
+ */
+function shareRef(site: DemoSite | null, home: string, path: string, isPublic: boolean): ShareRef {
+  const missing = site && siteMissing(home, site);
+  if (site && !missing) {
+    const tags = dimensions(site.tags).length ? { shareTags: Object.fromEntries(dimensions(site.tags)) } : {};
+    return { share: true, ...(site.publish === 'approved' ? { shareOnApproval: true as const } : {}), ...tags };
+  }
+  const needs = site && missing ? { shareNeeds: { site: siteName(site), file: missing } } : {};
+  const p = readPersonal(home);
+  if (!p || siteMissing(home, personalDemoSite(p))) return { ...needs, sharePersonal: 'none' };
+  if (!allowedHere(p, path, isPublic)) return { ...needs, sharePersonal: 'private' };
+  // a repository whose site publishes each approved demo does so on the personal site too
+  return { share: true, shareUnlisted: true, ...(site?.publish === 'approved' ? { shareOnApproval: true as const } : {}) };
 }
 
 /** Tells the UI about sharing on the repository what `share` says, in place of what it was told before. */
-function setShare(ref: RepoRef, share: Pick<RepoRef, 'share' | 'shareNeeds' | 'shareOnApproval' | 'shareTags'>) {
-  delete ref.share;
-  delete ref.shareNeeds;
-  delete ref.shareOnApproval;
-  delete ref.shareTags;
+function setShare(ref: RepoRef, share: ShareRef) {
+  for (const f of SHARE_FIELDS) delete ref[f];
   Object.assign(ref, share);
 }
 

@@ -2,8 +2,8 @@
 
 import type { ServerWebSocket } from 'bun';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { tmpdir, userInfo } from 'node:os';
+import { join, resolve } from 'node:path';
 import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type Item, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, MAX_FILE_BYTES, needsYou, waitingOn } from '../core/types';
 import index from '../ui/index.html';
 import panel from '../ui/panel.html';
@@ -11,6 +11,7 @@ import { guarded, LOCAL_HOSTS, refusal } from './access';
 import { BadRequest } from './board';
 import { type Dropped, findDropped, localImage } from './files';
 import type { CanvasRuntime } from './canvas';
+import { SiteSetup } from './site-setup';
 import { defaultPushKey, type PageFocus, type PushKeyView } from '../core/push-key';
 import { parsePlace } from '../core/layout';
 import { type Focus, type Heard, type Input, isField } from './commands';
@@ -134,6 +135,20 @@ export function serve(
   usage?: UsageMeter,
 ) {
   const canvases = Array.isArray(served) ? { all: () => served } : served;
+  const sites = config
+    ? new SiteSetup({
+        home: config.home,
+        changed: () => canvases.all().forEach((c) => c.personalSiteChanged()),
+        repoName: (path) => canvases.all().flatMap((c) => c.board.canvas.repos).find((r) => resolve(r.path) === resolve(path))?.name,
+        user: (() => {
+          try {
+            return userInfo().username;
+          } catch {
+            return '';
+          }
+        })(),
+      })
+    : undefined;
   const byId = new Map<string, CanvasRuntime>();
   const started = crypto.randomUUID();
   const sockets = new Map<string, Set<ServerWebSocket<Socket>>>();
@@ -495,6 +510,22 @@ export function serve(
       '/api/agents': {
         GET: needs(config, (c) => agentsView(c.home)),
         PUT: needs(config, async (c, req) => saveAgents(c.home, await req.json())),
+      },
+      // the owner's personal demo site: set up at a host, connected with another machine's code, removed
+      // from this machine; the private repositories ticked for it
+      '/api/personal-site': {
+        GET: needs(sites, (x) => x.view()),
+        DELETE: needs(sites, (x) => x.remove()),
+      },
+      '/api/personal-site/setup': { POST: needs(sites, async (x, req) => x.setupPersonal(await req.json())) },
+      '/api/personal-site/connect': { POST: needs(sites, async (x, req) => x.connect(await req.json())) },
+      '/api/personal-site/code': { GET: needs(sites, (x) => x.code()) },
+      '/api/personal-site/private': { POST: needs(sites, async (x, req) => x.allow(await req.json())) },
+      // „Demo-Seite einrichten“ for a repository: started, followed, and taken into its settings
+      '/api/site-setup': {
+        GET: needs(sites, (x, req) => ({ job: x.repoJob(new URL(req.url).searchParams.get('path') ?? '') })),
+        POST: needs(sites, async (x, req) => ({ job: x.setupRepo(await req.json()) })),
+        DELETE: needs(sites, (x, req) => (x.doneWith(new URL(req.url).searchParams.get('path') ?? ''), {})),
       },
       // what Obeya's own voice in needs here, and installing it
       '/api/voice-setup': { GET: needs(setup, (s) => s.view()) },

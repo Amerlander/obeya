@@ -203,7 +203,10 @@ export interface StoredShare {
   /** The page's tags the owner set by hand, by dimension: neither a worker nor the reading session changes them. */
   tags?: PageTags;
   /** The page's tags the reading session chose, by dimension, where neither the owner nor a worker had (`pageTagsOf`). */
-  auto?: PageTags;
+  auto?: PageTags;  /** The page is on the owner's personal site (unlisted), not on its repository's. */
+  personal?: true;
+  /** The random part of the page's address on the personal site (`<token>/<slug>`): drawn once for the card, so its link stays. */
+  token?: string;
 }
 
 /**
@@ -2443,6 +2446,7 @@ function shareOf(r: CardRow): Item['share'] {
     ...(stale ? { stale: true } : {}),
     // shown with each version on the page; the latest, not on it, brings the changes with „Auf der Seite ersetzen“ or „Zur Seite dazunehmen“
     ...(outdated.length ? { outdated: outdated.map((c) => c.id) } : {}),
+    ...(s.personal ? { unlisted: true as const } : {}),
   };
 }
 

@@ -312,7 +312,7 @@ auto-merge, accounts without review, soft paths), app and checks (setup, checks,
 App“ in a large text field, „Stoppen, solange eine Karte wartet“, the keep condition once there is
 one), plans and language (plan docs, „Sprache des Repositorys“), demos („Sprache der Demos“,
 „Demo-Site“ with title, URL, deploy command, env file, headers, largest file, tags and when a demo
-goes on it), then „Für alle ins Repository übernehmen“. A folder without git has no workspace or
+goes on it, and „Demo-Seite einrichten …“ while it has no URL), then „Für alle ins Repository übernehmen“. A folder without git has no workspace or
 branch group.
 
 Klonen shows the existing clones („Vorhandene Klone, einer pro Zeile“), then the ones Obeya makes on top of them („Dazu neue Klone
@@ -370,7 +370,8 @@ fail every change while one entry has it (a folder's `git: false` dropped, that 
 a git repository). The dialog says so under its title, with „Obeya fragen“, which closes it
 and opens Obeya's conversation (Space for voice does not reach Obeya while the dialog is open).
 The other sections save on their own, restarting nothing: the demo settings into `demo.json` (see
-The demo settings and voices), languages, theme, models and whether the bar shows the usage limits
+The demo settings and voices), the personal demo site below them into `personal-site.json` (see The
+personal site in Sharing demos), languages, theme, models and whether the bar shows the usage limits
 (`usageMeter: false` when not) into `settings.json` in Obeya's home.
 
 ### Live configuration

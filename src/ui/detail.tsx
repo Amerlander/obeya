@@ -67,6 +67,8 @@ interface Props {
   onReadPlan?: (project: Item, mark?: string) => void;
   /** Opens the configuration at the clone count (or the slots) of a repository: the card waits for a free clone or slot. Not in the phone view. */
   onClones?: (repo: string, field: 'clones' | 'slots') => void;
+  /** Opens the configuration at the owner's personal demo site. */
+  onDemoSites?: () => void;
   onTell: Tell;
 }
 
@@ -207,9 +209,9 @@ export function Detail(p: Props) {
   const sharing = !!item.demo && !item.prototypeOf;
   const shareBox = (demo: Demo) =>
     shares?.share || item.share ? (
-      <ShareBox item={item} demo={demo} act={act} onApproval={!!shares?.shareOnApproval} vocabulary={shares?.shareTags} />
+      <ShareBox item={item} demo={demo} act={act} onApproval={!!shares?.shareOnApproval} vocabulary={shares?.shareTags} unlisted={item.share ? !!item.share.unlisted : !!shares?.shareUnlisted} />
     ) : (
-      <ExportBox item={item} demo={demo} run={run} needs={shares?.shareNeeds} />
+      <ExportBox item={item} demo={demo} run={run} needs={shares?.shareNeeds} personal={shares?.sharePersonal} repoPath={shares?.path} onDemoSites={p.onDemoSites} />
     );
   // a prototype is discarded or its idea built on it, never approved or deleted; built once the idea's agent has taken in what changed
   const ideaTitle = plain(item.ideaTitle ?? p.from?.title ?? '');
@@ -2250,7 +2252,7 @@ function PrBox({ pr }: { pr: PullRequest }) {
  * the latest demo not on the page has „Mit der Freigabe teilen“ until the card is approved, and
  * "Teilen" reads „Jetzt teilen“: the owner may share it before approving, or not on approving.
  */
-function ShareBox({ item, demo, act, onApproval, vocabulary }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void>; onApproval: boolean; vocabulary?: PageTags | undefined }) {
+function ShareBox({ item, demo, act, onApproval, vocabulary, unlisted }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void>; onApproval: boolean; vocabulary?: PageTags | undefined; unlisted: boolean }) {
   const [copied, copy] = useCopy(2000);
   const s = item.share;
   const all = [...(item.demos ?? []), ...(item.demo ? [item.demo] : [])];
@@ -2304,7 +2306,7 @@ function ShareBox({ item, demo, act, onApproval, vocabulary }: { item: Item; dem
         <div className="share-row">
           {along.length > 0 && <p className="hint">{t.share.along(t.share.demos(along))}</p>}
           {approval}
-          <button className="btn share-go" title={later ? t.share.shareNowHint : demo.kind === 'html' ? t.share.shareHintHtml : t.share.shareHint} onClick={() => go({ action: 'share', ...which })}>
+          <button className="btn share-go" title={later ? t.share.shareNowHint : unlisted ? t.share.shareHintUnlisted : demo.kind === 'html' ? t.share.shareHintHtml : t.share.shareHint} onClick={() => go({ action: 'share', ...which })}>
             <ShareIcon />
             {later ? t.share.shareNow : t.share.share}
           </button>
@@ -2318,6 +2320,7 @@ function ShareBox({ item, demo, act, onApproval, vocabulary }: { item: Item; dem
             </button>
           </div>
           {all.length > 1 && onPage && <p className="hint">{t.share.onPage(onPage)}</p>}
+          {s.unlisted && <p className="hint">{t.share.unlisted}</p>}
           {s.outdated && (
             <div className="share-row">
               <p className="hint">{t.share.outdated}</p>
@@ -2434,7 +2437,25 @@ function ShareIcon() {
  * (short videos, artifacts that are their index.html alone). Where its site lacks its credentials
  * on this machine, a line under the buttons names the file.
  */
-function ExportBox({ item, demo, run, needs }: { item: Item; demo: Demo; run: Run; needs?: { site: string; file: string } | undefined }) {
+function ExportBox({
+  item,
+  demo,
+  run,
+  needs,
+  personal,
+  repoPath,
+  onDemoSites,
+}: {
+  item: Item;
+  demo: Demo;
+  run: Run;
+  needs?: { site: string; file: string } | undefined;
+  /** Why the owner's personal demo site does not take the demo: none set up here, or the repository is private and not ticked. */
+  personal?: 'none' | 'private' | undefined;
+  repoPath?: string | undefined;
+  /** Opens the configuration at the personal demo site. */
+  onDemoSites?: (() => void) | undefined;
+}) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<'zip' | 'html' | null>(null);
   const [size, setSize] = useState<number | null>(null);
@@ -2460,7 +2481,7 @@ function ExportBox({ item, demo, run, needs }: { item: Item; demo: Demo; run: Ru
         </button>
       ) : (
         <>
-          {!needs && <p className="hint">{t.share.exportIntro}</p>}
+          {!needs && personal !== 'private' && <p className="hint">{t.share.exportIntro}</p>}
           <div className="share-row">
             <button className="btn" title={artifact ? t.share.zipHintHtml : t.share.zipHint} disabled={!!busy} onClick={() => go('zip')}>
               {busy === 'zip' ? t.share.preparing : t.share.zip}
@@ -2480,6 +2501,23 @@ function ExportBox({ item, demo, run, needs }: { item: Item; demo: Demo; run: Ru
         </>
       )}
       {needs && <p className="hint">{t.share.needsEnv(needs.site, needs.file)}</p>}
+      {open && personal === 'none' && onDemoSites && (
+        <p className="hint">
+          {t.share.noPersonal}{' '}
+          <button className="link" onClick={onDemoSites}>
+            {t.share.setUpPersonal}
+          </button>
+        </p>
+      )}
+      {open && personal === 'private' && repoPath && (
+        <>
+          <p className="hint">{t.share.privateRepo}</p>
+          <label className="share-check">
+            <input type="checkbox" checked={false} onChange={() => void run(() => api.allowPrivateRepo(repoPath, true).then(() => {}), { close: false })} />
+            {t.share.allowPrivate}
+          </label>
+        </>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CardDiff } from '../core/diff';
 import type { PushKeyView } from '../core/push-key';
 import { type Place, placeParam } from '../core/layout';
-import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoTrust, ServerMessage, SettingsShared, SourceUpdate, SpotInput, TalkRef, AppUpdate, Theme, ThemeView, Usage, UsageMeterView } from '../core/types';
+import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, PersonalSiteView, SiteSetupJob, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoTrust, ServerMessage, SettingsShared, SourceUpdate, SpotInput, TalkRef, AppUpdate, Theme, ThemeView, Usage, UsageMeterView } from '../core/types';
 import type { Wish } from '../core/wish';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
@@ -179,6 +179,17 @@ export const api = {
   /** Tests a cloud service with the check's sentence and hears through it from then on; a key left out keeps the saved one. */
   useCloudVoice: (service: { preset: CloudPreset; baseUrl?: string; model?: string; key?: string }) => call<VoiceSetupView>('PUT', '/api/voice-setup/cloud', service),
   useLocalVoice: () => call<VoiceSetupView>('DELETE', '/api/voice-setup/cloud'),
+  /** The owner's personal demo site on this machine: set up at a host, connected by code, removed; private repositories ticked for it. */
+  personalSite: () => call<PersonalSiteView>('GET', '/api/personal-site'),
+  setUpPersonalSite: (host: 'cloudflare' | 'github', account?: string) => call<PersonalSiteView>('POST', '/api/personal-site/setup', { host, ...(account ? { account } : {}) }),
+  connectPersonalSite: (code: string) => call<PersonalSiteView>('POST', '/api/personal-site/connect', { code }),
+  personalSiteCode: () => call<{ code: string }>('GET', '/api/personal-site/code'),
+  removePersonalSite: () => call<PersonalSiteView>('DELETE', '/api/personal-site'),
+  allowPrivateRepo: (path: string, on: boolean) => call<PersonalSiteView>('POST', '/api/personal-site/private', { path, on }),
+  /** „Demo-Seite einrichten“ for a repository: started, followed, and taken into its settings. */
+  setUpRepoSite: (path: string, host: 'cloudflare' | 'github', name: string, account?: string) => call<{ job: SiteSetupJob | null }>('POST', '/api/site-setup', { path, host, name, ...(account ? { account } : {}) }),
+  repoSiteSetup: (path: string) => call<{ job: SiteSetupJob | null }>('GET', `/api/site-setup?path=${encodeURIComponent(path)}`),
+  repoSiteTaken: (path: string) => call<object>('DELETE', `/api/site-setup?path=${encodeURIComponent(path)}`),
   demoSettings: () => call<DemoSettingsView>('GET', '/api/demo-settings'),
   saveDemoSettings: (settings: DemoSettings) => call<DemoSettingsView>('PUT', '/api/demo-settings', settings),
   checkDemoVoice: (settings: DemoSettings) => call<DemoVoiceCheck>('POST', '/api/demo-settings/check', settings),

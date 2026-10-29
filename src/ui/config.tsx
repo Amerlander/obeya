@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type PageTags, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type PersonalSiteView, type SiteSetupJob, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type PageTags, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { lineDiff } from '../core/diff';
 import { parseTagLines, tagLines } from '../core/page-tags';
 import { LANGUAGES } from '../core/locale';
@@ -16,6 +16,7 @@ import { keep } from './keep';
 import { plain } from './markdown';
 import { demoState, GitSetup, platformName, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
 import { useFitHeight } from './fitHeight';
+import { useCopy } from './copy';
 import { failText, fileSize, pushKeyLabel, t } from './strings';
 import { applyTheme } from './theme';
 import { WishLink } from './wish';
@@ -53,6 +54,14 @@ const keptCanvas = () => {
   const n = Number(sessionStorage.getItem(CANVAS_KEY) ?? NaN);
   return Number.isInteger(n) && n >= 0 ? n : null;
 };
+
+/** Opens the dialog at the demos next time, as from the hint on a card to set up a personal demo site. */
+export const showDemosSection = () => {
+  sessionStorage.setItem(SECTION_KEY, 'demos');
+  sessionStorage.setItem(PERSONAL_SHOW_KEY, '1');
+};
+/** The personal demo site is to be scrolled to once the dialog shows it. */
+const PERSONAL_SHOW_KEY = 'obeya-config-personal';
 
 /** Opens the dialog at „Von anderen Geräten“ next time, as from „Telefon verbinden“. */
 export const showDevicesSection = () => sessionStorage.setItem(SECTION_KEY, 'devices');
@@ -439,6 +448,7 @@ export function ConfigDialog({ on, page, onClose, onSetup, onAsk, onTalk, onProb
           </section>
           <section className="cfg-sec" hidden={section !== 'demos'}>
             <DemoBlock on={on} />
+            <PersonalSiteBlock on={on && section === 'demos'} />
           </section>
           <section className="cfg-sec" hidden={section !== 'devices'}>
             <AccessSection on={on && section === 'devices'} onConnect={onConnect} />
@@ -1195,6 +1205,204 @@ function DemoBlock({ on }: { on: boolean }) {
 }
 
 /**
+ * Which Cloudflare account a new site goes into: that of a site this machine deploys to already
+ * (`accounts`, by site), or the machine's own login in the browser (''). Shown only where there is a
+ * site to take one from.
+ */
+function CloudflareAccount({ accounts, value, onChange, disabled }: { accounts: string[]; value: string; onChange: (account: string) => void; disabled?: boolean }) {
+  const a = t.config.personal;
+  if (!accounts.length) return null;
+  return (
+    <label className="site-account">
+      <span className="hint">{a.account}</span>
+      <select aria-label={a.account} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+        {accounts.map((x) => (
+          <option key={x} value={x}>
+            {a.accountOf(x)}
+          </option>
+        ))}
+        <option value="">{a.accountLogin}</option>
+      </select>
+    </label>
+  );
+}
+
+/** The host chosen for a new site, and a connection code pasted but not sent yet: they survive closing the dialog. */
+const PERSONAL_HOST_KEY = 'obeya-personal-host';
+const PERSONAL_CODE_KEY = 'obeya-personal-code';
+
+/**
+ * The owner's personal demo site: set up at Cloudflare Pages or GitHub Pages with one button, or
+ * connected with another machine's code; once there, its address, the code for another machine, the
+ * private repositories ticked for it, and removing it from this machine.
+ */
+function PersonalSiteBlock({ on }: { on: boolean }) {
+  const [view, setView] = useState<PersonalSiteView | null>(null);
+  const [host, setHost] = useState<'cloudflare' | 'github'>(() => (sessionStorage.getItem(PERSONAL_HOST_KEY) === 'github' ? 'github' : 'cloudflare'));
+  const [account, setAccount] = useState<string | null>(null);
+  const [code, setCode] = useState(() => sessionStorage.getItem(PERSONAL_CODE_KEY) ?? '');
+  const [connecting, setConnecting] = useState(() => !!sessionStorage.getItem(PERSONAL_CODE_KEY));
+  const [copied, copy] = useCopy(1500);
+  // the connection code, at hand before the click: the clipboard takes it within the click
+  const [connection, setConnection] = useState('');
+  const [removing, setRemoving] = useState(false);
+  const [status, setStatus] = useState('');
+  const p = t.config.personal;
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (on) api.personalSite().then(setView, console.error);
+  }, [on]);
+  // opened from a card's hint: it comes into view
+  useEffect(() => {
+    if (!on || !view || !sessionStorage.getItem(PERSONAL_SHOW_KEY)) return;
+    sessionStorage.removeItem(PERSONAL_SHOW_KEY);
+    box.current?.scrollIntoView({ block: 'start' });
+  }, [on, !!view]);
+  const running = !!view?.job?.running;
+  // a setup runs on the server, with a login in the browser maybe: follow it until it ends
+  useEffect(() => {
+    if (!on || !running) return;
+    const timer = setInterval(() => api.personalSite().then(setView, console.error), 1000);
+    return () => clearInterval(timer);
+  }, [on, running]);
+  useEffect(() => {
+    if (view?.site) api.personalSiteCode().then((c) => setConnection(c.code), console.error);
+  }, [view?.site?.url]);
+  useEffect(() => sessionStorage.setItem(PERSONAL_HOST_KEY, host), [host]);
+  useEffect(() => (code ? sessionStorage.setItem(PERSONAL_CODE_KEY, code) : sessionStorage.removeItem(PERSONAL_CODE_KEY)), [code]);
+  if (!view) return null;
+  const act = async (fn: () => Promise<PersonalSiteView>) => {
+    setStatus('');
+    try {
+      setView(await fn());
+      return true;
+    } catch (e) {
+      setStatus(failText(e));
+      return false;
+    }
+  };
+  // the first site's account, until the owner chooses
+  const chosen = account ?? view.cloudflareAccounts[0] ?? '';
+  const setUp = (h: 'cloudflare' | 'github') => {
+    setHost(h);
+    void act(() => api.setUpPersonalSite(h, h === 'cloudflare' ? chosen : undefined));
+  };
+  const job = view.job;
+  const site = view.site;
+  return (
+    <div className="personal-site" ref={box}>
+      <Head title={p.title} hint={p.hint} />
+      {!site ? (
+        <div className="cfg-narrow">
+          <div className="seg" role="radiogroup" aria-label={p.title}>
+            {(['cloudflare', 'github'] as const).map((h) => (
+              <button key={h} type="button" role="radio" aria-checked={host === h} className={host === h ? 'on' : undefined} disabled={running} onClick={() => setHost(h)}>
+                {p.hosts[h]}
+              </button>
+            ))}
+          </div>
+          <p className="hint">{p.notes[host]}</p>
+          {host === 'cloudflare' && <CloudflareAccount accounts={view.cloudflareAccounts} value={chosen} onChange={setAccount} disabled={running} />}
+          <button className="btn primary" disabled={running} onClick={() => setUp(host)}>
+            {running ? p.settingUp : p.setup}
+          </button>
+          {job && (job.running || !job.error) && job.lines.length > 0 && <p className="hint c-install">{job.lines.at(-1)}</p>}
+          {job?.error && !job.running && (
+            <p className="p-error">
+              {p.failed} {job.error}
+            </p>
+          )}
+          {job?.error && !job.running && job.offer === 'cloudflare' && (
+            <button className="btn small" onClick={() => setUp('cloudflare')}>
+              {p.tryCloudflare}
+            </button>
+          )}
+          <p className="hint">{p.unlistedNote}</p>
+          {!connecting ? (
+            <button className="link" onClick={() => setConnecting(true)}>
+              {p.connect}
+            </button>
+          ) : (
+            <Field label={p.connect} hint={p.connectHint}>
+              <textarea className="c-path" rows={3} spellCheck={false} placeholder="obeya-site:…" aria-label={p.connect} value={code} onChange={(e) => setCode(e.target.value)} />
+              <div className="personal-actions">
+                <button
+                  className="btn"
+                  disabled={!code.trim()}
+                  onClick={async () => {
+                    if (await act(() => api.connectPersonalSite(code))) {
+                      setCode('');
+                      setConnecting(false);
+                    }
+                  }}
+                >
+                  {p.connectGo}
+                </button>
+              </div>
+            </Field>
+          )}
+        </div>
+      ) : (
+        <div className="cfg-narrow">
+          <p className="personal-url">
+            <a href={site.url} target="_blank" rel="noreferrer">
+              {site.url.replace(/^https:\/\//, '').replace(/\/$/, '')}
+            </a>
+            <span className="hint"> · {p.at(p.hosts[site.host], site.project)}</span>
+          </p>
+          <p className="hint">
+            {p.example} <code>{site.example.replace(/^https:\/\//, '')}</code>
+          </p>
+          {site.needs && <p className="p-error">{p.needs(site.needs)}</p>}
+          <p className="hint">{p.unlistedNote}</p>
+          <Field label={p.privateRepos}>
+            {view.privateRepos.length ? (
+              <ul className="personal-private">
+                {view.privateRepos.map((r) => (
+                  <li key={r.path}>
+                    <span title={r.path}>{r.name}</span>
+                    <RemoveButton label={p.privateRemove(r.name)} onClick={() => void act(() => api.allowPrivateRepo(r.path, false))} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="hint">{p.privateNone}</p>
+            )}
+          </Field>
+          <div className="personal-actions">
+            <button className="btn small" title={p.codeHint} disabled={!connection} onClick={() => copy(connection)}>
+              {copied ? p.copied : p.code}
+            </button>
+            {!removing ? (
+              <button className="btn small" title={p.removeHint} onClick={() => setRemoving(true)}>
+                {p.remove}
+              </button>
+            ) : (
+              <>
+                <button
+                  className="btn small danger"
+                  onClick={async () => {
+                    setRemoving(false);
+                    await act(() => api.removePersonalSite());
+                  }}
+                >
+                  {p.removeConfirm}
+                </button>
+                <button className="btn small" onClick={() => setRemoving(false)}>
+                  {t.config.reset}
+                </button>
+              </>
+            )}
+          </div>
+          {removing && <p className="hint">{p.removeWarning}</p>}
+        </div>
+      )}
+      {status && <p className="p-error">{status}</p>}
+    </div>
+  );
+}
+
+/**
  * What a render needs on this machine besides the voice (that has its own lines above), each
  * missing piece with how to install it here. Checked again after an installation, and on request.
  */
@@ -1810,6 +2018,7 @@ function RepoSettingsBlock({
           'site',
           c.site,
           <div className="cfg-sub">
+            {!folder && <SiteSetupRow path={repo.path} name={repo.path.trim().split(/[\\/]/).filter(Boolean).pop() ?? ''} empty={!site.url.trim()} onSite={(made) => set('site', made)} />}
             {sub(c.siteTitle, <input className="c-path" aria-label={c.siteTitle} spellCheck={false} value={site.title} onChange={(e) => setSite({ title: e.target.value })} />)}
             {sub(c.siteUrl, <input className="c-path" aria-label={c.siteUrl} placeholder="https://demos.example.com" spellCheck={false} value={site.url} onChange={(e) => setSite({ url: e.target.value })} />)}
             {sub(c.siteDeploy, <input className="c-path" aria-label={c.siteDeploy} placeholder="bunx wrangler@4 pages deploy {dir} --project-name demos" spellCheck={false} value={site.deploy} onChange={(e) => setSite({ deploy: e.target.value })} />, true)}
@@ -1861,6 +2070,91 @@ function RepoSettingsBlock({
       </div>
       {/* the folder's settings file is written there like any other file; there is no commit or pull request to make */}
       {!folder && <ShareSettings repo={repo} values={values} branch={value<string>('branch')} shareTo={shareTo} shareDirect={shareDirect} takeover={takeover} />}
+    </div>
+  );
+}
+
+/**
+ * „Demo-Seite einrichten“ at a repository without a site: the host chosen, Obeya creates the site
+ * there (in the background, with a login in the browser maybe) and fills in its fields, which
+ * „Speichern“ then takes over. A setup that finished while the dialog was closed is taken in when it
+ * opens again.
+ */
+function SiteSetupRow({ path, name, empty, onSite }: { path: string; name: string; empty: boolean; onSite: (site: DemoSite) => void }) {
+  const [open, setOpen] = useState(false);
+  const [host, setHost] = useState<'cloudflare' | 'github'>('cloudflare');
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [account, setAccount] = useState<string | null>(null);
+  const [job, setJob] = useState<SiteSetupJob | null>(null);
+  const [done, setDone] = useState(false);
+  const [status, setStatus] = useState('');
+  const c = t.config.settings;
+  const take = (j: SiteSetupJob | null) => {
+    setJob(j);
+    if (j && !j.running && j.site) {
+      onSite(j.site);
+      setDone(true);
+      setOpen(false);
+      void api.repoSiteTaken(path).catch(console.error);
+    }
+  };
+  useEffect(() => {
+    if (path.trim()) api.repoSiteSetup(path).then((r) => take(r.job), console.error);
+  }, [path]);
+  useEffect(() => {
+    if (open) api.personalSite().then((v) => setAccounts(v.cloudflareAccounts), console.error);
+  }, [open]);
+  const chosen = account ?? accounts[0] ?? '';
+  const running = !!job?.running;
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => api.repoSiteSetup(path).then((r) => take(r.job), console.error), 1000);
+    return () => clearInterval(timer);
+  }, [running, path]);
+  if (done) return <p className="hint wide">{c.siteSetupDone}</p>;
+  if (!empty && !running) return null;
+  return (
+    <div className="wide site-setup">
+      {!open && !running ? (
+        <button type="button" className="btn small" title={c.siteSetupHint} onClick={() => setOpen(true)}>
+          {c.siteSetup}
+        </button>
+      ) : (
+        <>
+          <p className="hint">{c.siteSetupHint}</p>
+          <div className="seg" role="radiogroup" aria-label={c.siteSetup}>
+            {(['cloudflare', 'github'] as const).map((h) => (
+              <button key={h} type="button" role="radio" aria-checked={host === h} className={host === h ? 'on' : undefined} disabled={running} onClick={() => setHost(h)}>
+                {c.siteSetupHosts[h]}
+              </button>
+            ))}
+          </div>
+          <p className="hint">{c.siteSetupNotes[host]}</p>
+          {host === 'cloudflare' && <CloudflareAccount accounts={accounts} value={chosen} onChange={setAccount} disabled={running} />}
+          <button
+            type="button"
+            className="btn small primary"
+            disabled={running}
+            onClick={async () => {
+              setStatus('');
+              try {
+                take((await api.setUpRepoSite(path, host, name, host === 'cloudflare' ? chosen : undefined)).job);
+              } catch (e) {
+                setStatus(failText(e));
+              }
+            }}
+          >
+            {running ? c.siteSetupRunning : c.siteSetupGo}
+          </button>
+          {running && job!.lines.length > 0 && <p className="hint c-install">{job!.lines.at(-1)}</p>}
+        </>
+      )}
+      {job?.error && !running && (
+        <p className="p-error">
+          {c.siteSetupFailed} {job.error}
+        </p>
+      )}
+      {status && <p className="p-error">{status}</p>}
     </div>
   );
 }

@@ -34,6 +34,11 @@
 //
 // A host that reads a `_headers` file (Cloudflare Pages, Netlify) sends an artifact's files with the
 // headers that keep it from the internet beyond what its CSP covers (`artifactHeaders`).
+//
+// The owner's personal site (personal-site.ts) is unlisted (`unlisted`): a page lies at
+// `<token>/<slug>/`, the token drawn per card; the manifest lies in a secret directory; the root and
+// the answer to a missing address are blank; there is no feed; pages and headers keep search engines
+// out and send no referrer.
 
 import { createHash, randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -50,6 +55,7 @@ import { DEMO_FILES, OWN_CONNECTIONS } from './demo';
 import { BUN_ENV } from './resources';
 import { spawnOutput } from './spawn';
 import { HERE } from './workspaces';
+import { BLANK_PAGE, GITHUB_PAGES, githubPagesDeploy } from './site-hosts';
 import { COMMAND_TIMEOUT, commandWords, SHARE_CWD, type SharePage, type ShareTarget, scriptArgv, tail } from './share';
 import { messageOf } from '../core/text';
 
@@ -192,6 +198,12 @@ export interface SiteOptions {
   language?: PageLanguage;
   /** Who the pages published from here say shared them; git's name (`user.name`) in the repository without it. */
   by?: string;
+  /**
+   * An unlisted site (the owner's personal one): each page under a random part of its address
+   * (`<token>/<slug>`), the manifest under a secret directory, no overview and no feed, nothing
+   * for search engines, no referrer for the links leaving it.
+   */
+  unlisted?: { secret: string };
 }
 
 /** git's name in the repository (its own `user.name`, else the global one); undefined where it has none. */
@@ -206,6 +218,8 @@ function gitName(repo: string): string | undefined {
 
 /** About 30 s for a deployment to show: a host or its CDN may serve the earlier one for a moment. */
 const CHECK_WAITS = [0, 1000, 2000, 4000, 8000, 15000];
+/** About two minutes on GitHub Pages, whose build takes a minute or so after the push. */
+const PAGES_CHECK_WAITS = [0, 5000, 10000, 15000, 20000, 30000, 40000];
 /** Reading the manifest takes a moment; a file of a page (at most the site's limit) a few minutes on a slow line. */
 const FETCH_TIMEOUT = 30_000;
 const DOWNLOAD_TIMEOUT = 5 * 60_000;
@@ -217,6 +231,9 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
   const machine = opts.machine ?? HERE;
   const overviewLanguage = (): PageLanguage => opts.language ?? readDemoSettings(home).language;
   const root = site.url.replace(/\/+$/, '');
+  const unlisted = !!opts.unlisted;
+  /** Where the manifest is on the site: at its root, or in the unlisted site's secret directory. */
+  const manifestAt = opts.unlisted ? `${opts.unlisted.secret}/${MANIFEST}` : MANIFEST;
 
   /** The site lives only in its directory: one that lost pages Obeya has as shared would drop them with the next deployment. */
   const checkSite = (shared: string[], self: string) => {
@@ -263,7 +280,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
 
   /** The live site's manifest; refused when it cannot be read, since deploying blind could take other machines' pages offline. */
   const readLive = async (env: Record<string, string>): Promise<Live> => {
-    const at = `${root}/${MANIFEST}`;
+    const at = `${root}/${manifestAt}`;
     const unreadable = (why: string) => new Refused(t.manifestUnreadable(at, why));
     const answer = async (path: string) => {
       try {
@@ -274,7 +291,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
       }
     };
     const status = (r: Response) => (r.status >= 300 && r.status < 400 ? t.loginWall(r.status) : `HTTP ${r.status}`);
-    const r = await answer(`${MANIFEST}?at=${Date.now()}`);
+    const r = await answer(`${manifestAt}?at=${Date.now()}`);
     if (r.ok) {
       const body = await r.text();
       const m = manifestOf(body);
@@ -282,7 +299,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
       // a host may answer a missing file with a page of its own (Cloudflare Pages serves the
       // overview for a site without a 404.html): the manifest is missing when a file that cannot
       // be there gets the same answer
-      const missing = await answer(`${MANIFEST}.${randomUUID()}`);
+      const missing = await answer(`${manifestAt}.${randomUUID()}`);
       if (!missing.ok || (await missing.text()) !== body) throw unreadable(t.notManifest);
     } else if (r.status !== 404) throw unreadable(status(r));
     // no manifest: a site not deployed yet
@@ -301,7 +318,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
 
   /** The manifest of this directory, as written with the last change. */
   const readLocal = (): Manifest => {
-    const file = join(dir, MANIFEST);
+    const file = join(dir, manifestAt);
     return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { deploy: '', machine, at: '', pages: {} };
   };
 
@@ -309,8 +326,8 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
   const writeLocal = (m: Manifest): string => {
     const deploy = randomUUID();
     const pages = Object.fromEntries(Object.entries(m.pages).filter(([slug, e]) => e.withdrawn || existsSync(join(dir, slug, 'meta.json'))));
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, MANIFEST), JSON.stringify({ deploy, machine, at: new Date().toISOString(), pages } satisfies Manifest, null, 1));
+    mkdirSync(dirname(join(dir, manifestAt)), { recursive: true });
+    writeFileSync(join(dir, manifestAt), JSON.stringify({ deploy, machine, at: new Date().toISOString(), pages } satisfies Manifest, null, 1));
     return deploy;
   };
 
@@ -339,7 +356,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     const gone: Gone[] = [];
     const fetchList: [string, Entry][] = [];
     for (const [slug, e] of Object.entries(live.pages)) {
-      if (!isSlug(slug)) continue;
+      if (!isPage(slug, unlisted)) continue;
       const mine = local.pages[slug];
       if (e.withdrawn) {
         if (mine && mine.rev >= e.rev) continue;
@@ -379,7 +396,8 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
         writeFileSync(to, bytes);
       }
       rmSync(join(dir, slug), { recursive: true, force: true });
-      mkdirSync(dir, { recursive: true });
+      // an unlisted site's page lies a level deeper, in the random part of its address
+      mkdirSync(dirname(join(dir, slug)), { recursive: true });
       mkdirSync(into, { recursive: true });
       renameSync(into, join(dir, slug));
       local.pages[slug] = e;
@@ -394,7 +412,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
    * machine's deployment came in between without it; null when the site never showed the new one.
    */
   const check = async (expect: [string, number][], mine: string, before: string | null, env: Record<string, string>): Promise<boolean | null> => {
-    for (const wait of opts.checkWaits ?? CHECK_WAITS) {
+    for (const wait of opts.checkWaits ?? (commandWords(site.deploy)[0] === GITHUB_PAGES ? PAGES_CHECK_WAITS : CHECK_WAITS)) {
       await Bun.sleep(wait);
       let live: Live;
       try {
@@ -408,9 +426,20 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
     return null;
   };
 
-  /** Writes the overview and the feed from the pages in the directory, and the headers of the artifacts' files. */
+  /**
+   * Writes the overview and the feed from the pages in the directory, and the headers of the
+   * artifacts' files. An unlisted site has neither overview nor feed: its root and its answer to an
+   * address it lacks (`404.html`) are a blank page, so neither leads to a page.
+   */
   const writeOverview = () => {
     mkdirSync(dir, { recursive: true });
+    if (unlisted) {
+      writeFileSync(join(dir, 'index.html'), BLANK_PAGE);
+      writeFileSync(join(dir, NOT_FOUND), BLANK_PAGE);
+      writeFileSync(join(dir, HEADERS), unlistedHeaders() + artifactHeaders(site, true));
+      rmSync(join(dir, FEED), { force: true });
+      return;
+    }
     const pages = readPages(dir);
     writeFileSync(join(dir, 'index.html'), overviewHtml(site, pages, overviewLanguage()));
     writeFileSync(join(dir, FEED), feedXml(site, pages, overviewLanguage()));
@@ -420,10 +449,16 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
   /** Runs the deploy line on the directory; what it said, for the card's log. */
   const deploy = async (env: Record<string, string>): Promise<string> => {
     mkdirSync(dir, { recursive: true });
-    const argv = scriptArgv(
-      commandWords(site.deploy).map((a) => a.replaceAll('{dir}', dir)),
-      repo,
-    );
+    const words = commandWords(site.deploy).map((a) => a.replaceAll('{dir}', dir));
+    // the deploy Obeya builds in for GitHub Pages
+    if (words[0] === GITHUB_PAGES) {
+      try {
+        return tail(await githubPagesDeploy(dir, words[1] ?? '', join(base, 'git'), undefined, { private: unlisted }));
+      } catch (e) {
+        throw new Refused(t.deployFailed(1), { cause: messageOf(e) });
+      }
+    }
+    const argv = scriptArgv(words, repo);
     const cwd = join(home, SHARE_CWD);
     mkdirSync(cwd, { recursive: true });
     let out: string;
@@ -536,9 +571,10 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
   return {
     key: `site:${siteKey(site.url)}`,
     repo,
+    ...(unlisted ? { unlisted: true as const } : {}),
     publish: (p: SharePage, log = () => {}) =>
       attempt(async (gone) => {
-        const slug = checkSlug(p.slug);
+        const slug = checkSlug(p.slug, unlisted);
         // the first version at the page's root, each later one in a directory of its own
         const parts = [{ ...p, sub: '' }, ...(p.more ?? []).map((m, i) => ({ ...m, sub: String(i + 2) }))];
         const ready = await Promise.all(
@@ -608,7 +644,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
                 : {}),
             };
             writeFileSync(join(target, 'meta.json'), JSON.stringify(meta, null, 2));
-            writeFileSync(join(target, 'index.html'), pageHtml(site, meta, (sub) => existsSync(join(target, sub, 'poster.jpg'))));
+            writeFileSync(join(target, 'index.html'), pageHtml(site, meta, (sub) => existsSync(join(target, sub, 'poster.jpg')), undefined, unlisted));
             return { ...entryOf(slug), rev };
           },
           log,
@@ -618,7 +654,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
       }),
     withdraw: async (slugArg, shared, log = () => {}) => {
       const r = await attempt(async (gone) => {
-        const slug = checkSlug(slugArg);
+        const slug = checkSlug(slugArg, unlisted);
         const said = await change(slug, shared, (rev) => ({ rev, machine, at: new Date().toISOString(), withdrawn: true }), log, gone);
         return { said };
       });
@@ -647,7 +683,8 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
   };
 }
 
-const isSlug = (slug: string) => /^[a-z0-9][a-z0-9-]{0,80}$/.test(slug);
+/** A page's place on the site: its slug, on an unlisted site behind the random part of its address (`<token>/<slug>`). */
+const isPage = (slug: string, unlisted: boolean) => (unlisted ? /^[a-z0-9]{16,40}\/[a-z0-9][a-z0-9-]{0,80}$/ : /^[a-z0-9][a-z0-9-]{0,80}$/).test(slug);
 /** A path inside a page's directory. */
 const isPath = (f: string) => f.split('/').every((p) => p && p !== '.' && p !== '..' && !p.includes('\\'));
 const hashOf = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
@@ -659,8 +696,8 @@ function filesUnder(root: string, at = ''): string[] {
     .sort();
 }
 
-function checkSlug(slug: unknown): string {
-  if (typeof slug !== 'string' || !isSlug(slug)) throw new Refused(`not a slug: ${String(slug)}`);
+function checkSlug(slug: unknown, unlisted: boolean): string {
+  if (typeof slug !== 'string' || !isPage(slug, unlisted)) throw new Refused(`not a slug: ${String(slug)}`);
   return slug;
 }
 
@@ -713,6 +750,14 @@ export function pagesHash(): { video: string; html: string; stacked: string } {
 
 /** The file a host such as Cloudflare Pages or Netlify reads the headers of the site's files from; on another host it is a file nobody asks for. */
 export const HEADERS = '_headers';
+/** The page a host (Cloudflare Pages, GitHub Pages, Netlify) answers an address it lacks with. */
+export const NOT_FOUND = '404.html';
+
+/** Every file of an unlisted site is kept out of search engines, and a link leaving it says nothing of where it came from. */
+const unlistedHeaders = () => `/*
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: no-referrer
+`;
 
 /**
  * The headers of an artifact's files on the site, for a host that sends them: its policy again, now
@@ -720,9 +765,10 @@ export const HEADERS = '_headers';
  * reaches, a connection opened ahead (`preconnect`) or WebRTC, kept to the site
  * (`Connection-Allowlist`, Chrome 152 on).
  */
-export function artifactHeaders(site: DemoSite): string {
+export function artifactHeaders(site: DemoSite, unlisted = false): string {
   const u = new URL(site.url);
-  const path = u.pathname.replace(/\/+$/, '');
+  // on an unlisted site, behind the random part of the page's address
+  const path = u.pathname.replace(/\/+$/, '') + (unlisted ? '/:token' : '');
   // an artifact as the page's first version, and as a later one in a directory of its own
   return [`${path}/:slug/${ARTIFACT_DIR}/*`, `${path}/:slug/:n/${ARTIFACT_DIR}/*`]
     .map(
@@ -735,8 +781,12 @@ export function artifactHeaders(site: DemoSite): string {
     .join('');
 }
 
-/** A page of the site, in its language; `poster`: whether a version's directory (the page's own: '') holds a poster. */
-function pageHtml(site: DemoSite, m: Meta, poster: (dir: string) => boolean, timeZone?: string): string {
+/**
+ * A page of the site, in its language; `poster`: whether a version's directory (the page's own: '')
+ * holds a poster. A page of an unlisted site links no overview and no tags, and keeps itself out of
+ * search engines.
+ */
+function pageHtml(site: DemoSite, m: Meta, poster: (dir: string) => boolean, timeZone?: string, unlisted = false): string {
   const { language } = m;
   const w = PAGE_WORDS[language];
   const parts = {
@@ -744,11 +794,15 @@ function pageHtml(site: DemoSite, m: Meta, poster: (dir: string) => boolean, tim
     text: m.text,
     pr: m.pr,
     when: w.sharedOn(day(m.at, language), m.by),
-    tabTitle: `${m.title} · ${site.title}`,
+    tabTitle: unlisted ? m.title : `${m.title} · ${site.title}`,
     language,
-    top: { href: '../', text: w.allDemos },
-    // each links the overview showing the pages that have it
-    tags: Object.entries(m.tags ?? {}).flatMap(([dimension, values]) => values.map((value) => ({ dimension, value, href: `../?${new URLSearchParams({ [dimension]: value })}` }))),
+    ...(unlisted
+      ? { unlisted: true as const }
+      : {
+          top: { href: '../', text: w.allDemos },
+          // each links the overview showing the pages that have it
+          tags: Object.entries(m.tags ?? {}).flatMap(([dimension, values]) => values.map((value) => ({ dimension, value, href: `../?${new URLSearchParams({ [dimension]: value })}` }))),
+        }),
   };
   if (m.more?.length) {
     const demo = (d: { kind?: 'html'; title: string; text: string; chapters: [number, string][] }, dir: string): StackedDemo =>

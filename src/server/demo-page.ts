@@ -126,7 +126,8 @@ interface PageParts {
   /** A link above the title (say, to all demos). */
   top?: { href: string; text: string };
   /** The page's tags, by dimension, each a link (say, to the overview showing the pages with it). */
-  tags?: { dimension: string; value: string; href: string }[];
+  tags?: { dimension: string; value: string; href: string }[];  /** A page of an unlisted site: kept out of search engines, and its links send no referrer. */
+  unlisted?: true;
 }
 
 export interface DemoPageParts extends PageParts {
@@ -298,10 +299,13 @@ ${credit(language)}</main>
 `;
 }
 
+/** What an unlisted page's head says: no index, no referrer (the meta tags hold where a host sends no headers of the site's own, GitHub Pages). */
+const UNLISTED_META = '<meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">';
+
 /** A page's start, down to the demo's text: its head (with its `policy`, if it has one), the link above the title, the title, when it was shared. */
 function pageStart(p: PageParts, language: PageLanguage, policy?: string, style = '', list = ''): string {
   return `<!doctype html>
-<html lang="${language}"><head><meta charset="utf-8">${policy ? `<meta http-equiv="Content-Security-Policy" content="${policy}">` : ''}<meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="${language}"><head><meta charset="utf-8">${policy ? `<meta http-equiv="Content-Security-Policy" content="${policy}">` : ''}<meta name="viewport" content="width=device-width, initial-scale=1">${p.unlisted ? UNLISTED_META : ''}
 <title>${esc(p.tabTitle)}</title><style>${PAGE_STYLE}${style}</style></head>
 <body><main>
 ${p.top ? `<div class="top"><a href="${esc(p.top.href)}">${esc(p.top.text)}</a></div>\n` : ''}<h1>${esc(p.title)}</h1>

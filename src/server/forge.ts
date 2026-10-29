@@ -78,6 +78,8 @@ export interface Forge {
   comment(cwd: string, url: string, body: string): Promise<string | void>;
   /** A review of the PR that asks for changes (on GitHub „Request changes“), with `body`; returns its URL where the forge says. */
   requestChanges(cwd: string, url: string, body: string): Promise<string | void>;
+  /** Whether the repository at `cwd`'s origin is public, as its forge says; null where it cannot tell. */
+  visibility?(cwd: string): Promise<'public' | 'private' | null>;
 }
 
 /** A pull request a review card takes on (`Forge.contribution`). */
@@ -144,6 +146,12 @@ export const routedForge = (github: Forge, forgejo: Forge, origin: (cwd: string)
     open: async (cwd, pr) => {
       const remote = await origin(cwd);
       return (remote && !onGitHub(remote) ? forgejo : github).open(cwd, pr);
+    },
+    visibility: async (cwd) => {
+      const remote = await origin(cwd);
+      if (!remote) return null;
+      const f = onGitHub(remote) ? github : forgejo;
+      return f.visibility ? f.visibility(cwd) : null;
     },
   };
 };
@@ -320,6 +328,11 @@ export const makeGhForge = (
   async urlOf(cwd, n) {
     const at: GhAt = { cwd, ...(await repoOf(cwd)) };
     return (await run(at, 'pr', 'view', String(n), '--json', 'url', '--jq', '.url')).trim();
+  },
+  async visibility(cwd) {
+    const at: GhAt = { cwd, ...(await repoOf(cwd)) };
+    const v = (await run(at, 'repo', 'view', '--json', 'visibility', '--jq', '.visibility')).trim().toUpperCase();
+    return v === 'PUBLIC' ? 'public' : v ? 'private' : null;
   },
   async contribution(cwd, url) {
     const ref = prRef(url);

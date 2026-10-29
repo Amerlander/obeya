@@ -2065,3 +2065,19 @@ button.link:hover { text-decoration: underline; }
 .tell-hint span { flex: 1; min-width: 0; }
 .tell-hint-x { flex: none; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 3px; background: none; color: var(--muted); cursor: pointer; }
 .tell-hint-x:hover { color: var(--ink); background: var(--chip); }
+
+/* the personal demo site (Konfiguration → Demos), and setting up a repository's site */
+.personal-site { margin-top: 32px; }
+.cfg-narrow { max-width: 620px; }
+.cfg-narrow > .seg { margin-top: 4px; }
+.cfg-narrow > .hint { margin: 6px 0; }
+.personal-url { font-size: 15px; margin: 0 0 6px; }
+.personal-private { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.personal-private li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.site-setup { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.site-setup > .seg { margin-top: 0; }
+.site-setup > .hint { margin: 0; }
+.personal-actions { display: flex; gap: 8px; align-items: center; margin: 10px 0 4px; }
+.cfg-narrow > .btn.primary { margin: 4px 0 8px; }
+.site-account { display: flex; gap: 8px; align-items: center; margin: 2px 0 8px; }
+.site-account select { font: inherit; font-size: 13px; }

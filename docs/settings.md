@@ -172,7 +172,10 @@ page for something to look at; the worker picks which, and runs the app for it a
 
 - `site`: a static site Obeya keeps and deploys itself, so that "Teilen" puts a demo on a page for
   colleagues, for a host that takes a directory (Cloudflare Pages, Netlify, an S3 bucket, a
-  directory a web server serves). Without a site, "Teilen" exports a demo as a file:
+  directory a web server serves, GitHub Pages). Without a site (or without its credentials on this
+  machine), "Teilen" puts the demo on your personal demo site (Konfiguration → Demos), unlisted,
+  and without that exports it as a file. „Demo-Seite einrichten …“ in the repository's settings
+  creates a site at Cloudflare Pages or GitHub Pages and fills this in:
 
   ```json
   "site": {
@@ -189,7 +192,9 @@ page for something to look at; the worker picks which, and runs the app for it a
   `title` is the overview's heading and the pages' tab titles; a page is at `url/<slug>/`.
   `deploy` is a command line with `{dir}` for the site's directory, run in a directory under
   Obeya's home with `OBEYA_REPO` set to the repository's checkout (a program given as a path is
-  found in the repository; a script runs with Obeya's Bun). Optional: `env`, a file of
+  found in the repository; a script runs with Obeya's Bun). `obeya:github-pages <owner>/<repository>`
+  is the deploy Obeya builds in for GitHub Pages: the directory as one commit without history,
+  force-pushed to the repository's `main` with gh's login. Optional: `env`, a file of
   `KEY=value` lines relative to Obeya's home; `headers`, for reading the live site behind a login,
   `${KEY}` from `env`; `maxFile`, the largest file the host takes in bytes (25 MiB without it);
   `publish`, when a demo goes on the site: `"approved"` puts a card's latest demo there as you

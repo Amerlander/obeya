@@ -20,7 +20,9 @@ import { dimensions, shownTags, tagsOf, untagged } from '../core/page-tags';
 import type { DemoSite } from '../adapters/types';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { type Gone, siteBase, siteMissing, siteTarget } from './site';
+import { allowedHere, newToken, type PersonalSite, personalDemoSite, readPersonal } from './personal-site';
 import { artifactCopy } from './artifact-copy';
+import { GITHUB_PAGES } from './site-hosts';
 import { rereadChapters } from './demo';
 import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, ON_DISK, PAGE_WORDS, type PageLanguage } from './demo-page';
 import { type Forge, parsePrUrl } from './forge';
@@ -66,10 +68,14 @@ export interface SharePage {
   tags?: PageTags;
 }
 
-/** Where a repository's demos go: the site its settings name; with its checkout. */
+/**
+ * Where a repository's demos may go: the site its settings name (none without one), its checkout,
+ * and whether it is public (as its forge says), which lets it share on the owner's personal site.
+ */
 export interface ShareSource {
-  site: DemoSite;
+  site: DemoSite | null;
   repo: string;
+  isPublic?: boolean;
 }
 
 /**
@@ -79,6 +85,8 @@ export interface ShareSource {
  */
 export interface ShareTarget {
   key: string;
+  /** An unlisted site (the owner's personal one): a page's place on it is `<token>/<slug>`. */
+  unlisted?: true;
   /** The card's repository checkout. */
   repo: string;
   /**
@@ -110,8 +118,12 @@ export const SHARE_CWD = 'share';
 export interface SharingOptions {
   board: Board;
   runtime: AgentRuntime;
-  /** Where the card's repository shares demos; null when it shares none. */
+  /** Where the card's repository may share demos; null while it does not run. */
   sourceFor: (card: Item) => ShareSource | null;
+  /** The owner's personal demo site on this machine; read from Obeya's home without it. */
+  personal?: () => PersonalSite | null;
+  /** The personal site as a demo site, how it is deployed (`personalDemoSite` without it; a stand-in in tests). */
+  personalSite?: (p: PersonalSite) => DemoSite;
   /** The language the card's repository names for its demos (`demo.language` of its settings); none where it names none. */
   languageFor?: (card: Item) => PageLanguage | undefined;
   /** Obeya's data directory, passed to a site's deploy as `OBEYA_HOME`; the deploy runs in a directory of it (`SHARE_CWD`). */
@@ -159,6 +171,7 @@ export class Sharing {
     const card = this.card(cardId);
     const demo = handover === undefined ? this.demo(cardId) : this.cardDemo(cardId, { handover, dir: '' });
     if (card.prototypeOf || !demo || !this.target(card)) throw new BadRequest('noShare', 'the card has no demo, or its repository shares none');
+    if (this.onPersonal(card) && !this.personalAllowed(card)) throw new BadRequest('noShare', 'the repository is private and not allowed on the personal demo site');
     const s = this.stored(cardId);
     if (s?.state) throw new BadRequest('shareBusy', 'the page is being shared or withdrawn');
     const now: DemoRef[] = s?.url ? sharedDemos(s) : [];
@@ -166,7 +179,7 @@ export class Sharing {
     const on = now.some((d) => sameDemo(d, ref));
     // with no page yet or beside the versions there, it takes along the demos it supplements
     const next = on ? now : add || !now.length ? this.beside(cardId, now, ref) : [ref];
-    this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing', next: next.map(refOf) });
+    this.set(cardId, { ...this.fresh(card, s), state: 'publishing', next: next.map(refOf) });
     const t = this.o.board.t.share;
     const said = !s?.url ? t.share : on ? t.again : add ? t.added : t.newDemo;
     this.o.board.log(cardId, 'state', 'owner', said);
@@ -206,7 +219,7 @@ export class Sharing {
     const card = this.find(cardId);
     if (!card || card.prototypeOf) return null;
     const target = this.target(card);
-    if (target && this.o.sourceFor(card)?.site.publish === 'approved') {
+    if (target && this.o.sourceFor(card)?.site?.publish === 'approved') {
       const s = this.stored(cardId);
       if (s?.notOnApproval) this.notOnPage(cardId);
       // a share under way (one the owner chose) goes out first; the latest demo after it
@@ -226,7 +239,7 @@ export class Sharing {
     if (!page || page.state === 'withdrawing') return null;
     const first = page.state === 'publishing' && page.next ? page.next[0] : page.url ? sharedDemos(page)[0] : undefined;
     // a page going out is where the site has it then; one at rest where it was published
-    const url = page.state === 'publishing' && target ? target.pageUrl(page.slug) : page.url;
+    const url = page.state === 'publishing' && target ? target.pageUrl(pathOf(page)) : page.url;
     if (!first || !url) return null;
     const kind = this.cardDemo(cardId, first)?.kind ?? sharedDemos(page).find((d) => sameDemo(d, first))?.shown.kind;
     return `${kind === 'html' ? 'Demo-Page' : 'Demo-Video'}: ${url}`;
@@ -281,7 +294,7 @@ export class Sharing {
     const ref = refOf(demo);
     if (now.some((d) => sameDemo(d, ref))) return;
     const add = demo.follows === 'supplements';
-    this.set(cardId, { ...(s ? atRest(s) : { slug: slugOf(card) }), state: 'publishing', next: (add ? this.beside(cardId, now, ref) : [ref]).map(refOf) });
+    this.set(cardId, { ...this.fresh(card, s), state: 'publishing', next: (add ? this.beside(cardId, now, ref) : [ref]).map(refOf) });
     this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.approved(!now.length ? 'share' : add ? 'add' : 'replace'));
     void serial(() => this.publish(cardId));
   }
@@ -365,7 +378,7 @@ export class Sharing {
       const source = card && this.o.sourceFor(card);
       let page = '';
       try {
-        if (source) page = readFileSync(join(siteBase(this.o.home, source.site), 'site', s.slug, 'index.html'), 'utf8');
+        if (source?.site) page = readFileSync(join(siteBase(this.o.home, source.site), 'site', s.slug, 'index.html'), 'utf8');
       } catch {}
       const version = page.includes('body.alone') ? '2026-10-16-alone' : page.includes('Newsreader') ? '2026-10-10-look' : '';
       const { outdated: _, ...rest } = s as StoredShare & { outdated?: true };
@@ -492,7 +505,7 @@ export class Sharing {
   /** Pages shared from here that another machine's deployment took offline: deployed again, a line on each card. */
   private async repair(target: ShareTarget, shared: string[], missing: string[]) {
     const ids = this.shares()
-      .filter(({ s }) => missing.includes(s.slug))
+      .filter(({ s }) => missing.includes(pathOf(s)))
       .map(({ r }) => r.id);
     const log = (kind: 'activity' | 'state' | 'error', text: string) => ids.forEach((id) => this.o.board.log(id, kind, 'obeya', text));
     const t = this.o.board.t.share;
@@ -506,10 +519,10 @@ export class Sharing {
   /** Pages withdrawn on another machine: their cards here lose their link. */
   private lost(key: string, gone: Gone[] = []) {
     for (const g of gone) {
-      const { r, s } = this.shares().find(({ s }) => s.slug === g.slug) ?? {};
+      const { r, s } = this.shares().find(({ s }) => pathOf(s) === g.slug) ?? {};
       const card = r && this.find(r.id);
       if (!r || !s?.url || s.state || !card || this.target(card)?.key !== key) continue;
-      this.set(r.id, { slug: s.slug });
+      this.set(r.id, { slug: s.slug, ...(s.token ? { token: s.token } : {}) });
       this.o.board.log(r.id, 'state', 'obeya', this.o.board.t.share.withdrawnElsewhere(g.machine));
     }
   }
@@ -536,6 +549,8 @@ export class Sharing {
       return false;
     };
     const target = this.target(card);
+    // a private repository unticked since: its page may be withdrawn, but nothing more goes out
+    if (s.personal && !this.personalAllowed(card)) return back(t.privateNotAllowed);
     let demos: SharedDemo[];
     if (s.refresh) {
       // the page as it is: a newer demo on the card waits for "Auf der Seite ersetzen" or "Zur Seite dazunehmen"
@@ -573,7 +588,7 @@ export class Sharing {
     const tags = tagsOf(pageTagsOf(this.o.board.row(cardId)), vocabulary);
     const pr = this.prOf(cardId);
     const input: SharePage = {
-      slug: s.slug,
+      slug: pathOf(s),
       ...first.shown,
       pr,
       language: this.languageOf(first.dir, card),
@@ -586,7 +601,7 @@ export class Sharing {
     this.lost(target.key, r.gone);
     if ('why' in r) return back(r.why, r.said);
     const { url } = r;
-    this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), version: pagesVersion(), ...kept(s) });
+    this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), version: pagesVersion(), ...kept(s), ...(s.personal ? { personal: true as const } : {}) });
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
     this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.retag ? t.retagged(url) : s.refresh ? t.linksPr(url) : t.shared(url));
     this.settled(cardId, { url });
@@ -646,7 +661,7 @@ export class Sharing {
     const target = this.target(card);
     const t = this.o.board.t.share;
     if (!target) return back(t.notWithdrawnNoShare);
-    const r = await target.withdraw(s.slug, this.others(cardId, target.key), (text) => this.o.board.log(cardId, 'activity', 'obeya', text));
+    const r = await target.withdraw(pathOf(s), this.others(cardId, target.key), (text) => this.o.board.log(cardId, 'activity', 'obeya', text));
     this.lost(target.key, r.gone);
     if (r.why) return back(r.why, r.said);
     this.set(cardId, { slug: s.slug, ...kept(s) });
@@ -848,9 +863,10 @@ export class Sharing {
     this.o.board.log(cardId, 'activity', 'obeya', this.o.board.t.share.tagsChosen(shownTags(tags, tags).map(([d, v]) => `${d}: ${v.join(', ')}`).join(' · ') || '–'));
   }
 
-  /** The site's vocabulary of tags for the card's page; none where its repository names none. */
+  /** The site's vocabulary of tags for the card's page; none where its repository names none, or the page is on the personal site. */
   private vocabulary(card: Item): PageTags | undefined {
-    const v = this.o.sourceFor(card)?.site.tags;
+    if (this.onPersonal(card)) return undefined;
+    const v = this.o.sourceFor(card)?.site?.tags;
     return v && dimensions(v).length ? v : undefined;
   }
 
@@ -867,17 +883,73 @@ export class Sharing {
       .filter(({ r }) => r.id !== cardId)
       .flatMap(({ r, s }) => {
         const card = this.find(r.id);
-        return s.url && s.state !== 'withdrawing' && card && this.target(card)?.key === key ? [s.slug] : [];
+        return s.url && s.state !== 'withdrawing' && card && this.target(card)?.key === key ? [pathOf(s)] : [];
       })
       .sort();
   }
 
-  /** Where the card's pages go; null when its repository shares none, or its site's credentials are not on this machine. */
+  /**
+   * Where the card's page goes: where it is, once it is out or going out; else its repository's
+   * site, where this machine can deploy to it, else the owner's personal site, where the repository
+   * may share there (public, or ticked). Null where none takes it: its demos are exported.
+   */
   private target(card: Item): ShareTarget | null {
+    const s = this.stored(card.id);
+    if (s?.url || s?.state) return s.personal ? this.personalTarget(card) : this.ownTarget(card);
+    return this.ownTarget(card) ?? (this.personalAllowed(card) ? this.personalTarget(card) : null);
+  }
+
+  /** The card's repository's own site, where this machine has its credentials. */
+  private ownTarget(card: Item): ShareTarget | null {
     const src = this.o.sourceFor(card);
-    if (!src || siteMissing(this.o.home, src.site)) return null;
+    if (!src?.site || siteMissing(this.o.home, src.site)) return null;
     const language = this.o.languageFor?.(card);
     return siteTarget(src.site, src.repo, this.o.home, this.o.board.t.share, language ? { language } : {});
+  }
+
+  /**
+   * The owner's personal site, unlisted, where this machine is connected to it and has its
+   * credentials; none for a page that went out on another personal site (this machine was connected
+   * to another one since).
+   */
+  private personalTarget(card: Item): ShareTarget | null {
+    const src = this.o.sourceFor(card);
+    const p = this.personal();
+    if (!src || !p) return null;
+    const url = this.stored(card.id)?.url;
+    if (url && !url.startsWith(`${p.url.replace(/\/+$/, '')}/`)) return null;
+    const site = (this.o.personalSite ?? personalDemoSite)(p);
+    if (siteMissing(this.o.home, site)) return null;
+    const language = this.o.languageFor?.(card);
+    return siteTarget(site, src.repo, this.o.home, this.o.board.t.share, { unlisted: { secret: p.secret }, ...(language ? { language } : {}) });
+  }
+
+  private personal(): PersonalSite | null {
+    return this.o.personal ? this.o.personal() : readPersonal(this.o.home);
+  }
+
+  /** Whether the card's repository may share on the personal site: a public one, or a private one the owner ticked. */
+  private personalAllowed(card: Item): boolean {
+    const src = this.o.sourceFor(card);
+    const p = this.personal();
+    return !!src && !!p && allowedHere(p, src.repo, !!src.isPublic);
+  }
+
+  /** Whether the card's page is, or would go, on the personal site. */
+  private onPersonal(card: Item): boolean {
+    const s = this.stored(card.id);
+    return s?.url || s?.state ? !!s.personal : !this.ownTarget(card) && this.personalAllowed(card);
+  }
+
+  /**
+   * The card's share as a publish starts from it: a page that is out stays where it is; a new one
+   * goes where `target` says, on the personal site with the random part of its address, drawn once
+   * for the card, so its link stays the same when it is shared again.
+   */
+  private fresh(card: Item, s: StoredShare | null): StoredShare {
+    const { personal: _, ...base } = s ? atRest(s) : { slug: slugOf(card) };
+    if (s?.url) return atRest(s);
+    return this.onPersonal(card) ? { ...base, personal: true, token: base.token ?? newToken() } : base;
   }
 
   private card(cardId: string): Item {
@@ -1001,8 +1073,11 @@ function atRest({ state: _, refresh: __, again: ___, next: ____, retag: _____, .
   return s;
 }
 
-/** What a share keeps of the owner's choices when its page is made anew or withdrawn. */
-const kept = (s: StoredShare): Pick<StoredShare, 'notOnApproval'> => (s.notOnApproval ? { notOnApproval: true } : {});
+/** What a share keeps when its page is made anew or withdrawn: the owner's choices, and the random part of its address on the personal site. */
+const kept = (s: StoredShare): Pick<StoredShare, 'notOnApproval' | 'token'> => ({ ...(s.notOnApproval ? { notOnApproval: true as const } : {}), ...(s.token ? { token: s.token } : {}) });
+
+/** The page's place on its site: its slug, on the personal site behind the random part of its address. */
+const pathOf = (s: StoredShare) => (s.personal && s.token ? `${s.token}/${s.slug}` : s.slug);
 
 /** What names a demo among the card's: its handover, and its directory. */
 const refOf = (d: DemoRef): DemoRef => ({ ...(d.handover !== undefined ? { handover: d.handover } : {}), dir: d.dir });
@@ -1048,6 +1123,8 @@ export const commandWords = (line: string): string[] => [...line.matchAll(/"([^"
 export function scriptArgv(words: string[], repoPath: string): string[] {
   if (!words.length) return [];
   let [program, ...rest] = words as [string, ...string[]];
+  // bunx is Obeya's own Bun too: an installation of Obeya may have no bunx on the PATH
+  if (program === 'bunx') return [process.execPath, 'x', ...rest];
   program = expandHome(program);
   const script = /\.(m?[jt]sx?|cjs)$/.test(program);
   if ((script || /[\\/]/.test(program)) && !isAbsolute(program)) program = resolve(repoPath, program);
@@ -1069,7 +1146,15 @@ export function siteIncomplete(site: DemoSite): string | null {
 export function siteProblem(site: DemoSite, repoPath: string): string | null {
   const incomplete = siteIncomplete(site);
   if (incomplete) return incomplete;
-  const argv = scriptArgv(commandWords(site.deploy), repoPath);
+  const words = commandWords(site.deploy);
+  // the deploy Obeya builds in: a GitHub repository, pushed to with gh's login
+  if (words[0] === GITHUB_PAGES) {
+    if (!/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/.test(words[1] ?? '')) return `demo.site.deploy: ${GITHUB_PAGES} expects <owner>/<repository>`;
+    return Bun.which('gh') ? null : `demo.site.deploy: ${GITHUB_PAGES} needs gh, which is not on the PATH`;
+  }
+  // bunx runs as Obeya's own Bun
+  if (words[0] === 'bunx') return words.length > 1 ? null : 'demo.site.deploy: bunx without a package';
+  const argv = scriptArgv(words, repoPath);
   const program = argv[0] === process.execPath ? argv[1] : argv[0];
   if (!program) return 'demo.site.deploy: the deploy command is empty';
   if (isAbsolute(program)) return existsSync(program) ? null : `demo.site.deploy: the deploy command's program ${program} does not exist`;

@@ -10,9 +10,12 @@ shared, the line holds the link, "Link kopieren" and "Nicht mehr teilen".
 
 #### Where a demo goes
 
-With a complete demo site in the repository's settings (see Static sites), "Teilen" publishes the
-demo on a page there at once, without a hold; "Nicht mehr teilen" withdraws it as easily. Without
-one, it exports a file (see Export without a site). Pages go out one change at a time through one
+Where a site takes the demo, "Teilen" publishes it on a page there at once, without a hold; "Nicht
+mehr teilen" withdraws it as easily. The site is the repository's own (see Static sites) where this
+machine can deploy to it, else the owner's personal one (see The personal site) where the repository
+may share there. Without either, it exports a file (see Export without a site). A page stays on the
+site it went out on: later versions, a withdrawal and the PR's link go there, even once the other
+site would take a new page. Pages go out one change at a time through one
 queue for all canvases, which resumes after a restart. The slug comes from the card's title and id
 once and stays, so the link survives republishing. The deploy's output goes into the card's log; a
 failure is logged as an error and leaves the card as it was.
@@ -259,8 +262,93 @@ shown as a list of titles and URLs, put on the clipboard as `text/html` (links i
 document) and as Markdown (`- [Title](URL)`) in `text/plain`, as text alone where the browser lacks
 `ClipboardItem`. It all runs in an inline script; the site stays static.
 
-A machine without the site's `env` file exports, with a line naming the missing file; once placed,
-it counts when the owner comes back. A site without `env` deploys with the machine's own login.
+A machine without the site's `env` file shares on the personal site where it may, else exports, with
+a line naming the missing file; once placed, it counts when the owner comes back. A site without `env` deploys with the machine's own login.
+
+#### Setting up a repository's site
+
+Where a repository has no site, its settings offer „Demo-Seite einrichten …“: the owner picks the
+host, Obeya creates the site there in the background (the dialog shows its last line, a login in the
+browser may take minutes) and fills in `demo.site`, which „Speichern“ then takes over. Such a site is
+listed, like any repository's. Cloudflare Pages: a project `<repository>-demos` (with a suffix where
+the name is taken), through wrangler in the account of a site this machine deploys to already, as the
+owner picks it („wie bei demos.example.dev“, each account once; its credentials go into the new site's
+env file), or with the machine's own `wrangler login`, which opens the browser. The choice is shown,
+since a machine may deploy to sites of several accounts, a work account among them. wrangler runs in an
+empty directory of its own and creates a Pages project with `--force`: without it, wrangler 4.15x
+hands `pages project create` on to Workers, which made a Worker of the directory it ran in
+(2026-10-29, Obeya's checkout). A new project's address resolves only once something is deployed
+there, so the setup deploys a blank page and waits up to about two minutes for the address to answer;
+before that, the first share could not read the site and would refuse. GitHub Pages: a public repository `<repository>-demos` under gh's account, with Pages
+turned on for its `main`, and the built-in deploy as the deploy line.
+
+GitHub Pages takes no directory upload, so Obeya builds its deploy in: a deploy line
+`obeya:github-pages <owner>/<repository>` commits the site's directory as a single commit without
+history and force-pushes it to the repository's `main`, so videos do not pile up in it. git runs with
+gh's token in its environment (an `http.extraheader`), never on the command line; in a repository
+made afresh for each deploy, with nothing of the machine's git configuration that could leave files
+out or stop the commit (ignores, hooks, signing); `.nojekyll` keeps Jekyll from dropping files. It
+runs as programs with their arguments, so it works on Windows and Linux. GitHub takes files up to 100
+MiB and sites up to about 1 GB; its build takes a minute or so, so the check after a deploy waits
+about two minutes.
+
+#### The personal site
+
+The owner's personal site is one per person, in Obeya's home (`personal-site.json`: host, address,
+the host's project, the manifest's secret directory, the env file, the private repositories ticked),
+not in any repository: the site is a repository's setting, but credentials belong to a person. It
+takes every repository without a site of its own, and every one whose site this machine lacks the
+credentials for: a contributor's Obeya on Obeya's own repository shares there, and the PR gets the
+link as any page's (see The page and the pull request).
+
+A public repository shares there at once; its forge says whether it is public (gh, the Forgejo API).
+A private one, or one whose forge cannot tell (no remote, a folder), shares there only once the owner
+ticks it: the export box on its cards says the repository is private and offers „Demos dieses
+Repositorys auf meiner persönlichen Seite teilen“, and the configuration lists the ticked ones with ×
+to untick. A repository whose site publishes on approval does so on the personal site too.
+
+The personal site is unlisted, always; a repository's site is listed, always; there is no setting for
+it. Unlisted means:
+
+- no overview, no feed, no tag links on the pages, no link to the site's root;
+- a page lies at `<token>/<slug>/`: the slug for reading, the token (16 letters and digits, about 82
+  bits) for not guessing; it is drawn once per card, on its first share there, and kept through a
+  withdrawal, so sharing again gives the same link;
+- the root, and the answer to every address the site lacks (`404.html`, which Cloudflare and GitHub
+  Pages serve), are a blank page, so neither the root nor the level above a page lists anything;
+- the manifest lies in a secret directory (`<secret>/obeya-site.json`, about 128 bits) that only the
+  owner's machines know: at the root it would list every page;
+- every page says `noindex, nofollow` and `no-referrer` in meta tags (GitHub Pages sends no headers
+  of the site's), and `_headers` sends `X-Robots-Tag` and `Referrer-Policy` for every file where the
+  host reads it, so a click on „Aufgenommen mit Obeya“ does not pass the address on. No `robots.txt`:
+  a `Disallow` keeps search engines from reading the `noindex`, so a link found in a public PR could
+  still show as a bare address.
+
+Unlisted is not protected: whoever has a link can pass it on, and in a public PR GitHub's search finds
+it. The setup says so in one sentence; for real protection a project's site stays behind a login
+(Cloudflare Access).
+
+Konfiguration → Demos sets it up („Persönliche Demo-Seite“, the host to choose, „Einrichten“), and a
+card's export box, while there is none, offers „Persönliche Demo-Seite einrichten“, which opens it
+there. The setup runs in the background and shows its last line:
+
+- Cloudflare Pages (free account): a project `obeya-<user name>` (a suffix where taken), as for a
+  repository's site; its address is the one Cloudflare names (`…pages.dev`).
+- GitHub Pages: a private repository `obeya-demos` (a number where the name is taken; an existing one
+  is never reused) under gh's account, with Pages turned on, deployed by the built-in deploy. Obeya
+  never makes a public repository for it: its file list would show every page's token. It creates it
+  with `--private`, checks GitHub's answer on its visibility before anything goes in, and stops
+  otherwise. Pages from a private repository needs GitHub Pro: an account on the free plan is refused
+  before anything is created, and a refusal when Pages is turned on gives GitHub's reason (the
+  repository stays, private); both offer Cloudflare instead.
+
+Another machine of the owner's joins with a connection code: „Verbindungscode kopieren“ on one gives
+`obeya-site:` and the site, its secret directory and the env file's values, base64url-encoded;
+„Mit vorhandener Seite verbinden“ on the other takes it and writes them under its home. Without
+credentials in it (a site deploying with the machine's own login), the other machine deploys with its
+own `wrangler login` or `gh auth login`. Its first share pulls the pages from the live site as any
+machine's does (see Several machines on one site). „Von diesem Rechner entfernen“ asks once more: the
+pages and the project stay, and only a connected machine can withdraw them.
 
 #### Several machines on one site
 
@@ -336,6 +424,22 @@ another machine withdrew loses its link here, with a line naming the machine.
   the AI makes up (a filter with near-duplicates).
 - **Links are copied one by one and as the filtered list** (owner, 2026-10-28): a demo goes to one
   person, or several on one topic into a mail, release notes or to a customer.
+- **A personal site per person, beside the repositories' sites** (owner, 2026-10-28): the site is a
+  repository's setting, but credentials are a person's, so a contributor (or a second project without
+  a site) had only an export. Rejected: an Obeya service to share on (`share.obeya.si`), now or
+  later (costs, moderation, duties of a host; Cloudflare or GitHub Pages leave a contributor one step
+  of a few minutes).
+- **The personal site is unlisted, also for public repositories** (owner, 2026-10-28): an overview of
+  all projects is another kind of public than links one would have to collect, and an unlisted page
+  can go to one recipient. Rejected: a setting for listed or unlisted (a repository's site is listed,
+  the personal one is not).
+- **A private repository shares on the personal site only once ticked** (owner, 2026-10-28), so
+  nothing of a private project goes out unasked; one whose forge cannot tell counts as private.
+- **Both hosts for the personal site, and GitHub Pages only from a private repository** (owner,
+  2026-10-28): Cloudflare lists no files and is free; GitHub needs only gh's login but Pro, since a
+  public repository would list every token. Rejected: a public repository on the free plan.
+- **No `robots.txt` on the unlisted site** (2026-10-28): its `Disallow` hides the `noindex` from
+  search engines, which may then list a linked address without its content.
 - **Several machines pull before they push** (2026-10-09). Rejected: refusing deploys while the live
   site has pages missing here (leaves copying by hand), and a shared storage folder or bucket as the
   source (pushes the problem onto each user's setup).

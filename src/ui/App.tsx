@@ -15,7 +15,7 @@ import { replyOn, setReply } from './reply';
 import { ArchivePill } from './archive';
 import { useBarFit } from './barFit';
 import { UsagePill } from './usage';
-import { ConfigDialog, Problem, showCanvasesSection, showDevicesSection, showRepoClones } from './config';
+import { ConfigDialog, Problem, showCanvasesSection, showDemosSection, showDevicesSection, showRepoClones } from './config';
 import { PhoneDialog } from './access';
 import { Setup } from './setup';
 import { Phone, phoneView } from './phone';
@@ -1632,6 +1632,10 @@ function Canvas({
                   onReadPlan={(project, mark) => readPlan(project, { mark })}
                   onClones={(repo, field) => {
                     showRepoClones({ canvas: snapshot.canvas.id, repo, field });
+                    setCOn(true);
+                  }}
+                  onDemoSites={() => {
+                    showDemosSection();
                     setCOn(true);
                   }}
                   onEdit={onEdit}

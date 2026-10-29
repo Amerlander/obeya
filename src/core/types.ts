@@ -833,7 +833,8 @@ export interface Share {
   /** The card's latest demo is not on the page. */
   stale?: boolean;
   /** The page shows the card's demo, but pages changed since it was published ("Erneut teilen"): those changes, oldest first. */
-  outdated?: PageChangeId[];
+  outdated?: PageChangeId[];  /** The page is on the owner's personal demo site, unlisted. */
+  unlisted?: true;
 }
 
 /** One line in a card's log. */
@@ -939,6 +940,10 @@ export interface RepoRef {
   shareOnApproval?: true;
   /** With `share`: the site's vocabulary of tags (`demo.site.tags`), which a card's page takes its tags from. */
   shareTags?: PageTags;
+  /** With `share`: its demos go to the owner's personal site, unlisted (it has no site of its own this machine can deploy to). */
+  shareUnlisted?: true;
+  /** Without `share`: why the owner's personal site does not take its demos: none is set up on this machine, or the repository is private and not ticked for it. */
+  sharePersonal?: 'none' | 'private';
   /** Its approved work goes out as a pull request (else it lands on the default branch of the Obeya checkout). */
   pullRequests?: boolean;
   /** Its `origin` is on a server, where others may open pull requests („Review PR #5“). */
@@ -1623,6 +1628,35 @@ export interface AppSettings {
  * directory (one subdirectory per page, and the overview), writes the pages with its own templates
  * and runs the deploy command after each change.
  */
+/** A demo site being set up at a host, as the configuration follows it: its last lines, and how it ended. */
+export interface SiteSetupJob {
+  host: 'cloudflare' | 'github';
+  running: boolean;
+  lines: string[];
+  error?: string;
+  /** The host the dialog offers where this one refused (GitHub Pages from a private repository without Pro). */
+  offer?: 'cloudflare';
+  /** A repository's site once it is set up, for its settings. */
+  site?: DemoSite;
+}
+
+/** The owner's personal demo site on this machine, as Konfiguration → Demos shows it. */
+export interface PersonalSiteView {
+  site: {
+    host: 'cloudflare' | 'github';
+    url: string;
+    project: string;
+    /** What a page's address looks like there (a fresh random part, for the dialog). */
+    example: string;
+    /** The env file with its credentials this machine lacks, relative to Obeya's home. */
+    needs?: string;
+  } | null;
+  job?: SiteSetupJob;
+  /** The private repositories ticked to share there. */
+  privateRepos: { path: string; name: string }[];  /** The sites this machine deploys to on Cloudflare, each of another account: a new site may go into one of them. */
+  cloudflareAccounts: string[];
+}
+
 export interface DemoSite {
   /** The overview's heading, and the pages' tab titles. */
   title: string;
