@@ -20,7 +20,7 @@ import { dimensions, shownTags, tagsOf, untagged } from '../core/page-tags';
 import type { DemoSite } from '../adapters/types';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { type Gone, siteBase, siteMissing, siteTarget } from './site';
-import { allowedHere, newToken, type PersonalSite, personalDemoSite, readPersonal } from './personal-site';
+import { allowedHere, approvedHere, newToken, type PersonalSite, personalDemoSite, readPersonal } from './personal-site';
 import { artifactCopy } from './artifact-copy';
 import { GITHUB_PAGES } from './site-hosts';
 import { rereadChapters } from './demo';
@@ -188,7 +188,8 @@ export class Sharing {
 
   /**
    * The owner approved the card's work. Where its repository's site publishes on approval
-   * (`demo.site.publish`), its latest demo goes on its page unless it is there: beside the versions
+   * (`demo.site.publish`), or the owner ticked the repository for it on the personal site its page
+   * goes to, its latest demo goes on its page unless it is there: beside the versions
    * there where its worker said it only supplements them (with the demos it supplements), else in
    * their place. It goes out through
    * the queue like any share, so the landing does not wait for it; a failure goes into the card's
@@ -219,7 +220,7 @@ export class Sharing {
     const card = this.find(cardId);
     if (!card || card.prototypeOf) return null;
     const target = this.target(card);
-    if (target && this.o.sourceFor(card)?.site?.publish === 'approved') {
+    if (target && this.publishesOnApproval(card)) {
       const s = this.stored(cardId);
       if (s?.notOnApproval) this.notOnPage(cardId);
       // a share under way (one the owner chose) goes out first; the latest demo after it
@@ -246,7 +247,7 @@ export class Sharing {
   }
 
   /**
-   * „Mit der Freigabe teilen“, where the card's site publishes on approval: whether approving the
+   * „Mit der Freigabe teilen“, where approving shares (see `approved`): whether approving the
    * card puts its latest demo on its page. It stays with the card across handovers.
    */
   onApproval(cardId: string, on: boolean) {
@@ -933,6 +934,15 @@ export class Sharing {
     const src = this.o.sourceFor(card);
     const p = this.personal();
     return !!src && !!p && allowedHere(p, src.repo, !!src.isPublic);
+  }
+
+  /** Whether approving the card puts its latest demo on its page: its site publishes on approval, or the personal site, where its page goes, has its repository ticked for it. */
+  private publishesOnApproval(card: Item): boolean {
+    const src = this.o.sourceFor(card);
+    if (!src) return false;
+    if (src.site?.publish === 'approved') return true;
+    const p = this.personal();
+    return !!p && approvedHere(p, src.repo) && this.onPersonal(card);
   }
 
   /** Whether the card's page is, or would go, on the personal site. */

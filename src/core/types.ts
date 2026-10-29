@@ -936,11 +936,17 @@ export interface RepoRef {
   share?: boolean;
   /** The demo site of its settings needs an env file this machine lacks (as the settings name it, relative to Obeya's home): demos are exported meanwhile. */
   shareNeeds?: { site: string; file: string };
-  /** With `share`: its site publishes each approved card's latest demo by itself (`demo.site.publish`), unless the card opts out. */
+  /**
+   * With `share`: each approved card's latest demo goes on the page by itself, unless the card opts
+   * out: its site publishes on approval (`demo.site.publish`), or it shares on the owner's personal
+   * site and the owner ticked it there for that.
+   */
   shareOnApproval?: true;
   /** With `share`: the site's vocabulary of tags (`demo.site.tags`), which a card's page takes its tags from. */
   shareTags?: PageTags;
-  /** With `share`: its demos go to the owner's personal site, unlisted (it has no site of its own this machine can deploy to). */
+  /** With `share`: its demos go to the owner's personal site (it has no site of its own this machine can deploy to). */
+  shareOnPersonal?: true;
+  /** With `shareOnPersonal`: the personal site is unlisted. */
   shareUnlisted?: true;
   /** Without `share`: why the owner's personal site does not take its demos: none is set up on this machine, or the repository is private and not ticked for it. */
   sharePersonal?: 'none' | 'private';
@@ -1659,7 +1665,14 @@ export interface PersonalSiteView {
    * those ticked), each with whether it is ticked to share there and whether it has a site of its
    * own this machine deploys to.
    */
-  privateRepos: { path: string; name: string; allowed: boolean; ownSite?: true }[];  /** The sites this machine deploys to on Cloudflare, each of another account: a new site may go into one of them. */
+  privateRepos: { path: string; name: string; allowed: boolean; ownSite?: true }[];
+  /**
+   * The repositories that share there (and those ticked for it), each with whether each approved
+   * card's latest demo goes there by itself: ticked here, or by its site's settings (`bySettings`),
+   * which the tick here cannot change.
+   */
+  approvedRepos: { path: string; name: string; on: boolean; bySettings?: true }[];
+  /** The sites this machine deploys to on Cloudflare, each of another account: a new site may go into one of them. */
   cloudflareAccounts: string[];
 }
 

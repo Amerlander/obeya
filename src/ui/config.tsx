@@ -1415,6 +1415,21 @@ function PersonalSiteBlock({ on }: { on: boolean }) {
               <p className="hint">{p.privateNone}</p>
             )}
           </Field>
+          <Field label={p.approvedRepos} hint={p.approvedHint}>
+            {view.approvedRepos.length ? (
+              <div className="personal-private">
+                {view.approvedRepos.map((r) => (
+                  <label key={r.path} className="c-check" title={r.path}>
+                    <input type="checkbox" checked={r.on} disabled={r.bySettings} aria-label={p.approvedOn(r.name)} onChange={(e) => void act(() => api.shareApprovedRepo(r.path, e.target.checked))} />
+                    {r.name}
+                    {r.bySettings && <span className="hint"> · {p.bySettings}</span>}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="hint">{p.approvedNone}</p>
+            )}
+          </Field>
           <Field label={p.codeLabel} hint={p.codeHint}>
             <div className="personal-actions">
               <button className="btn small" disabled={!connection} onClick={() => copy(connection)}>

@@ -176,6 +176,15 @@ latest demo not on the page has a checkbox „Mit der Freigabe teilen“ (ticked
 which then reads „Jetzt teilen“. Unticked, approving shares nothing and the log says so. The choice
 stays with the card and takes effect at once.
 
+A repository that shares on the personal site does the same once the owner ticks it for that, a
+choice of the owner's that stays on this machine, not in the repository's settings (colleagues share
+on their own personal sites): Konfiguration → Demos lists, under the personal site, the repositories
+of the canvases that share there, each with „Mit der Freigabe teilen“ (one whose site publishes on
+approval ticked and fixed, „laut seinen Einstellungen“). Until it is ticked, its cards show the same
+checkbox unticked where the ticked one would be; ticking it there ticks the repository. A page that
+went out on the repository's own site stays out of it. The connection code does not carry the ticks,
+and connecting again keeps them.
+
 On approval, before landing, the latest demo goes on the page as the owner's click would: a new page,
 or beside the versions where its worker said it supplements (with what it supplements, see Several
 versions on one page), else in their place, after any share
@@ -298,7 +307,8 @@ about two minutes.
 #### The personal site
 
 The owner's personal site is one per person, in Obeya's home (`personal-site.json`: host, address,
-the host's project, the manifest's secret directory, the env file, the private repositories ticked),
+the host's project, the manifest's secret directory, the env file, the private repositories ticked,
+the repositories ticked to share with the approval),
 not in any repository: the site is a repository's setting, but credentials belong to a person. It
 takes every repository without a site of its own, and every one whose site this machine lacks the
 credentials for: a contributor's Obeya on Obeya's own repository shares there, and the PR gets the
@@ -309,7 +319,8 @@ A private one, or one whose forge cannot tell (no remote, a folder), shares ther
 ticks it: the export box on its cards says the repository is private and offers „Demos dieses
 Repositorys auf meiner persönlichen Seite teilen“, and the configuration lists the private
 repositories of the canvases (and those ticked) with a checkbox each, ticked or not, to change it
-there too. A repository whose site publishes on approval does so on the personal site too.
+there too. A repository whose site publishes on approval does so on the personal site too; one
+without a site the owner may tick for it on the personal site (see Publishing on approval).
 
 Where the personal site lives decides whether it is listed, without a setting of its own: on
 Cloudflare Pages and from a private GitHub repository it is unlisted; from a public GitHub repository,
@@ -411,6 +422,9 @@ another machine withdrew loses its link here, with a line naming the machine.
   request as much as a video.
 - **Sharing takes effect at once** (2026-10-02). Rejected: an 8 s hold with "Doch nicht";
   withdrawing is as easy.
+- **Sharing on approval on the personal site is the owner's choice per repository** (owner,
+  2026-10-29): the site is theirs, so their colleagues need not follow it. Rejected: the repository's
+  settings (it would go for everyone who works in it), one choice for the whole personal site.
 - **On approval, sharing only when „Mit der Freigabe teilen“ stays ticked** (2026-10-20), with
   „Jetzt teilen“ beside it, so a demo can go to colleagues for review before approval. Rejected:
   approval always sharing.

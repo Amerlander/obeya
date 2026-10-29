@@ -209,7 +209,19 @@ export function Detail(p: Props) {
   const sharing = !!item.demo && !item.prototypeOf;
   const shareBox = (demo: Demo) =>
     shares?.share || item.share ? (
-      <ShareBox item={item} demo={demo} act={act} onApproval={!!shares?.shareOnApproval} vocabulary={shares?.shareTags} unlisted={item.share ? !!item.share.unlisted : !!shares?.shareUnlisted} />
+      <ShareBox
+        item={item}
+        demo={demo}
+        act={act}
+        onApproval={!!shares?.shareOnApproval}
+        // on the personal site, the tick that is not there yet turns sharing with the approval on for the whole repository
+        approveAll={shares?.shareOnPersonal && !shares.shareOnApproval ? () => run(async () => {
+          await api.shareApprovedRepo(shares.path, true);
+          if (item.notOnApproval) await api.act(item.id, { action: 'shareOnApproval', on: true });
+        }, { close: false }) : undefined}
+        vocabulary={shares?.shareTags}
+        unlisted={item.share ? !!item.share.unlisted : !!shares?.shareUnlisted}
+      />
     ) : (
       <ExportBox item={item} demo={demo} run={run} needs={shares?.shareNeeds} personal={shares?.sharePersonal} repoPath={shares?.path} onDemoSites={p.onDemoSites} />
     );
@@ -2252,7 +2264,7 @@ function PrBox({ pr }: { pr: PullRequest }) {
  * the latest demo not on the page has „Mit der Freigabe teilen“ until the card is approved, and
  * "Teilen" reads „Jetzt teilen“: the owner may share it before approving, or not on approving.
  */
-function ShareBox({ item, demo, act, onApproval, vocabulary, unlisted }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void>; onApproval: boolean; vocabulary?: PageTags | undefined; unlisted: boolean }) {
+function ShareBox({ item, demo, act, onApproval, approveAll, vocabulary, unlisted }: { item: Item; demo: Demo; act: (a: CardAction, done: ActDone) => Promise<void>; onApproval: boolean; approveAll?: (() => Promise<void>) | undefined; vocabulary?: PageTags | undefined; unlisted: boolean }) {
   const [copied, copy] = useCopy(2000);
   const s = item.share;
   const all = [...(item.demos ?? []), ...(item.demo ? [item.demo] : [])];
@@ -2268,11 +2280,12 @@ function ShareBox({ item, demo, act, onApproval, vocabulary, unlisted }: { item:
   const along = mine < 0 ? [] : withSupplemented(all, mine).slice(0, -1).map((d) => all.indexOf(d) + 1);
   // a latest demo from before handovers were kept is on the page unless the page shows an earlier one
   const here = !!s?.url && (demo.handover !== undefined ? !!s.on?.includes(demo.handover) : latest && !s.stale);
-  // approving would put this demo on the page: the owner may opt out, or share it now
-  const later = onApproval && latest && !here && !busy && !item.landing && (item.state === 'working' || item.state === 'waiting');
-  const approval = later && (
-    <label className="share-check" title={t.share.onApprovalHint}>
-      <input type="checkbox" checked={!item.notOnApproval} onChange={(e) => go({ action: 'shareOnApproval', on: e.target.checked })} />
+  // approving would put this demo on the page: the owner may opt out, or share it now; where it would not, the owner may have it do so for the repository
+  const before = latest && !here && !busy && !item.landing && (item.state === 'working' || item.state === 'waiting');
+  const later = onApproval && before;
+  const approval = (later || (before && approveAll)) && (
+    <label className="share-check" title={later ? t.share.onApprovalHint : t.share.onApprovalRepoHint}>
+      <input type="checkbox" checked={later && !item.notOnApproval} onChange={(e) => (later ? go({ action: 'shareOnApproval', on: e.target.checked }) : void approveAll?.())} />
       {item.contribution ? t.review.onApproval : t.share.onApproval}
     </label>
   );

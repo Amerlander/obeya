@@ -6,7 +6,7 @@ import { basename, resolve } from 'node:path';
 import type { DemoSite } from '../adapters/types';
 import type { PersonalSiteView, SiteSetupJob } from '../core/types';
 import { BadRequest } from './board';
-import { allowPrivate, cloudflareDeploy, connect, connectionCode, envFileFor, newToken, type PersonalSite, personalDemoSite, readPersonal, type SiteHost, writeEnv, writePersonal } from './personal-site';
+import { allowPrivate, cloudflareDeploy, connect, connectionCode, envFileFor, newToken, type PersonalSite, personalDemoSite, readPersonal, shareApproved, type SiteHost, writeEnv, writePersonal } from './personal-site';
 import { siteMissing } from './site';
 import { cloudflareAccounts, type Exec, GITHUB_PAGES, GITHUB_PAGES_MAX, setupCloudflare, setupGithub, SetupRefused } from './site-hosts';
 import { messageOf } from '../core/text';
@@ -15,8 +15,12 @@ export interface SiteSetupOptions {
   home: string;
   /** The personal site changed: every canvas tells its cards where they share now. */
   changed: () => void;
-  /** The repositories on the canvases: their checkouts, names, whether public and whether they have a site of their own this machine deploys to. */
-  repos?: () => { path: string; name: string; isPublic: boolean; ownSite: boolean }[];
+  /**
+   * The repositories on the canvases: their checkouts, names, whether public, whether they have a
+   * site of their own this machine deploys to, whether they share on the personal site, and whether
+   * their site's settings publish on approval.
+   */
+  repos?: () => { path: string; name: string; isPublic: boolean; ownSite: boolean; onPersonal?: boolean; siteApproved?: boolean }[];
   /** Who runs Obeya here, for the personal site's name at Cloudflare. */
   user?: string;
   /** Runs wrangler, gh and git; a stand-in in tests. */
@@ -47,6 +51,7 @@ export class SiteSetup {
         : null,
       ...(job ? { job } : {}),
       privateRepos: this.privateRepos(p),
+      approvedRepos: this.approvedRepos(p),
       cloudflareAccounts: this.accounts(),
     };
   }
@@ -62,6 +67,19 @@ export class SiteSetup {
       out.push({ path, name: r.name, allowed: ticked.includes(path), ...(r.ownSite ? { ownSite: true as const } : {}) });
     }
     for (const path of ticked) if (!out.some((x) => x.path === path)) out.push({ path, name: basename(path), allowed: true });
+    return out;
+  }
+
+  /** The repositories on the canvases that share on the personal site, and those ticked to share there with the approval that are not on them, each once. */
+  private approvedRepos(p: PersonalSite | null): PersonalSiteView['approvedRepos'] {
+    const ticked = (p?.approved ?? []).map((x) => resolve(x));
+    const out: PersonalSiteView['approvedRepos'] = [];
+    for (const r of this.o.repos?.() ?? []) {
+      const path = resolve(r.path);
+      if (!r.onPersonal || out.some((x) => x.path === path)) continue;
+      out.push({ path, name: r.name, on: !!r.siteApproved || ticked.includes(path), ...(r.siteApproved ? { bySettings: true as const } : {}) });
+    }
+    for (const path of ticked) if (!out.some((x) => x.path === path)) out.push({ path, name: basename(path), on: true });
     return out;
   }
 
@@ -133,6 +151,19 @@ export class SiteSetup {
     if (typeof path !== 'string' || typeof on !== 'boolean') throw new BadRequest('invalid', 'expected { path, on }');
     try {
       allowPrivate(this.o.home, path, on);
+    } catch (e) {
+      throw new BadRequest('invalid', messageOf(e));
+    }
+    this.o.changed();
+    return this.view();
+  }
+
+  /** Ticks or unticks a repository for sharing each approved card's latest demo on the personal site by itself. */
+  approved(input: unknown): PersonalSiteView {
+    const { path, on } = (input ?? {}) as { path?: unknown; on?: unknown };
+    if (typeof path !== 'string' || typeof on !== 'boolean') throw new BadRequest('invalid', 'expected { path, on }');
+    try {
+      shareApproved(this.o.home, path, on);
     } catch (e) {
       throw new BadRequest('invalid', messageOf(e));
     }

@@ -38,7 +38,7 @@ import { commandsOf, heldGroups, withoutHeld } from './trust';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
-import { allowedHere, personalDemoSite, readPersonal } from './personal-site';
+import { allowedHere, approvedHere, personalDemoSite, readPersonal } from './personal-site';
 import { dimensions } from '../core/page-tags';
 import { type DueRestart, Workers } from './workers';
 import { branchSetting, type CardWorkspaces, defaultBranch, type FileAt, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, markFolder, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
@@ -2657,7 +2657,7 @@ function siteOf(adapter: RepoAdapter): DemoSite | null {
 }
 
 /** What the UI is told about sharing a repository's demos. */
-const SHARE_FIELDS = ['share', 'shareNeeds', 'shareOnApproval', 'shareTags', 'shareUnlisted', 'sharePersonal'] as const;
+const SHARE_FIELDS = ['share', 'shareNeeds', 'shareOnApproval', 'shareTags', 'shareOnPersonal', 'shareUnlisted', 'sharePersonal'] as const;
 type ShareRef = Pick<RepoRef, (typeof SHARE_FIELDS)[number]>;
 
 /**
@@ -2676,8 +2676,9 @@ function shareRef(site: DemoSite | null, home: string, path: string, isPublic: b
   const p = readPersonal(home);
   if (!p || siteMissing(home, personalDemoSite(p))) return { ...needs, sharePersonal: 'none' };
   if (!allowedHere(p, path, isPublic)) return { ...needs, sharePersonal: 'private' };
-  // a repository whose site publishes each approved demo does so on the personal site too
-  return { share: true, ...(p.secret ? { shareUnlisted: true as const } : {}), ...(site?.publish === 'approved' ? { shareOnApproval: true as const } : {}) };
+  // a repository whose site publishes each approved demo does so on the personal site too, as does one the owner ticked there for it
+  const approved = site?.publish === 'approved' || approvedHere(p, path);
+  return { share: true, shareOnPersonal: true, ...(p.secret ? { shareUnlisted: true as const } : {}), ...(approved ? { shareOnApproval: true as const } : {}) };
 }
 
 /** Tells the UI about sharing on the repository what `share` says, in place of what it was told before. */

@@ -139,7 +139,7 @@ export function serve(
     ? new SiteSetup({
         home: config.home,
         changed: () => canvases.all().forEach((c) => c.personalSiteChanged()),
-        repos: () => canvases.all().flatMap((c) => c.repos.map((r) => ({ path: r.info.path, name: r.ref.name, isPublic: !!r.isPublic, ownSite: !!r.ref.share && !r.ref.shareUnlisted }))),
+        repos: () => canvases.all().flatMap((c) => c.repos.map((r) => ({ path: r.info.path, name: r.ref.name, isPublic: !!r.isPublic, ownSite: !!r.ref.share && !r.ref.shareOnPersonal, onPersonal: !!r.ref.shareOnPersonal, siteApproved: r.site?.publish === 'approved' }))),
         user: (() => {
           try {
             return userInfo().username;
@@ -512,7 +512,7 @@ export function serve(
         PUT: needs(config, async (c, req) => saveAgents(c.home, await req.json())),
       },
       // the owner's personal demo site: set up at a host, connected with another machine's code, removed
-      // from this machine; the private repositories ticked for it
+      // from this machine; the private repositories ticked for it, and those that share there with the approval
       '/api/personal-site': {
         GET: needs(sites, (x) => x.view()),
         DELETE: needs(sites, (x) => x.remove()),
@@ -521,6 +521,7 @@ export function serve(
       '/api/personal-site/connect': { POST: needs(sites, async (x, req) => x.connect(await req.json())) },
       '/api/personal-site/code': { GET: needs(sites, (x) => x.code()) },
       '/api/personal-site/private': { POST: needs(sites, async (x, req) => x.allow(await req.json())) },
+      '/api/personal-site/approved': { POST: needs(sites, async (x, req) => x.approved(await req.json())) },
       // „Demo-Seite einrichten“ for a repository: started, followed, and taken into its settings
       '/api/site-setup': {
         GET: needs(sites, (x, req) => ({ job: x.repoJob(new URL(req.url).searchParams.get('path') ?? '') })),

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { MESSAGES } from '../core/messages';
 import { Board } from './board';
 import { Store } from './db';
-import { allowedHere, allowPrivate, connect, connectionCode, newToken, type PersonalSite, readPersonal, writePersonal } from './personal-site';
+import { allowedHere, allowPrivate, approvedHere, connect, connectionCode, newToken, type PersonalSite, readPersonal, shareApproved, writePersonal } from './personal-site';
 import type { SharePage, ShareSource } from './share';
 import { Sharing } from './share';
 import { MANIFEST, siteKey, siteTarget } from './site';
@@ -227,6 +227,32 @@ describe('sharing without a site of the repository', () => {
     expect(existsSync(join(deployed(), MANIFEST))).toBe(true);
   });
 
+  test('approving shares nothing there until the owner ticks the repository for it, then the latest demo goes out unless the card opts out', async () => {
+    const id = card();
+    expect(sharing.approved(id)).toBeNull();
+    expect(board.item(id)!.share).toBeUndefined();
+    shareApproved(home, repo, true);
+    expect(sharing.approved(id)).toStartWith(`Demo-Video: ${URL_}`);
+    expect((await settled(id, 'shared'))?.url).toStartWith(URL_);
+    // the card that opted out stays here
+    const other = card();
+    sharing.onApproval(other, false);
+    expect(sharing.approved(other)).toBeNull();
+    expect(board.item(other)!.share?.url).toBeUndefined();
+    shareApproved(home, repo, false);
+    expect(approvedHere(readPersonal(home)!, repo)).toBe(false);
+    expect(readPersonal(home)!.approved).toBeUndefined();
+  });
+
+  test('the tick for approval does not reach a repository whose card shares on its own site', async () => {
+    shareApproved(home, repo, true);
+    const own = { title: 'Team', url: 'https://demos.example.dev', deploy: 'true' };
+    source = { site: own, repo, isPublic: true };
+    const id = card();
+    expect(sharing.approved(id)).toBeNull();
+    expect(board.item(id)!.share).toBeUndefined();
+  });
+
   test('a repository whose site this machine cannot deploy to falls back to the personal site', async () => {
     source = { site: { title: 'Team', url: 'https://demos.example.dev', deploy: 'true', env: 'sites/team/cloudflare.env' }, repo, isPublic: true };
     const id = card();
@@ -439,9 +465,16 @@ test('the canvas says where a repository without a site shares: nowhere without 
     canvas.personalSiteChanged();
     expect(ref()).toMatchObject({ share: true, shareUnlisted: true });
     expect(ref().sharePersonal).toBeUndefined();
+    expect(ref().shareOnPersonal).toBe(true);
+    expect(ref().shareOnApproval).toBeUndefined();
+    // ticked on the personal site, its approved cards share there by themselves
+    shareApproved(home, shop, true);
+    canvas.personalSiteChanged();
+    expect(ref()).toMatchObject({ share: true, shareOnApproval: true });
     allowPrivate(home, shop, false);
     canvas.personalSiteChanged();
     expect(ref().share).toBeUndefined();
+    expect(ref().shareOnApproval).toBeUndefined();
     // a public repository needs no tick, once its forge says so
     visibility = 'public';
     const again = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home, runtime: new FakeRuntime(), forge: { ...noForge, visibility: async () => visibility } });
@@ -454,4 +487,27 @@ test('the canvas says where a repository without a site shares: nowhere without 
   } finally {
     canvas.shutdown();
   }
+});
+
+test('the configuration lists the repositories that share on the personal site with their tick for approval, and a connection keeps the ticks', () => {
+  writePersonal(home, personal());
+  let changed = 0;
+  const repos = [
+    { path: join(dir, 'shop'), name: 'shop', isPublic: true, ownSite: false, onPersonal: true },
+    { path: join(dir, 'team'), name: 'team', isPublic: true, ownSite: false, onPersonal: true, siteApproved: true },
+    { path: join(dir, 'site'), name: 'site', isPublic: true, ownSite: true },
+  ];
+  const setup = new SiteSetup({ home, changed: () => changed++, repos: () => repos });
+  expect(setup.view().approvedRepos).toEqual([
+    { path: join(dir, 'shop'), name: 'shop', on: false },
+    { path: join(dir, 'team'), name: 'team', on: true, bySettings: true },
+  ]);
+  expect(setup.approved({ path: join(dir, 'shop'), on: true }).approvedRepos[0]).toMatchObject({ name: 'shop', on: true });
+  expect(changed).toBe(1);
+  expect(() => setup.approved({ path: 1, on: true })).toThrow();
+  // the code carries no ticks; connecting again keeps this machine's
+  const code = connectionCode(home, readPersonal(home)!);
+  expect(JSON.parse(Buffer.from(code.slice('obeya-site:'.length), 'base64url').toString()).approved).toBeUndefined();
+  connect(home, code);
+  expect(approvedHere(readPersonal(home)!, join(dir, 'shop'))).toBe(true);
 });

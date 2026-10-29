@@ -191,13 +191,15 @@ export const api = {
   /** Tests a cloud service with the check's sentence and hears through it from then on; a key left out keeps the saved one. */
   useCloudVoice: (service: { preset: CloudPreset; baseUrl?: string; model?: string; key?: string }) => call<VoiceSetupView>('PUT', '/api/voice-setup/cloud', service),
   useLocalVoice: () => call<VoiceSetupView>('DELETE', '/api/voice-setup/cloud'),
-  /** The owner's personal demo site on this machine: set up at a host, connected by code, removed; private repositories ticked for it. */
+  /** The owner's personal demo site on this machine: set up at a host, connected by code, removed; repositories ticked for it (private ones, those that share with the approval). */
   personalSite: () => call<PersonalSiteView>('GET', '/api/personal-site'),
   setUpPersonalSite: (host: 'cloudflare' | 'github', how: SiteHow = {}) => call<PersonalSiteView>('POST', '/api/personal-site/setup', { host, ...how }),
   connectPersonalSite: (code: string) => call<PersonalSiteView>('POST', '/api/personal-site/connect', { code }),
   personalSiteCode: () => call<{ code: string }>('GET', '/api/personal-site/code'),
   removePersonalSite: () => call<PersonalSiteView>('DELETE', '/api/personal-site'),
   allowPrivateRepo: (path: string, on: boolean) => call<PersonalSiteView>('POST', '/api/personal-site/private', { path, on }),
+  /** Ticks or unticks a repository whose approved cards put their latest demo on the personal site by themselves. */
+  shareApprovedRepo: (path: string, on: boolean) => call<PersonalSiteView>('POST', '/api/personal-site/approved', { path, on }),
   /** „Demo-Seite einrichten“ for a repository: started, followed, and taken into its settings. */
   setUpRepoSite: (path: string, host: 'cloudflare' | 'github', name: string, how: SiteHow = {}) => call<{ job: SiteSetupJob | null }>('POST', '/api/site-setup', { path, host, name, ...how }),
   repoSiteSetup: (path: string) => call<{ job: SiteSetupJob | null }>('GET', `/api/site-setup?path=${encodeURIComponent(path)}`),

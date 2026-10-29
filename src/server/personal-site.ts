@@ -7,8 +7,9 @@
 // can list, it is listed like a repository's site.
 //
 // A private repository shares there only once the owner ticked it (`private`), so nothing of a
-// private project goes out unasked. A second machine joins with a connection code, which carries
-// the site and its credentials.
+// private project goes out unasked. A repository the owner ticked for it (`approved`) puts each
+// approved card's latest demo there by itself, as a repository's site does with `publish`. A
+// second machine joins with a connection code, which carries the site and its credentials.
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -39,6 +40,8 @@ const shape = z
     env: z.string().optional(),
     /** The private repositories (their checkouts' paths) the owner allowed to share here. */
     private: z.array(z.string()).optional(),
+    /** The repositories (their checkouts' paths) whose approved cards put their latest demo here by themselves. */
+    approved: z.array(z.string()).optional(),
   })
   .strict();
 
@@ -93,13 +96,22 @@ export const cloudflareDeploy = (project: string) => `bunx wrangler@4 pages depl
 /** Whether the repository at `path` may share on the personal site: a public one always, a private one once ticked. */
 export const allowedHere = (p: PersonalSite, path: string, isPublic: boolean) => isPublic || (p.private ?? []).some((x) => resolve(x) === resolve(path));
 
+/** Whether the repository at `path` puts each approved card's latest demo on the personal site by itself. */
+export const approvedHere = (p: PersonalSite, path: string) => (p.approved ?? []).some((x) => resolve(x) === resolve(path));
+
 /** Ticks or unticks a private repository for the personal site. */
-export function allowPrivate(home: string, path: string, on: boolean): PersonalSite {
+export const allowPrivate = (home: string, path: string, on: boolean) => tick(home, 'private', path, on);
+
+/** Ticks or unticks a repository for sharing its approved demos on the personal site by themselves. */
+export const shareApproved = (home: string, path: string, on: boolean) => tick(home, 'approved', path, on);
+
+function tick(home: string, list: 'private' | 'approved', path: string, on: boolean): PersonalSite {
   const p = readPersonal(home);
   if (!p) throw new Error('no personal demo site on this machine');
-  const others = (p.private ?? []).filter((x) => resolve(x) !== resolve(path));
-  const next = { ...p, private: on ? [...others, resolve(path)] : others };
-  if (!next.private.length) delete (next as Partial<PersonalSite>).private;
+  const others = (p[list] ?? []).filter((x) => resolve(x) !== resolve(path));
+  const paths = on ? [...others, resolve(path)] : others;
+  const { [list]: _, ...rest } = p;
+  const next: PersonalSite = paths.length ? { ...rest, [list]: paths } : rest;
   writePersonal(home, next);
   return next;
 }
@@ -141,7 +153,7 @@ const CODE_PREFIX = 'obeya-site:';
  */
 export function connectionCode(home: string, p: PersonalSite): string {
   const env = p.env && existsSync(join(home, p.env)) ? parseEnv(readFileSync(join(home, p.env), 'utf8')) : undefined;
-  const { private: _, env: __, ...site } = p;
+  const { private: _, approved: ___, env: __, ...site } = p;
   return CODE_PREFIX + Buffer.from(JSON.stringify({ ...site, ...(env ? { credentials: env } : {}) })).toString('base64url');
 }
 
@@ -156,7 +168,7 @@ export function connect(home: string, code: string): { site: PersonalSite; crede
     throw new Error('the connection code is incomplete; copy it again');
   }
   const { credentials, ...rest } = raw as { credentials?: Record<string, unknown> };
-  const parsed = shape.omit({ env: true, private: true }).safeParse(rest);
+  const parsed = shape.omit({ env: true, private: true, approved: true }).safeParse(rest);
   if (!parsed.success) throw new Error('the connection code is incomplete; copy it again');
   const env = credentials && typeof credentials === 'object' ? Object.fromEntries(Object.entries(credentials).filter((e): e is [string, string] => typeof e[1] === 'string' && /^[A-Za-z_][A-Za-z0-9_]*$/.test(e[0]))) : {};
   const site: PersonalSite = { ...parsed.data };
@@ -164,9 +176,12 @@ export function connect(home: string, code: string): { site: PersonalSite; crede
     site.env = envFileFor(site.url, site.host);
     writeEnv(home, site.env, env);
   }
-  // the private repositories ticked here stay ticked
+  // the repositories ticked here stay ticked
   const before = readPersonal(home);
-  if (before?.private?.length && before.url === site.url) site.private = before.private;
+  if (before?.url === site.url) {
+    if (before.private?.length) site.private = before.private;
+    if (before.approved?.length) site.approved = before.approved;
+  }
   writePersonal(home, site);
   return { site, credentials: !!site.env };
 }
