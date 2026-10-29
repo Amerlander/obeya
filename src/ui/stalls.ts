@@ -81,29 +81,32 @@ export function watchPageStalls(send: (s: PageStall) => boolean) {
     new PerformanceObserver((list) => {
       frames.push(...(list.getEntries() as unknown as LongFrame[]));
       const old = performance.now() - SLEPT_MS;
-      while (frames.length && frames[0]!.startTime < old) frames.shift();
+      while (frames.length && frames[0]!.startTime + frames[0]!.duration < old) frames.shift();
     }).observe({ type: 'long-animation-frame', buffered: true });
   // stalls the browser may not have told the long frames of yet, and those the server has not heard
   // of yet: one during a reconnect goes out once the page is connected again
   const found: { from: number; to: number; before: string[] }[] = [];
   const unsent: PageStall[] = [];
   let last = performance.now();
+  // the browser holds a page out of view back by itself: a pause it was out of view in, however
+  // briefly, is no stall, so going out of view and back starts the count afresh
   let visible = document.visibilityState === 'visible';
+  document.addEventListener('visibilitychange', () => {
+    last = performance.now();
+    visible = document.visibilityState === 'visible';
+  });
   setInterval(() => {
     const now = performance.now();
     const from = last;
-    const seen = visible && document.visibilityState === 'visible';
     last = now;
-    visible = document.visibilityState === 'visible';
-    // the browser holds a page out of view back by itself, and a machine asleep runs nothing at all
-    if (now - from - TICK_MS >= STALL_MS && seen) found.push({ from, to: now, before: beforeOf(noted, from, now) });
+    if (now - from >= STALL_MS && visible) found.push({ from, to: now, before: beforeOf(noted, from, now) });
     while (found.length && (!supported || now - found[0]!.to >= REPORTED_MS)) {
       const f = found.shift()!;
-      const ms = f.to - f.from - TICK_MS;
       const long = supported ? framesWithin(frames, f.from, f.to) : [];
       // the ticks see a stall up to one tick short; the long frames tell its length to the millisecond
-      const length = Math.max(ms, long.reduce((sum, l) => sum + l.duration, 0));
-      if (supported ? long.length : ms < SLEPT_MS) unsent.push({ ms: Math.round(length), scripts: scriptsOf(long), before: f.before });
+      const ms = Math.max(f.to - f.from - TICK_MS, long.reduce((sum, l) => sum + l.duration, 0));
+      // and a machine asleep runs nothing at all: without long frames to tell, a very long pause is sleep
+      if (ms >= STALL_MS && (supported ? long.length : ms < SLEPT_MS)) unsent.push({ ms: Math.round(ms), scripts: scriptsOf(long), before: f.before });
     }
     while (unsent.length > KEPT) unsent.shift();
     while (unsent.length && send(unsent[0]!)) unsent.shift();

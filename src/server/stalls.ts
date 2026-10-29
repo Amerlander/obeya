@@ -50,8 +50,8 @@ function frame(f: Trace['frames'][number]): string {
 export function placeOf(t: Trace): string {
   if (!t.frames.length) return '(no JavaScript: garbage collection or the runtime itself)';
   const native = t.frames[0]!.sourceURL ? null : t.frames[0]!.name;
-  // the timing of synchronous processes below is not where the time went
-  const sourced = t.frames.filter((f) => f.sourceURL && f.sourceURL !== import.meta.path);
+  // the timing of synchronous processes (`Stalls.start`) is not where the time went
+  const sourced = t.frames.filter((f) => f.sourceURL && f.name !== 'timedSpawnSync');
   // Obeya's own code says more than a library's; a stall entirely inside one names the library's
   const own = sourced.filter((f) => !f.sourceURL!.includes('/node_modules/'));
   const shown = (own.length ? own : sourced).slice(0, FRAMES).map(frame);
@@ -99,9 +99,11 @@ export function describePageStall(s: PageStall, where: string): string[] {
 /** What a page sent of its stall, if it is one: the server takes nothing else from it, and no more than it logs. */
 export function pageStall(msg: unknown): PageStall | null {
   const m = msg as Partial<PageStall> | null;
-  if (!m || typeof m.ms !== 'number' || !(m.ms >= STALL_MS) || m.ms > 3600_000) return null;
-  const text = (s: unknown) => (typeof s === 'string' ? s.slice(0, 200) : '');
-  const scripts = (Array.isArray(m.scripts) ? m.scripts : []).slice(0, PLACES).flatMap((x) => (x && typeof x.ms === 'number' && text(x.what) ? [{ ms: x.ms, what: text(x.what) }] : []));
+  const length = (n: unknown, least: number): n is number => typeof n === 'number' && n >= least && n <= 3600_000;
+  if (!m || !length(m.ms, STALL_MS)) return null;
+  // one line each, without what a terminal would take for a command
+  const text = (s: unknown) => (typeof s === 'string' ? s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, ' ').slice(0, 200) : '');
+  const scripts = (Array.isArray(m.scripts) ? m.scripts : []).slice(0, PLACES).flatMap((x) => (x && length(x.ms, 0) && text(x.what) ? [{ ms: x.ms, what: text(x.what) }] : []));
   const before = (Array.isArray(m.before) ? m.before : []).slice(-8).map(text).filter(Boolean);
   return { ms: m.ms, scripts, before };
 }
@@ -113,6 +115,30 @@ export interface StallOptions {
   log?: (line: string) => void;
 }
 
+/** The profiler's samples since the last look, which it hands out once each; null for a Bun whose `bun:jsc` lacks the call (its types leave it out). */
+function drain(): { traces: Trace[]; intervalMs: number } | null {
+  const take = (jsc as unknown as { samplingProfilerStackTraces?: () => { traces: Trace[]; interval: number } }).samplingProfilerStackTraces;
+  if (!take) return null;
+  const { traces, interval } = take();
+  return { traces, intervalMs: interval * 1000 };
+}
+
+/**
+ * The watcher the samples go to. The profiler, once started, runs for the rest of the process, so
+ * its samples are taken out on every tick, and dropped while no watcher is there to look at them.
+ */
+let watching: Stalls | null = null;
+let ticking: ReturnType<typeof setInterval> | undefined;
+let last = 0;
+
+function tick() {
+  const now = performance.now();
+  const since = last;
+  last = now;
+  const samples = drain();
+  watching?.tick(since, now, samples);
+}
+
 /**
  * Watches the server's thread for stalls and logs them. The JavaScript engine's sampling profiler
  * samples the thread's stack on a thread of its own, also while the thread waits in a synchronous
@@ -120,19 +146,24 @@ export interface StallOptions {
  * timed by their command.
  */
 export class Stalls {
-  private timer: ReturnType<typeof setInterval> | undefined;
-  private last = 0;
   private waited: (Waited & { end: number })[] = [];
   private spawnSync: typeof Bun.spawnSync | undefined;
 
   constructor(private readonly o: StallOptions) {}
 
   start(): this {
-    jsc.startSamplingProfiler(undefined, SAMPLE_US);
-    this.drain();
+    if (!ticking) {
+      jsc.startSamplingProfiler(undefined, SAMPLE_US);
+      ticking = setInterval(tick, TICK_MS);
+      ticking.unref?.();
+    }
+    drain();
+    last = performance.now();
+    watching = this;
     const spawnSync = (this.spawnSync = Bun.spawnSync);
     const waited = this.waited;
-    Bun.spawnSync = ((...args: Parameters<typeof Bun.spawnSync>) => {
+    // by its name, the stall's places leave this frame out: the time went to the process
+    Bun.spawnSync = function timedSpawnSync(...args: Parameters<typeof Bun.spawnSync>) {
       const start = performance.now();
       try {
         return spawnSync(...args);
@@ -141,15 +172,12 @@ export class Stalls {
         const first = args[0] as string[] | { cmd: string[] };
         if (end - start >= SLOW_PROCESS_MS) waited.push({ argv: Array.isArray(first) ? first : first.cmd, ms: end - start, end });
       }
-    }) as typeof Bun.spawnSync;
-    this.last = performance.now();
-    this.timer = setInterval(() => this.tick(), TICK_MS);
-    this.timer.unref?.();
+    } as typeof Bun.spawnSync;
     return this;
   }
 
   stop() {
-    clearInterval(this.timer);
+    if (watching === this) watching = null;
     if (this.spawnSync) Bun.spawnSync = this.spawnSync;
   }
 
@@ -159,23 +187,16 @@ export class Stalls {
   }
 
   /**
-   * The samples taken since the last look; the profiler hands each out once. Bun's types leave the
-   * call out: a Bun without it gets stalls logged by their length alone.
+   * A tick that came at `now`, the one before at `since`. Late by half a second, the thread was held
+   * up; how long, the samples' span says more precisely than the ticks, which see a stall up to a
+   * tick short.
    */
-  private drain(): { traces: Trace[]; intervalMs: number } | null {
-    const take = (jsc as unknown as { samplingProfilerStackTraces?: () => { traces: Trace[]; interval: number } }).samplingProfilerStackTraces;
-    if (!take) return null;
-    const { traces, interval } = take();
-    return { traces, intervalMs: interval * 1000 };
-  }
-
-  private tick() {
-    const now = performance.now();
-    const ms = now - this.last - TICK_MS;
-    const since = this.last;
-    this.last = now;
-    const samples = this.drain();
+  tick(since: number, now: number, samples: { traces: Trace[]; intervalMs: number } | null) {
     const waited = this.waited.splice(0).filter((w) => w.end >= since);
+    if (now - since < STALL_MS) return;
+    const traces = samples?.traces ?? [];
+    const span = traces.length > 1 ? (traces.at(-1)!.timestamp - traces[0]!.timestamp) * 1000 : 0;
+    const ms = Math.max(now - since - TICK_MS, Math.min(span, now - since));
     if (ms < STALL_MS) return;
     const lines = describeStall(ms, samples?.traces ?? null, waited, samples?.intervalMs);
     if (lines) this.write(lines);

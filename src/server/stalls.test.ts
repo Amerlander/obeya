@@ -41,6 +41,9 @@ test('a page’s stall is logged with where its time went and what it took in be
   expect(pageStall({ ms: 'long' })).toBeNull();
   const s = pageStall({ type: 'stall', ms: 1300, scripts: [{ what: 'x'.repeat(500), ms: 900 }, { what: 3, ms: 1 }], before: ['snapshot (412 KB) 0.2 s before', 7], extra: true })!;
   expect(s).toEqual({ ms: 1300, scripts: [{ what: 'x'.repeat(200), ms: 900 }], before: ['snapshot (412 KB) 0.2 s before'] });
+  // a line of its own, and nothing a terminal takes for a command, are not the page's to write
+  expect(pageStall({ ms: 900, scripts: [{ what: 'a\nObeya: forged\u001b[2J', ms: -5 }, { what: 'b', ms: 1e309 }, { what: 'c\u2028d', ms: 600 }], before: ['x\ry'] })).toEqual({ ms: 900, scripts: [{ what: 'c d', ms: 600 }], before: ['x y'] });
+  expect(pageStall({ ms: 1e309, scripts: [], before: [] })).toBeNull();
   expect(describePageStall({ ms: 1300, scripts: [{ what: 'WebSocket.onmessage: (anonymous) (index.js@1204)', ms: 1100 }], before: ['snapshot (412 KB) 0.2 s before'] }, 'this machine, canvas main')).toEqual([
     'Obeya: a page (this machine, canvas main) stalled for 1.3 s; meanwhile it took no click or key',
     '  1.1 s WebSocket.onmessage: (anonymous) (index.js@1204)',
@@ -53,6 +56,18 @@ let stalls: Stalls | undefined;
 afterEach(() => {
   stalls?.stop();
   if (home) rmSync(home, { recursive: true, force: true });
+});
+
+test('a stall the ticks see short is as long as its samples span', () => {
+  const lines: string[] = [];
+  home = mkdtempSync(join(tmpdir(), 'obeya-stalls-'));
+  const stalls = new Stalls({ home, log: (l) => lines.push(l) });
+  const samples = (spanS: number) => ({ traces: Array.from({ length: 280 }, (_, i) => ({ timestamp: (i * spanS) / 279, frames: [at('render', 'board.ts', 9)] })), intervalMs: 2 });
+  // late by 560 ms: up to 100 ms of it may have come before the stall began
+  stalls.tick(0, 560, samples(0.45));
+  expect(lines).toEqual([]);
+  stalls.tick(0, 560, samples(0.54));
+  expect(lines[0]).toBe('Obeya: the server stalled for 0.5 s; meanwhile it answered no page and heard no agent');
 });
 
 test('a synchronous process that holds the server up goes into the log and stalls.log, by its command and the code that ran it', async () => {
@@ -74,4 +89,12 @@ test('a synchronous process that holds the server up goes into the log and stall
   // stopped, it leaves Bun's own spawnSync behind
   stalls.stop();
   expect(Bun.spawnSync.name).toBe('spawnSync');
+  // the profiler runs on, and a watcher started anew gets the samples of its own stalls
+  lines.length = 0;
+  stalls = new Stalls({ home, log: (line) => lines.push(line) }).start();
+  await Bun.sleep(150);
+  const t = performance.now();
+  while (performance.now() - t < 700);
+  await until(() => lines.length > 0);
+  expect(lines.some((l) => /% \(anonymous\) \(stalls\.test\.ts:\d+\)/.test(l))).toBe(true);
 });
