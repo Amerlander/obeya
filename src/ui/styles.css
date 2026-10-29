@@ -2083,3 +2083,4 @@ button.link:hover { text-decoration: underline; }
 .site-account label { display: flex; flex-direction: column; gap: 3px; }
 .site-account label:first-child { flex-direction: row; align-items: center; gap: 8px; }
 .site-account select { font: inherit; font-size: 13px; }
+.cfg-narrow > button.link { display: block; margin-top: 10px; font-size: 13px; }
