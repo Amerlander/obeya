@@ -346,7 +346,7 @@ const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.a
 // what held the server up, or a page, for the owner to notice: in this log and in the home's stalls.log
 const stalls = new Stalls({ home }).start();
 server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, updates, access, push, sources, usage, stalls);
-claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, app: !!process.env.OBEYA_APP });
+claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION });
 // the address as a one-time link that signs a browser in (owner.ts)
 const link = access.owner.link(`http://127.0.0.1:${server.port}`);
 console.log(`Obeya ${own ? `from ${own}` : VERSION} on ${link} (${source === 'file' ? configFile : 'canvases from the command line'}), agents on ${claudeExecutable() ?? 'the Claude Code the Agent SDK brings'}`);

@@ -10,8 +10,8 @@ given repositories (`--name` names it); `obeya` starts the canvases `~/.obeya/ca
 `obeya --config <file>` those of another file. Without that file (the first start) it serves no
 canvas, and the page is the setup assistant (see Setup assistant).
 
-One Obeya per home: a running one writes its port, its supervisor's pid and whether the app started
-it into `server.json` in its home, and a second start on that home says where the first runs and
+One Obeya per home: a running one writes its port and its supervisor's pid into `server.json` in
+its home, and a second start on that home says where the first runs and
 ends. An entry whose process is gone, or alive but silent for 5 s (another program got the pid), is
 stale. A supervisor restarting its server marks the entry `restarting`, and a start meanwhile waits
 up to 90 s for it, so the app started during a checkout's self-update opens that Obeya.

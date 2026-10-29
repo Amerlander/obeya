@@ -2,8 +2,8 @@
 // this program, built by scripts/build-app.ts), which the shell starts and stops.
 //
 // - One Obeya per home: when one runs on the home already ($OBEYA_HOME/server.json, written by the
-//   server), the window opens on it instead of starting a second. One the app started stops when
-//   the app quits; one started from a terminal keeps running.
+//   server), the window opens on it instead of starting a second. Whoever started it (the app, or
+//   `bun start` in a terminal), it stops when the app quits, and the app ends when it does.
 // - The server picks no port of its own: 4417 ($OBEYA_PORT) when free, else one the system hands out.
 // - Quitting stops the server through `POST /api/stop`, the way Ctrl-C does: workers in the middle
 //   of a turn pause first (at most 15 minutes), and the window shows that until the server is gone.
@@ -85,8 +85,6 @@ pub(crate) fn login_link(port: u16, next: &str, once: bool) -> String {
 pub(crate) struct Obeya {
   /// Where it answers; 0 until known.
   pub(crate) port: AtomicU16,
-  /// Started by the app (now or by an earlier run of it): quitting stops it.
-  owned: AtomicBool,
   /// Started in this run: the shell sees it end, and how (an update is installed then).
   pub(crate) child: AtomicBool,
   /// The owner quit; the server is told once it answers.
@@ -171,12 +169,12 @@ pub(crate) fn home(app: &AppHandle) -> PathBuf {
     .unwrap_or_else(|| app.path().home_dir().unwrap_or_default().join(".obeya"))
 }
 
-/// The Obeya that runs on `home` (src/server/instance.ts): its port, and whether the app started it.
-fn running(home: &Path) -> Option<(u16, bool)> {
+/// The port of the Obeya that runs on `home` (src/server/instance.ts).
+fn running(home: &Path) -> Option<u16> {
   let text = fs::read_to_string(home.join("server.json")).ok()?;
   let entry: serde_json::Value = serde_json::from_str(&text).ok()?;
   let port = u16::try_from(entry["port"].as_u64()?).ok()?;
-  answers(port).then(|| (port, entry["app"].as_bool().unwrap_or(false)))
+  answers(port).then_some(port)
 }
 
 fn pick_port() -> u16 {
@@ -290,7 +288,6 @@ fn start_server(app: &AppHandle, home: &Path, port: u16, log: &(fs::File, PathBu
   };
   cmd
     .args(["--port", &port.to_string()])
-    .env("OBEYA_APP", "1")
     .env("OBEYA_HOME", home)
     .stdin(Stdio::null())
     .stdout(log.0.try_clone()?)
@@ -316,16 +313,15 @@ pub(crate) fn no_window(cmd: &mut Command) {
 }
 
 /// Brings up the Obeya of this home (the running one, else a new server) and shows its canvas;
-/// ends the app when the server it owns has ended.
+/// ends the app when that server has ended.
 fn serve(app: AppHandle, obeya: Arc<Obeya>, updates: Arc<update::Updates>) {
   let home = home(&app);
-  let attach = |port: u16, owned: bool| {
+  let attach = |port: u16| {
     obeya.port.store(port, Ordering::SeqCst);
-    obeya.owned.store(owned, Ordering::SeqCst);
     navigate(&app, &obeya);
   };
-  if let Some((port, owned)) = running(&home) {
-    attach(port, owned);
+  if let Some(port) = running(&home) {
+    attach(port);
     return watch(&app, &obeya, &home);
   }
   let Some(log) = log_file(&home) else {
@@ -347,13 +343,12 @@ fn serve(app: AppHandle, obeya: Arc<Obeya>, updates: Arc<update::Updates>) {
       )
     }
   };
-  obeya.owned.store(true, Ordering::SeqCst);
   let started = Instant::now();
   while !answers(port) {
     if let Ok(Some(status)) = child.try_wait() {
       // another start on this home got there first: the server said so and ended
-      if let Some((port, owned)) = running(&home) {
-        attach(port, owned);
+      if let Some(port) = running(&home) {
+        attach(port);
         return watch(&app, &obeya, &home);
       }
       return fail(&app, ended(status, &log.1));
@@ -369,7 +364,7 @@ fn serve(app: AppHandle, obeya: Arc<Obeya>, updates: Arc<update::Updates>) {
     }
     thread::sleep(Duration::from_millis(150));
   }
-  attach(port, true);
+  attach(port);
   obeya.child.store(true, Ordering::SeqCst);
   match child.wait() {
     Ok(status) if status.code() == Some(update::EXIT) => update::install(&app, &updates),
@@ -386,19 +381,20 @@ fn ended(status: std::process::ExitStatus, log: &Path) -> String {
   )
 }
 
-/// An Obeya the shell did not start in this run: when it is the app's, the app ends with it.
+/// An Obeya the shell did not start in this run (an earlier run of the app did, or a terminal): the
+/// app ends with it.
 fn watch(app: &AppHandle, obeya: &Obeya, home: &Path) {
-  if !obeya.owned.load(Ordering::SeqCst) {
-    return;
-  }
   let port = obeya.port.load(Ordering::SeqCst);
   let mut silent = 0;
   loop {
     thread::sleep(Duration::from_secs(1));
     silent = if answers(port) { 0 } else { silent + 1 };
-    // a restart takes seconds and keeps the home's entry; a stop ends it for good and gives the entry up
-    let stopped = obeya.stopping.load(Ordering::SeqCst) || !home.join("server.json").exists();
-    if silent > 0 && stopped || silent > 30 {
+    // a restart keeps the home's entry, marked while new dependencies go in (up to 90 s, as a start
+    // waits for it); a stop ends it for good and gives the entry up
+    let entry = fs::read_to_string(home.join("server.json")).ok();
+    let stopped = obeya.stopping.load(Ordering::SeqCst) || entry.is_none();
+    let patience = if entry.is_some_and(|e| e.contains("\"restarting\"")) { 90 } else { 30 };
+    if silent > 0 && stopped || silent > patience {
       return app.exit(0);
     }
   }
@@ -415,11 +411,8 @@ fn navigate(app: &AppHandle, obeya: &Obeya) {
   }
 }
 
-/// The owner quits: an Obeya the app owns is told to stop, and the app waits for it (true).
+/// The owner quits: Obeya is told to stop, and the app waits for it (true).
 fn quit(app: &AppHandle, obeya: &Obeya) -> bool {
-  if !obeya.owned.load(Ordering::SeqCst) {
-    return false;
-  }
   let first = !obeya.stopping.swap(true, Ordering::SeqCst);
   match obeya.port.load(Ordering::SeqCst) {
     // still starting: told once it answers
@@ -618,7 +611,7 @@ fn main() {
     RunEvent::Reopen { .. } => show(app),
     // ended without asking (the Dock's Quit, logging out): the server is told on the way out and
     // stops on its own once its workers paused
-    RunEvent::Exit if obeya.owned.load(Ordering::SeqCst) && !obeya.stopping.load(Ordering::SeqCst) => {
+    RunEvent::Exit if !obeya.stopping.load(Ordering::SeqCst) => {
       http(obeya.port.load(Ordering::SeqCst), "POST", "/api/stop");
     }
     _ => {}

@@ -37,11 +37,11 @@ on Windows (no admin rights), an AppImage and a .deb on Linux (`app/linux.Docker
 checks them in a container on a Mac).
 
 The shell opens a window on the Obeya already running on the home, or starts the server (on 4417,
-else a free port) and shows „Obeya startet …“ until it answers. A server the app started (in this
-run or an earlier one) it stops when the app quits, as Ctrl-C would (`POST /api/stop`), and the
-window shows what the stop waits for; quitting again goes ahead at once. A server started from a
-terminal it leaves running. The app ends when its server does; a server that ends unasked shows the
-last lines of its log in a dialog. The server's output goes to `app.log` in the home. A second start
+else a free port) and shows „Obeya startet …“ until it answers. Quitting the app (Cmd+Q, the menu,
+the Dock) stops that server as Ctrl-C would (`POST /api/stop`), whoever started it (the app, in this
+run or an earlier one, or `bun start` in a terminal, which then ends too), and the window shows what
+the stop waits for; quitting again goes ahead at once. The app ends when its server does; a server
+it started in this run that ends unasked shows the last lines of its log in a dialog. The server's output goes to `app.log` in the home. A second start
 brings the window to the front. On a Mac, closing the window keeps the app in the Dock, and the
 window has no title bar: the canvas's bar holds the traffic lights and drags the window. Links
 leaving the canvas and new windows open in the default browser, as does „Im Browser öffnen“ in the
@@ -266,6 +266,10 @@ which Chrome leaves stale after a seek. Without JavaScript or the chapters file 
   for the server. Rejected: an app of a release build from the checkout, whose compiled server never
   follows the checkout; a launcher that rebuilds the shell at every start, which would make every
   start wait for cargo.
+- **Quitting the app stops the Obeya it shows, also one started from a terminal** (owner,
+  2026-10-29): to the owner, quitting the app means quitting Obeya, as Ctrl-C does in the terminal.
+  Rejected: leaving a server started from a terminal running, which made Cmd+Q close only the window
+  while the workers went on, with nothing to say so.
 - **DMG, NSIS installer, AppImage and .deb** (2026-10-06). Rejected: Flatpak and Snap, whose
   sandboxes get in the way of git, agents and the repositories. Windows on ARM once there is a
   machine to try it on.
