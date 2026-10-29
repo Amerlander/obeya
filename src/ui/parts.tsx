@@ -10,7 +10,7 @@ import type { Cam } from './camera';
 import type { Shape } from './groups';
 import { Doc, excerpt, Inline, plain } from './markdown';
 import { Body } from './message';
-import { waitedOn } from './queue';
+import { useMenuClose, waitedOn } from './queue';
 import { ClockMark, snoozeWho } from './snooze';
 import { becomesLabel, clock, shortDay, snoozeWhen, stateLabel, t } from './strings';
 
@@ -249,11 +249,13 @@ export const CardView = memo(
  */
 export function CanvasPill({ canvas, canvases, waiting }: { canvas: CanvasInfo; canvases: CanvasInfo[]; waiting: Record<string, number> }) {
   const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useMenuClose(open, box, () => setOpen(false), true);
   const home = canvas.repos[0];
   const many = canvases.length > 1;
   const elsewhere = canvases.reduce((n, c) => n + (c.id === canvas.id ? 0 : (waiting[c.id] ?? 0)), 0);
   return (
-    <div className="canvas-pill">
+    <div className="canvas-pill" ref={box}>
       <button
         className={many ? 'pill switch' : 'pill'}
         title={many ? (elsewhere ? `${t.switchCanvas} · ${t.waitingElsewhere(elsewhere)}` : t.switchCanvas) : undefined}

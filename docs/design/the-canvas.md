@@ -10,7 +10,8 @@ edge indicators, minimap, and a frosted top bar the canvas slides under.
 Left, after the canvas switcher: the archive's button (see Card lifecycle), the queue's and "Neue
 Aufgabe". The queue's button counts the waiting cards; a click lists them in turn, each with what it
 waits for, buttons to move it and a × that takes it out of the queue at once, as „Aus der Warteschlange nehmen“ on the card does (back to planned; no
-undo, starting it again is the way back); a row opens its card. Obeya's button is the rightmost (see
+undo, starting it again is the way back); a row opens its card. The switcher's, the archive's and
+the queue's lists close on a click beside them and on Esc. Obeya's button is the rightmost (see
 Sheets).
 
 Right, before the workspace pool: the usage limits of the Claude plan that Claude Code on this
