@@ -115,7 +115,7 @@ let comments: string[] = [];
 
 const forge: Forge = {
   ...noContributions,
-  comment: async (_cwd, url, body) => void comments.push(`${url} ${body}`),
+  comment: async (_cwd, url, body) => `${url}#issuecomment-${comments.push(`${url} ${body}`)}`,
   open: async () => '',
   status: async () => ({}) as never,
   body: async (_cwd, url) => {
@@ -946,7 +946,7 @@ describe('publishing on approval', () => {
     await until(() => comments.length === 1);
     expect(comments[0]).toBe(`${url} Demo-Video: ${SITE_URL}${slug(c.id)}/`);
     expect(edits).toEqual([]);
-    expect(log(c.id)).toContain('Den Link zur Demo als Kommentar an PR #5 geschrieben.');
+    expect(log(c.id)).toContain(`Den Link zur Demo als Kommentar an PR #5 geschrieben. ${url}#issuecomment-1`);
     // approved again: the same page is not linked twice
     sharing.approved(c.id);
     await Bun.sleep(50);
@@ -1059,7 +1059,7 @@ describe('the link in the pull request', () => {
     expect(meta(c.id)).toMatchObject({ title: 'CSV-Export', pr: PR });
     expect(bodies.get(PR)).toBe(`Exportiert Zählerstände.\n\nDemo-Video: ${url} ${DEMO_MARKER}\n`);
     expect(log(c.id)).toContain(`Die geteilte Seite verlinkt jetzt den Pull Request: ${url}`);
-    expect(log(c.id).at(-1)).toBe('Den Link zur Demo in die Beschreibung von Pull Request #42 eingetragen.');
+    expect(log(c.id).at(-1)).toBe(`Den Link zur Demo in die Beschreibung von Pull Request #42 eingetragen. ${PR}`);
     // once: the PR is linked, and the description is not touched again
     sharing.prOpened(c.id);
     await new Promise((r) => setTimeout(r, 50));

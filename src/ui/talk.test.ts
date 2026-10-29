@@ -68,6 +68,21 @@ test("Obeya's lines that the plan doc ticked a workstream off stand as lines: th
   ]);
 });
 
+test("Obeya's line that it linked the demo on the pull request stands, with the link, so the owner sees it without opening the steps", () => {
+  const approved = ev('state', 'owner', 'Approved. Obeya merges PR #3.');
+  const shared = ev('state', 'obeya', MESSAGES.en.share.shared('https://demos.example/pr-3/'));
+  const pr = 'https://github.com/acme/app/pull/3';
+  const commented = ev('state', 'obeya', MESSAGES.en.share.prCommented(3, `${pr}#issuecomment-1`));
+  const linked = ev('state', 'obeya', MESSAGES.de.share.prLinked(3, pr));
+  const done = ev('talk', 'worker', 'The demo is online.');
+  expect(talkTurns([approved, shared, commented, linked, done]).shown).toEqual([
+    { e: approved, steps: [], line: true },
+    { e: commented, steps: [], line: true },
+    { e: linked, steps: [], line: true },
+    { e: done, steps: [shared] },
+  ]);
+});
+
 test('a note the worker did not reply to is answered by the first words it says after it', () => {
   const read = ev('activity', 'worker', 'Liest server/export.ts');
   const note = ev('hint', 'owner', 'Bitte auch Excel.');

@@ -162,7 +162,9 @@ for an artifact; „Demo video:“/„Demo page:“ in English), replacing its o
 marker. A page shared before the PR existed is republished with the PR's link, as it showed then; a PR
 reported while the page is going out gets a second round after it. A failure goes into the card's log; the page stays shared. Withdrawing leaves the line. A review card's pull request is the contributor's: its
 description stays as it is, and once the owner approved, the page's link goes into a comment on it
-instead (`Demo-Video: <url>` in the demo's language), once per page.
+instead (`Demo-Video: <url>` in the demo's language), once per page. Either way the card's
+conversation shows a line that the link is on the PR, with the comment's or the PR's address: the
+agent only knows Obeya will put it there, and the owner should not have to look on the forge.
 
 #### The page and the landing
 

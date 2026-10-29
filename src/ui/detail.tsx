@@ -1467,10 +1467,23 @@ function Line({ turn, snoozed, ...rest }: { turn: Turn; snoozed?: Item; demoQues
     <SnoozeLine item={snoozed} e={turn.e} at={time(turn.e.at)} />
   ) : turn.line ? (
     <div className={`note ev-${turn.e.kind}`} title={turn.e.code ? turn.e.text : undefined}>
-      {time(turn.e.at)} · {eventText(turn.e)}
+      {time(turn.e.at)} · <Linked text={eventText(turn.e)} />
     </div>
   ) : (
     <Message turn={turn} {...rest} />
+  );
+}
+
+/** A line's text with its addresses as links (the comment Obeya or the agent wrote on a pull request, say). */
+function Linked({ text }: { text: string }) {
+  return text.split(/(https?:\/\/[^\s<>"]*[^\s<>".,;:!?)])/).map((part, i) =>
+    i % 2 ? (
+      <a key={i} className="link" href={part} target="_blank" rel="noreferrer">
+        {part.replace(/^https?:\/\/(www\.)?/, '')}
+      </a>
+    ) : (
+      part
+    ),
   );
 }
 

@@ -630,10 +630,10 @@ export class Sharing {
       this.commenting.add(key);
       const t = MESSAGES[this.languageOf(this.demo(cardId)?.dir ?? '', this.card(cardId))].share;
       try {
-        await this.o.forge.comment(cwd, pr, t.prComment(kind === 'html', url));
+        const at = await this.o.forge.comment(cwd, pr, t.prComment(kind === 'html', url));
         const now = contributionOf(this.o.board.row(cardId));
         if (now) this.o.board.work(cardId, { contribution: JSON.stringify({ ...now, linked: url }) });
-        this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.prCommented(n));
+        this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.prCommented(n, at || pr));
       } catch (e) {
         this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.share.prNotCommented(n, messageOf(e)));
       } finally {
@@ -645,7 +645,7 @@ export class Sharing {
       const body = withDemoLink(await this.o.forge.body(cwd, pr), url, kind, this.o.board.t);
       if (body === null) return;
       await this.o.forge.setBody(cwd, pr, body);
-      this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.prLinked(n));
+      this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.share.prLinked(n, pr));
     } catch (e) {
       this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.share.prNotLinked(n, messageOf(e)));
     }
