@@ -118,8 +118,10 @@ starten“ without scrolling.
 A card whose conversation stands alone is a conversation wide. A card with a conversation beside
 what it is about (an idea, a proposal, a task with a result) is a wide split, the conversation a
 third, as tall as its taller column, centred left of a docked sheet and keeping at least a conversation's width beside it. Each
-column scrolls on its own, the panel never. A proposal's text box grows until the reason below it
-would leave view.
+column scrolls on its own, the panel never. A Question card is its conversation alone at a card's
+width, growing with it up to the room above the microphone before it scrolls, like a split's column:
+a looked-up answer is long, and a box of fixed height left most of the window unused. A proposal's
+text box grows until the reason below it would leave view.
 
 ### Sheets
 

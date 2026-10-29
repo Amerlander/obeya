@@ -925,21 +925,25 @@ function QuestionView({ item, act, run, onTell }: { item: Item; act: (a: CardAct
         <Limited item={item} />
         {archivedOn(item)}
       </div>
-      <TalkColumn bare>
-        {item.archivedAt ? (
-          <Talk item={item} past />
-        ) : (
-          <Talk
-            item={item}
-            field={{
-              placeholder: t.question.compose,
-              quote: true,
-              onWords: async (words, images, replyTo) => onTell(words, images, 'note', replyTo),
-              onPicked: (text, _, images, replyTo) => act({ action: 'ask', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
-            }}
-          />
-        )}
-      </TalkColumn>
+      {/* the conversation alone, as tall as the room down to the microphone allows */}
+      <Split
+        main={null}
+        talk={
+          item.archivedAt ? (
+            <Talk item={item} past />
+          ) : (
+            <Talk
+              item={item}
+              field={{
+                placeholder: t.question.compose,
+                quote: true,
+                onWords: async (words, images, replyTo) => onTell(words, images, 'note', replyTo),
+                onPicked: (text, _, images, replyTo) => act({ action: 'ask', text, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),
+              }}
+            />
+          )
+        }
+      />
       <div className="actions">
         {item.archivedAt ? (
           <ArchiveButton item={item} run={run} />
@@ -2690,9 +2694,10 @@ function TaskTalk({
 }
 
 /**
- * The layout every card with a conversation shares, idea, proposal or task: what the card is about
- * on the left (brief, text, demo), the conversation on the right; the decisions go below both.
- * Without anything on the left (a task with no result yet), the conversation stands alone. `cite`:
+ * The layout every card with a conversation shares, idea, proposal, task or question: what the card
+ * is about on the left (brief, text, demo), the conversation on the right; the decisions go below
+ * both. Without anything on the left (a task with no result yet, a question), the conversation
+ * stands alone. `cite`:
  * the draft of the card's field, which text marked on the left can be quoted into.
  */
 function Split({ main, talk, className, cite }: { main: ReactNode; talk: ReactNode; className?: string; cite?: string | false }) {
