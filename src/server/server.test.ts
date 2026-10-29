@@ -12,6 +12,7 @@ import { Restarter } from './self-update';
 import { SourceUpdates } from './source-update';
 import { UsageMeter } from './usage';
 import type { NarrationHost } from './narration';
+import { Stalls } from './stalls';
 import { serve, serveNarration } from './server';
 import { artifact, asOwner, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 import { git, RECHECK_MS } from './workspaces';
@@ -976,6 +977,19 @@ describe('the usage limits in the bar', () => {
     await until(() => closed === 1);
     expect(usage.current()).toBeNull();
   });
+});
+
+test('a page that froze has its stall logged, with this machine and the canvas as where', async () => {
+  const lines: string[] = [];
+  server.stop(true);
+  server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, new Stalls({ home: dir, log: (l) => lines.push(l) }));
+  const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
+  await new Promise((r) => (ws.onopen = r));
+  ws.send(JSON.stringify({ type: 'stall', ms: 200, scripts: [], before: [] } satisfies ClientMessage));
+  ws.send(JSON.stringify({ type: 'stall', ms: 1300, scripts: [{ what: 'WebSocket.onmessage: (anonymous)', ms: 1200 }], before: [] } satisfies ClientMessage));
+  await until(() => lines.length > 0);
+  ws.close();
+  expect(lines).toEqual(['Obeya: a page (this machine, canvas main) stalled for 1.3 s; meanwhile it took no click or key', '  1.2 s WebSocket.onmessage: (anonymous)']);
 });
 
 describe('a restart that waits', () => {

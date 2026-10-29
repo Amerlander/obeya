@@ -73,6 +73,7 @@ import { DemoSpace } from './demo-space';
 import { qwen3Serve } from '../../plugin/skills/demo/lib/voices.ts';
 import { agentSetting, conversationLanguage, ownerLanguage, usageMeterView } from './settings';
 import { loginLink } from './owner';
+import { Stalls } from './stalls';
 
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -344,7 +345,9 @@ const access = new Access({ store, home, language: () => ownerLanguage(home) });
 const push = new Push({ store, home, language: () => ownerLanguage(home) });
 // while other devices may reach Obeya, the machine stays awake as long as a worker works, or the whole time
 const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.awake() === 'works' && busy().length > 0) }).start();
-server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access, push, sources, usage);
+// what held the server up, or a page, for the owner to notice: in this log and in the home's stalls.log
+const stalls = new Stalls({ home }).start();
+server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, shells, updates, access, push, sources, usage, stalls);
 claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, app: !!process.env.OBEYA_APP });
 // the address as a one-time link that signs a browser in (owner.ts)
 const link = access.owner.link(`http://127.0.0.1:${server.port}`);

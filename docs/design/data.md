@@ -39,7 +39,7 @@ owner's screenshots (`images/<canvas>/`), other files the owner dropped into a f
 (`files/<canvas>/<uuid>/<name>`), the configuration (`canvases.json`), the settings
 (`settings.json`, `demo.json`, `voice.json`), where the running Obeya answers (`server.json`), the
 `tailscale serve` entry Obeya made (`tailscale-serve.json`), the key it signs pushes with
-(`vapid.json`), the app's server log (`app.log`), voices and models (`voices/`), the workers'
+(`vapid.json`), the app's server log (`app.log`), the stalls of the server and its pages (`stalls.log`, see Running Obeya), voices and models (`voices/`), the workers'
 clones and worktrees (`workspaces/`), the Lesestand's worktrees (`read/`), the cards' undo in
 folders without git (`undo/`), the files of looked-up answers (`answers/<canvas>/<thread>/`), the
 static sites Obeya keeps (`sites/<key>/`), the env files their repositories' settings name

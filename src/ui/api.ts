@@ -4,6 +4,7 @@ import type { PushKeyView } from '../core/push-key';
 import { type Place, placeParam } from '../core/layout';
 import type { AccessView, Pairing, RemoteSetting, AgentRole, AgentSetting, CloudPreset, AgentsView, CanvasConfig, CanvasInfo, CanvasSnapshot, ClientMessage, ConfigSaved, ConfigView, CardAction, ConfigChecked, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, PersonalSiteView, SiteSetupJob, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, RepoTrust, ServerMessage, SettingsShared, SourceUpdate, SpotInput, TalkRef, AppUpdate, Theme, ThemeView, Usage, UsageMeterView } from '../core/types';
 import type { Wish } from '../core/wish';
+import { noteMessage, watchPageStalls } from './stalls';
 
 /** A request the server refused; `code` picks the owner's text, the message is the server's detail. */
 export class ApiError extends Error {
@@ -440,6 +441,13 @@ const sendHere = () => {
   if (document.visibilityState === 'visible' && ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'here' } satisfies ClientMessage));
 };
 if (typeof document !== 'undefined') {
+  // a stall of this page goes into the server's log
+  watchPageStalls((stall) => {
+    const ws = sockets.get(canvasId) ?? [...sockets.values()][0];
+    if (ws?.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify({ type: 'stall', ...stall } satisfies ClientMessage));
+    return true;
+  });
   for (const type of ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']) addEventListener(type, () => void (used = true), { capture: true, passive: true });
   setInterval(() => {
     const playing = [...document.querySelectorAll('video')].some((v) => !v.paused && !v.ended);
@@ -544,7 +552,10 @@ export function useCanvas(id = canvasId): {
         sendFocus();
       };
       ws.onmessage = (e) => {
+        const start = performance.now();
         const msg = JSON.parse(e.data) as ServerMessage;
+        // what the page took in, for a stall right after it
+        queueMicrotask(() => noteMessage(msg.type, e.data.length, start, performance.now() - start));
         // a new server process may run new code: the page loads it, and keeps what was open
         if (msg.type === 'hello') {
           if (server && server !== msg.server) reload();

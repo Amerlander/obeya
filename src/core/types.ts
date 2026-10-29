@@ -2558,7 +2558,20 @@ export type ClientMessage =
    * microphone shows them; `place`: the middle of the canvas in view and its bounds (`placeParam`),
    * where a new card goes that a command without a place of its own makes.
    */
-  | { type: 'focus'; card?: string; project?: string; target: string; title?: string; place?: string };
+  | { type: 'focus'; card?: string; project?: string; target: string; title?: string; place?: string }
+  /** This page froze: the server logs it beside its own stalls. */
+  | ({ type: 'stall' } & PageStall);
+
+/**
+ * A page that froze for `ms`: where the time went as far as the browser tells (the scripts of its
+ * long frames, longest first, e.g. „WebSocket.onmessage (index.js:1204)“), and what the page did
+ * shortly before (the server's messages it took in).
+ */
+export interface PageStall {
+  ms: number;
+  scripts: { what: string; ms: number }[];
+  before: string[];
+}
 
 /** Server → UI over the WebSocket. */
 export type ServerMessage =

@@ -284,6 +284,25 @@ and the canvases it last had. The worker requests the page anew rather than pass
 Android's Chrome marks a home-screen launch `Sec-Fetch-Site: cross-site`, and passed on it loses
 `Sec-Fetch-Mode: navigate`, so *Its own site* would refuse it. The canvas page registers no worker.
 
+#### Stalls
+
+Obeya's server runs on one thread: while it computes or waits in a synchronous call (a git command,
+say), it answers no page and hears no agent, and the canvas seems frozen. Every stall of half a
+second or more goes into the server's output and into `stalls.log` in the home, which outlives
+restarts (past 1 MB it starts afresh, the one before kept as `stalls.previous.log`). An entry gives
+the time, the stall's length, the few places in the code where most of it went with their share
+(the runtime function the thread was in, `spawnSync` or `stringify`, then the functions of Obeya
+that called it, by file and line), and each process the server waited for longer than 50 ms, by its
+command line. A pause the thread did not run in at all (the machine slept) is no stall.
+
+A page reports its own freezes of half a second or more over its WebSocket, and the server logs them
+in the same places, naming the device and the canvas: where the browser says where the time went
+(Chromium's long animation frames: the scripts by what invoked them, and style and layout), the
+largest parts; and the server's messages the page took in during the three seconds before, by type
+and size. Safari and Firefox tell only the length. A page out of view is not watched, as the
+browser holds it back by itself; one that froze while its connection was down reports once it is
+back.
+
 ### Setup assistant
 
 One list of what Obeya needs on this machine, in four parts: *Agenten* (Claude Code, its login, git,
@@ -446,6 +465,14 @@ them).
 - **No pushes while the owner uses the phone view either** (2026-10-17): they add nothing while the
   owner works through the cards there. Its hold ends the moment it goes out of view, not three
   minutes later, so what starts waiting right after the phone is locked is pushed.
+- **Stalls are always watched, with the JavaScript engine's sampling profiler running all along**
+  (2026-10-29, the owner): freezes of a few seconds came now and then (after an approval, say) and
+  could not be traced afterwards. The profiler samples the thread's stack from a thread of its own,
+  also while it waits in a synchronous call; it costs under half a percent of a core while Obeya is
+  idle and a few percent of its speed while busy. Rejected: timing chosen
+  calls only (a stall in code nobody thought of goes unnamed); profiling only on demand (the stall
+  is over by the time someone asks); a slow-request log (the page acts on a click before the
+  server answers, so a slow answer freezes nothing).
 - **Obeya restarts itself for new code on its own checkout instead of hot reloading**: workers resume
   by session id anyway; hot reloading keeps old state alive next to new code. It also restarts for
   commits made outside Obeya.

@@ -42,6 +42,7 @@ import { nonEmpty } from '../core/text';
 import { VERSION } from './resources';
 import { footerOf } from './wish';
 import { serving } from './owner';
+import { pageStall, type Stalls } from './stalls';
 
 type Req = Request & { params: Record<string, string> };
 
@@ -133,6 +134,8 @@ export function serve(
   sources?: SourceUpdates,
   /** The plan's usage limits for the bar, fetched while the owner has it show them and a page is open. */
   usage?: UsageMeter,
+  /** Where the stalls of the pages go, beside the server's own. */
+  stalls?: Stalls,
 ) {
   const canvases = Array.isArray(served) ? { all: () => served } : served;
   const sites = config
@@ -986,6 +989,12 @@ export function serve(
           const { device } = ws.data;
           if (msg.type === 'back' || msg.type === 'here') device ? push.onDevice(device) : push.here();
           if (msg.type === 'away' && device) push.away(device);
+          if (msg.type === 'stall') {
+            const stall = pageStall(msg);
+            const { device } = ws.data;
+            const where = `${device ? (access.devices().find((d) => d.id === device)?.name ?? 'another device') : 'this machine'}, canvas ${ws.data.canvas}`;
+            if (stall) stalls?.page(stall, where);
+          }
           if (msg.type === 'focus') {
             const f = { card: nonEmpty(msg.card), project: nonEmpty(msg.project), target: nonEmpty(msg.target), title: nonEmpty(msg.title) };
             focused.set(ws.data.page, { canvas: ws.data.canvas, ...Object.fromEntries(Object.entries(f).filter(([, v]) => v)), at: Date.now() });
