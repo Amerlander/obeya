@@ -1591,7 +1591,9 @@ export class Workers {
     const trailer = this.o.onApproval?.(cardId) ?? undefined;
     const result = await (direct ? this.o.workspaces.pushToMain(cardId, trailer) : this.o.workspaces.landOnMain(cardId, row.branch!, trailer));
     if ('code' in result && !result.worker) {
-      this.o.board.work(cardId, { approved_at: null });
+      // the worker hears it with its next step, so it does not tell the owner the card still waits for their approval as if nothing had happened
+      const text = `Since you handed over, the owner approved your work, but Obeya could not land it on main: ${result.detail}\n\nThat is in the way at the Obeya checkout, not in your work: the owner sees on the card what to do there, and the card waits for their approval again.`;
+      this.o.board.work(cardId, { approved_at: null, unheard: JSON.stringify([...this.unheard(cardId), { said: [], text, images: [] }] satisfies Unheard[]) });
       throw new BadRequest(result.code, result.detail);
     }
     if ('code' in result) {
