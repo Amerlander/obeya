@@ -96,6 +96,30 @@ brief names it for an HTML artifact. The demo directory is where demos are made,
 looks for them: a handover names its demo by its absolute path, and the card serves it from there
 wherever that is. A worker on a host puts its demos into the host's `~/demos` (see Hosts).
 
+#### Disk space of demos
+
+A render keeps the frames its video is cut from in its work directory (`.work/frames`, with their
+list `.work/frames.txt`), about half a gigabyte a demo, which only re-voicing needs once the video
+is made. Obeya deletes them a set time after the demo's last render: „Einzelbilder behalten“ in the
+dialog's Demos section (`keepFrames` in `demo.json`: whole days, or `always`), two weeks unless set.
+A render's last time is the newest change in its work directory (a re-voicing or a retake counts),
+and a demo a render still holds (its `render.pid` names a running process) is left alone. The rest
+of the work directory stays: the narration's clips, so a render with the same words does not
+synthesise them again (a hosted voice would be paid again), and the take's cuts, which are small.
+Obeya looks a minute after it starts, every six hours after that, and at once when the setting or
+the demo directory changes, over the renders in the demo directory (`<demo>/.work`, and
+`<demo>/<voice>/.work` of a render in another voice); demos elsewhere and on hosts are not touched.
+
+The default applies only to the Obeya in the default home (`~/.obeya`): another one (a scratch
+Obeya, a test, a render's own Obeya) shares the demo directory without sharing the owner's demo
+settings, so it deletes frames only where its own `demo.json` says so (a scratch Obeya with the
+default would go against an owner's `always`).
+
+Below the setting the section shows what the demo directory takes and how much of it is in work
+directories, counted in the background (some 30 s for two million files): after each deletion,
+and when the section is opened and the last count is older than ten minutes. The last deletion
+since Obeya started shows beside it (when, how many demos, how much freed).
+
 #### Installing voices
 
 Obeya installs Piper and Qwen3-TTS on request from the configuration dialog, which first shows what
@@ -460,6 +484,13 @@ translate or install, the first-fullscreen hint), which would catch taps meant f
   owner's machine in a file every colleague checks out); an environment variable (the skill run by
   hand would not see it, and the dialog could not show it); a symlink at `~/demos` (what users
   asked to be spared, and not without admin rights on Windows).
+- **Old demos lose their frames, not their whole work directory** (2026-10-29, issue #18): the
+  frames are nearly all of it (329 of 335 MB in one demo), and the clips beside them spare a
+  re-render with unchanged narration from synthesising again, which with a hosted voice (the hero
+  video's) costs credits each release. Deleted by time since the last render, which covers demos
+  made without a card too. Rejected: deleting when the card lands or is archived (a demo is not
+  always a card's, and a card's demos may live anywhere); deleting nothing by default (demos filled
+  hundreds of gigabytes unnoticed).
 - **Every worker gets the plugin** (2026-10-08), not only those of a repository with demo settings,
   which otherwise had no way to the skill that writes them.
 - **Demos do not listen back to their narration** (2026-10-15). Rejected: transcribing each clip and

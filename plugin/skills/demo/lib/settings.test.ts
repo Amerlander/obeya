@@ -29,6 +29,13 @@ describe('demo settings', () => {
     expect(readDemoSettings(home)).toEqual({ language: 'de', voice: 'piper' });
   });
 
+  test('keep frames a whole number of days, or always', () => {
+    const keep = (keepFrames: unknown) => tidyDemoSettings({ language: 'en', voice: 'piper', keepFrames }).keepFrames;
+    expect(keep(14)).toBe(14);
+    expect(keep('always')).toBe('always');
+    for (const v of [0, -3, 1.5, '14', 'never', null]) expect(keep(v)).toBeUndefined();
+  });
+
   test('are written to and read from the home', () => {
     writeDemoSettings({ language: 'en', voice: 'command', command: 'speak', ownVoice: true }, home);
     expect(readDemoSettings(home)).toEqual({ language: 'en', voice: 'command', command: 'speak', ownVoice: true });

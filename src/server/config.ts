@@ -34,6 +34,7 @@ import { ConfigError, readingRepo, resolveCanvas, type StartFailure } from './ca
 import type { Store } from './db';
 import { freshPath } from './path';
 import { sameRemote } from './repo';
+import type { DemoSpace } from './demo-space';
 import type { Forge } from './forge';
 import { commitShared, proposeShared, pushShared } from './shared-settings';
 import { gitCalls, gitSteps, leavingClones } from './workspaces';
@@ -231,6 +232,8 @@ export interface ConfigOptions {
   onSettings?: () => void;
   /** Where „Für alle ins Repository übernehmen“ opens its pull request. */
   forge?: Forge;
+  /** The demo directory's space and the deletion of old frames; none in tests. */
+  space?: DemoSpace;
 }
 
 /** Whether the repository has the branch, locally or as `origin`'s. */
@@ -252,6 +255,7 @@ const demoShape = z
     reference: z.string().optional(),
     keyFile: z.string().optional(),
     directory: z.string().optional(),
+    keepFrames: z.union([z.number().int().positive(), z.literal('always')]).optional(),
   })
   .strict();
 
@@ -670,6 +674,7 @@ export class Config {
       check: this.voiceCheck(settings),
       ...(this.voiceJob ? { job: this.voiceJob } : {}),
       platform: process.platform,
+      ...(this.o.space ? { space: this.o.space.view() } : {}),
     };
   }
 
@@ -682,8 +687,12 @@ export class Config {
   }
 
   saveDemo(input: unknown): DemoSettingsView {
-    writeDemoSettings(parseDemo(input), this.o.server.home);
+    const before = readDemoSettings(this.o.server.home);
+    const settings = parseDemo(input);
+    writeDemoSettings(settings, this.o.server.home);
     console.log(`Obeya: demo settings saved to ${resolve(this.o.server.home, DEMO_SETTINGS_FILE)}`);
+    // frames kept for a shorter time, or another directory: what is due goes at once
+    if (before.keepFrames !== settings.keepFrames || demoDirectory(before) !== demoDirectory(settings)) void this.o.space?.sweepSoon();
     return this.demo();
   }
 

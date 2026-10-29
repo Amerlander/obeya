@@ -2127,6 +2127,22 @@ export interface DemoSettingsView {
   job?: VoiceInstallJob;
   /** `process.platform` of the server: `say` is offered on a Mac only. */
   platform: string;
+  /** What demos take on disk, and how long their frames are kept; none where Obeya does not look after the demo directory (tests). */
+  space?: DemoSpaceView;
+}
+
+/** The demo directory's disk space (`src/server/demo-space.ts`). */
+export interface DemoSpaceView {
+  /** Days after a demo's last render that its frames are kept, as applies now; null: always. */
+  keepDays: number | null;
+  /** What applies while the demo settings name nothing; null: always. */
+  defaultDays: number | null;
+  /** Counting or deleting right now. */
+  busy: boolean;
+  /** What the demo directory took at the last count, and its renders' work directories (`.work`) of that. */
+  used?: { bytes: number; work: number; at: string };
+  /** The last deletion that found frames to delete, since Obeya started. */
+  freed?: { at: string; demos: number; bytes: number };
 }
 
 /** The owner's languages (`src/server/settings.ts`): the interface's, chosen else the system's, and the conversation's, chosen else the interface's. */

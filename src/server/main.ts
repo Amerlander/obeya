@@ -68,7 +68,8 @@ import { serve, serveNarration } from './server';
 import { LocalTranscriber, VoiceIn } from './voice';
 import { VoiceSetup } from './voice-setup';
 import { useLib } from '../../plugin/skills/demo/lib/here.ts';
-import { expandHome } from '../../plugin/skills/demo/lib/settings.ts';
+import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
+import { DemoSpace } from './demo-space';
 import { qwen3Serve } from '../../plugin/skills/demo/lib/voices.ts';
 import { agentSetting, conversationLanguage, ownerLanguage, usageMeterView } from './settings';
 import { loginLink } from './owner';
@@ -230,6 +231,8 @@ const narration = new NarrationHost({ argv: (voice, language) => qwen3Serve(voic
 // narration and nothing else, from a worker here as from one on another machine (design: Hosts)
 const narrationServer = serveNarration(narration);
 const narrationUrl = `http://127.0.0.1:${narrationServer.port}`;
+// the disk space demos take, and the frames of old renders deleted (demo-space.ts)
+const demoSpace = new DemoSpace({ home, settings: () => readDemoSettings(home), log: (line) => console.log(line) }).start();
 const config = new Config({
   file: configFile,
   source,
@@ -239,6 +242,7 @@ const config = new Config({
   server: { port: Number(values.port), home, permissionMode: values['permission-mode'], commit: commitOf() },
   narrationUrl,
   forge,
+  space: demoSpace,
   onSettings: () => {
     for (const c of live()) c.settingsChanged();
   },
@@ -306,6 +310,7 @@ welcome(home, canvases.all());
 const shutdown = (code: number) => {
   canvases?.shutdown();
   usage.stop();
+  demoSpace.stop();
   endAgentsHere();
   awake.stop();
   access.release();

@@ -55,6 +55,11 @@ export interface DemoSettings {
   keyFile?: string;
   /** Where demos go, each into a directory of its own: an absolute path or one from `~`; `DEFAULT_DEMO_DIRECTORY` when left out. */
   directory?: string;
+  /**
+   * How many days after a demo's last render Obeya keeps the frames it was cut from (`.work/frames`),
+   * which only re-voicing needs; `always` keeps them. Left out: Obeya's default (see `demo-space.ts`).
+   */
+  keepFrames?: number | 'always';
 }
 
 export const DEFAULT_DEMO_SETTINGS: DemoSettings = { language: 'de', voice: 'piper' };
@@ -96,6 +101,7 @@ export function tidyDemoSettings(input: unknown, fallbackLanguage: NarrationLang
   const given = (o.references && typeof o.references === 'object' ? o.references : { [language]: o.reference }) as Record<string, unknown>;
   const references = Object.fromEntries(LANGUAGES.flatMap((l) => (str(given[l]) ? [[l, str(given[l])]] : [])));
   if (Object.keys(references).length) out.references = references;
+  if (o.keepFrames === 'always' || (typeof o.keepFrames === 'number' && Number.isInteger(o.keepFrames) && o.keepFrames > 0)) out.keepFrames = o.keepFrames;
   return out;
 }
 

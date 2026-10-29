@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSite, type DemoVoiceCheck, type FilledClones, type PersonalSiteView, type SiteSetupJob, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type PageTags, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSpaceView, type DemoSite, type DemoVoiceCheck, type FilledClones, type PersonalSiteView, type SiteSetupJob, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type PageTags, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { lineDiff } from '../core/diff';
 import { parseTagLines, tagLines } from '../core/page-tags';
 import { LANGUAGES } from '../core/locale';
@@ -17,7 +17,7 @@ import { plain } from './markdown';
 import { demoState, GitSetup, platformName, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
 import { useFitHeight } from './fitHeight';
 import { useCopy } from './copy';
-import { failText, fileSize, pushKeyLabel, t } from './strings';
+import { failText, fileSize, pushKeyLabel, snoozeWhen, t } from './strings';
 import { applyTheme } from './theme';
 import { WishLink } from './wish';
 
@@ -1030,12 +1030,13 @@ function DemoBlock({ on }: { on: boolean }) {
       live = false;
     };
   }, [draft, installing]);
-  // an installation runs on the server: follow it until it ends
+  // an installation runs on the server, or it counts the demos' space: follow it until it ends
+  const counting = !!view?.space?.busy;
   useEffect(() => {
-    if (!on || !installing) return;
+    if (!on || !(installing || counting)) return;
     const timer = setInterval(() => api.demoSettings().then(setView, console.error), 1500);
     return () => clearInterval(timer);
-  }, [on, installing]);
+  }, [on, installing, counting]);
   useEffect(() => () => audio.current?.pause(), []);
   if (!view || !draft) return null;
   const d = t.config.demo;
@@ -1105,6 +1106,7 @@ function DemoBlock({ on }: { on: boolean }) {
             />
             {shown.directoryRelative && <p className="p-error">{d.directoryRelative}</p>}
           </Field>
+          {view.space && <KeepFrames space={view.space} value={draft.keepFrames} onChange={(v) => set('keepFrames', v)} />}
           <Field label={d.language} hint={d.languageHint}>
             <select aria-label={d.language} value={draft.language} onChange={(e) => set('language', e.target.value as NarrationLanguage)}>
               {(Object.keys(d.languages) as NarrationLanguage[]).map((l) => (
@@ -1118,8 +1120,10 @@ function DemoBlock({ on }: { on: boolean }) {
             <select
               aria-label={d.voice}
               value={draft.voice}
-              // another voice starts with its own fields, and is nobody's own until ticked; the directory stays
-              onChange={(e) => setDraft({ language: draft.language, voice: e.target.value as VoiceKind, ...(draft.directory ? { directory: draft.directory } : {}) })}
+              // another voice starts with its own fields, and is nobody's own until ticked; directory and frames stay
+              onChange={(e) =>
+                setDraft({ language: draft.language, voice: e.target.value as VoiceKind, ...(draft.directory ? { directory: draft.directory } : {}), ...(draft.keepFrames ? { keepFrames: draft.keepFrames } : {}) })
+              }
             >
               {VOICE_GROUPS.map(({ group, voices }) => (
                 <optgroup key={group} label={d.groups[group]}>
@@ -1445,6 +1449,45 @@ function PersonalSiteBlock({ on }: { on: boolean }) {
       )}
       {status && <p className="p-error">{status}</p>}
     </div>
+  );
+}
+
+/** The days choosable for keeping a demo's frames, besides one the settings name already. */
+const KEEP_CHOICES = [7, 14, 30, 90, 'always'] as const;
+
+/**
+ * How long a demo's frames stay after its last render, and what the demos take on disk: counted on the
+ * server, which the section follows while it counts. Choosing what applies anyway names nothing.
+ */
+function KeepFrames({ space, value, onChange }: { space: DemoSpaceView; value: DemoSettings['keepFrames']; onChange: (v: DemoSettings['keepFrames']) => void }) {
+  const d = t.config.demo;
+  const fallback = space.defaultDays ?? 'always';
+  const shown = value ?? fallback;
+  const choices = KEEP_CHOICES.some((c) => c === shown) ? KEEP_CHOICES : [...KEEP_CHOICES.slice(0, -1), shown, 'always' as const].sort((a, b) => (a === 'always' ? 1 : b === 'always' ? -1 : a - b));
+  const label = (c: number | 'always') => (c === fallback ? d.keepDefault(d.keepFor(c)) : d.keepFor(c));
+  const { used, freed, busy } = space;
+  return (
+    <Field label={<>{d.keepFrames} <Info text={d.keepFramesInfo} /></>}>
+      <select
+        aria-label={d.keepFrames}
+        value={String(shown)}
+        onChange={(e) => {
+          const v = e.target.value === 'always' ? 'always' : Number(e.target.value);
+          onChange(v === fallback ? undefined : v);
+        }}
+      >
+        {choices.map((c) => (
+          <option key={c} value={String(c)}>
+            {label(c)}
+          </option>
+        ))}
+      </select>
+      <p className="hint">
+        {used ? d.used(fileSize(used.bytes), fileSize(used.work)) : d.counting}
+        {used && busy && ` ${d.recounting}`}
+      </p>
+      {freed && <p className="hint">{d.freed(snoozeWhen(freed.at), freed.demos, fileSize(freed.bytes))}</p>}
+    </Field>
   );
 }
 
