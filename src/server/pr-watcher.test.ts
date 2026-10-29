@@ -441,6 +441,45 @@ describe('watching', () => {
   });
 });
 
+describe('a tool call waiting for permission', () => {
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+
+  test('after the merge, a worker finishing asks for one: the card is not merged a second time, and the question stays', async () => {
+    const id = await inPr();
+    runtime.last.call('pr_opened', { url: URL_ });
+    runtime.last.emit({ type: 'idle' });
+    status.state = 'MERGED';
+    await watcher.poll();
+    expect(state(id)).toBe('live');
+    const told = runtime.last.inbox.length;
+    // the turn the merge started cleans up, with a command the settings want confirmed
+    const answer = runtime.last.permission('Bash', { command: 'rm -rf /tmp/demo' });
+    await flush();
+    expect(state(id)).toBe('waiting:question');
+    await watcher.poll();
+    expect(state(id)).toBe('waiting:question');
+    expect(board.events(id).filter((e) => e.text === 'Pull Request gemergt. Live.')).toHaveLength(1);
+    expect(runtime.last.inbox.length).toBe(told);
+    workers.answer(id, 'Erlauben');
+    expect(await answer).toEqual({ allow: true });
+  });
+
+  test('one waiting when the PR is merged is refused, so the worker goes on and hears of the merge', async () => {
+    const id = await inPr();
+    runtime.last.call('pr_opened', { url: URL_ });
+    const answer = runtime.last.permission('Bash', { command: 'git push --force' });
+    await flush();
+    expect(state(id)).toBe('waiting:question');
+    status.state = 'MERGED';
+    await watcher.poll();
+    expect(state(id)).toBe('live');
+    const refused = await answer;
+    expect(refused.allow).toBe(false);
+    expect('message' in refused && refused.message).toContain('pull request was merged');
+    expect(runtime.last.inbox.at(-1)).toContain('pull request was merged');
+  });
+});
+
 describe('a merge that takes a while', () => {
   test('a watcher stopped meanwhile leaves the card alone, merged or refused; a card on another PR meanwhile too', async () => {
     const id = await inPr();

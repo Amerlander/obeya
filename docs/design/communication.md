@@ -182,7 +182,9 @@ SDK's `canUseTool`, the question the card waits on: the whole command, Claude Co
 „Erlauben“ and „Ablehnen“. The call waits within the worker's turn; meanwhile the worker counts as
 waiting for the owner, so a restart need not wait for it. „Erlauben“ runs it (words with it reach the
 worker next); „Ablehnen“, words alone or a note refuse it with the owner's words in the result.
-Concurrent calls are asked one after another. After a restart the question stays; answered then, an
+Concurrent calls are asked one after another. A card that moves on without the answer (its PR merged,
+a review card's PR closed) refuses the call with what happened, so the worker goes on instead of
+waiting for a question no longer on the card. After a restart the question stays; answered then, an
 allowed call runs once without asking when the resumed worker makes it again. It is no decision for
 the project's log. Claude Code's `AskUserQuestion` is refused with a pointer to `ask`.
 

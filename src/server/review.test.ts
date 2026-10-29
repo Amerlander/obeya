@@ -295,6 +295,19 @@ describe('a review card', () => {
     expect(await runtime.last.call('close_unchanged', {})).toContain('done');
     expect(board.item(id)!.state).toBe('done');
   });
+
+  test('closed while a tool call of the worker waits for permission, the call is refused and the owner asked about the card', async () => {
+    const id = await reviewCard();
+    const answer = runtime.last.permission('Bash', { command: 'gh pr checkout 5' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(board.item(id)!.need).toBe('question');
+    fake.status.state = 'CLOSED';
+    await watcher.poll();
+    const refused = await answer;
+    expect(refused.allow).toBe(false);
+    expect('message' in refused && refused.message).toContain('closed without a merge');
+    expect(board.item(id)!.question!.options).toEqual([board.t.worker.closeCard, board.t.worker.keepCard]);
+  });
 });
 
 describe('„Review PR #5“ on a canvas', () => {

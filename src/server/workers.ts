@@ -1402,6 +1402,7 @@ export class Workers {
     const c = contributionOf(row);
     if (!c) return;
     const t = this.o.board.t.worker;
+    this.refuseAsked(cardId, 'meanwhile the pull request was closed without a merge.');
     this.o.board.work(cardId, { contribution: JSON.stringify({ ...c, closed: true } satisfies StoredContribution) });
     this.o.board.log(cardId, 'state', 'obeya', t.prClosed);
     this.toOwner(cardId, { text: t.contributionClosedQuestion, options: [t.closeCard, t.keepCard] });
@@ -1867,6 +1868,7 @@ export class Workers {
    */
   merged(cardId: string, commit?: string, note = this.o.board.t.worker.merged, comments?: Comments) {
     this.bump(cardId);
+    this.refuseAsked(cardId, 'meanwhile your pull request was merged, and the card is live.');
     // a review card's PR where work lands on the local main: the checkout gets the merge, as the owner would pull it
     if (contributionOf(this.o.board.row(cardId)) && this.o.adapter.land === 'main' && this.o.remote && this.o.pullMain) void this.pullAfterMerge(cardId);
     // git reads them without blocking the server; the workspace goes only once it has (`finish`)
@@ -3755,6 +3757,15 @@ export class Workers {
       // the session ended (stopped, Obeya restarting): the question stays on the card for the next one
       signal.addEventListener('abort', () => (live.permission = undefined), { once: true });
     });
+  }
+
+  /**
+   * The card moves on without the owner's answer (its PR merged, a review card's closed) while a tool call of its
+   * worker waits for their permission: the call is refused with `why`, so that the worker's turn goes
+   * on and it hears what happened, instead of waiting for an answer to a question no longer on the card.
+   */
+  private refuseAsked(cardId: string, why: string) {
+    this.live.get(cardId)?.permission?.({ allow: false, message: `Not run: ${why} If you still need the call, make it again; the owner is asked anew.` });
   }
 
   /** The worker takes back one of its proposals by title, or marks it replaced (`s.by`): what became of it, as the tool's result. */

@@ -50,7 +50,8 @@ forge and returns.
 
 Every call to the forge (reading, merging, opening a PR, editing its description) runs without
 blocking the server. A round asks for all open PRs side by side and handles each card as its answer
-comes in, as the card is by then (one approved, stopped or closed meanwhile is left alone). A gh
+comes in, as the card is by then (one approved, stopped or closed meanwhile is left alone). A card
+whose PR is merged is not watched again, also while its worker, finishing, waits for the owner. A gh
 call gets a minute: a PR GitHub does not answer for counts as unreadable for that round and holds up
 no other card.
 

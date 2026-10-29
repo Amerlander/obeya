@@ -14,6 +14,8 @@ const READ_ERROR_AFTER_MS = 10 * 60_000;
 import type { Workers } from './workers';
 import { messageOf } from '../core/text';
 
+const watched = (state: string | undefined) => state === 'inPr' || state === 'waiting';
+
 export class PrWatcher {
   private timer: ReturnType<typeof setInterval> | undefined;
   private polling = false;
@@ -76,7 +78,8 @@ export class PrWatcher {
     try {
       const open = this.board
         .snapshot()
-        .items.filter((i) => (i.state === 'inPr' || i.state === 'waiting') && (!this.repo || i.repo === this.repo))
+        // a card whose PR is merged already may wait for the owner again (its worker asks while it finishes): it is not watched again
+        .items.filter((i) => watched(i.state) && !this.board.row(i.id).landed && (!this.repo || i.repo === this.repo))
         .flatMap((i) => {
           const url = this.prOf(i.id)?.url;
           return url ? [{ id: i.id, url }] : [];
@@ -124,7 +127,7 @@ export class PrWatcher {
    */
   private current(cardId: string, url: string): { state: string; pr: PrState } | null {
     const item = this.board.item(cardId);
-    if (this.stopped || !item || (item.state !== 'inPr' && item.state !== 'waiting')) return null;
+    if (this.stopped || !item || !watched(item.state) || this.board.row(cardId).landed) return null;
     const pr = this.prOf(cardId);
     return pr?.url === url ? { state: item.state, pr } : null;
   }
