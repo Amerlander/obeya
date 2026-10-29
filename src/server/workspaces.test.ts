@@ -241,6 +241,71 @@ describe("a follow-up's temporary worktree", () => {
   });
 });
 
+describe('the pull after a merge', () => {
+  // the machine's own git configuration may set a way of pulling: none is set unless a test sets one
+  let globalConfig: string | undefined;
+  let origin: string;
+  let checkout: string;
+  let spaces: Workspaces;
+  beforeEach(() => {
+    globalConfig = process.env.GIT_CONFIG_GLOBAL;
+    process.env.GIT_CONFIG_GLOBAL = join(dir, 'gitconfig');
+    writeFileSync(process.env.GIT_CONFIG_GLOBAL, '');
+    origin = gitRepo(join(dir, 'origin'), { 'README.md': 'hello\n', 'notes.md': 'notes\n' });
+    checkout = join(dir, 'checkout');
+    git(dir, 'clone', '--quiet', origin, checkout);
+    identify(checkout);
+    spaces = new Workspaces(new Store(':memory:'), 'c', { mode: 'clones', repoPath: checkout, dir: join(dir, 'ws') });
+  });
+  afterEach(() => {
+    if (globalConfig === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+    else process.env.GIT_CONFIG_GLOBAL = globalConfig;
+  });
+  const commit = (repo: string, file: string, text: string) => {
+    writeFileSync(join(repo, file), text);
+    git(repo, 'commit', '--quiet', '-am', `${file}: ${text.trim()}`);
+    return git(repo, 'rev-parse', 'HEAD');
+  };
+
+  test('rebases a main with commits of its own where git sets no way of pulling', async () => {
+    const own = commit(checkout, 'notes.md', 'mine\n');
+    const merged = commit(origin, 'README.md', 'merged\n');
+    const r = await spaces.pullMain();
+    expect(r).toEqual({ from: own, to: git(checkout, 'rev-parse', 'HEAD') });
+    // the owner's commit on top of the merge, no merge commit
+    expect(git(checkout, 'rev-parse', 'HEAD~1')).toBe(merged);
+    expect(git(checkout, 'log', '-1', '--format=%s')).toBe('notes.md: mine');
+    expect(git(checkout, 'rev-list', '--merges', '--count', 'HEAD')).toBe('0');
+  });
+
+  test("keeps the repository's own way of pulling", async () => {
+    git(checkout, 'config', 'pull.rebase', 'false');
+    const own = commit(checkout, 'notes.md', 'mine\n');
+    const merged = commit(origin, 'README.md', 'merged\n');
+    expect(await spaces.pullMain()).not.toHaveProperty('problem');
+    expect(git(checkout, 'rev-parse', 'HEAD^1')).toBe(own);
+    expect(git(checkout, 'rev-parse', 'HEAD^2')).toBe(merged);
+  });
+
+  test("fast-forwards a main without commits of its own, the owner's uncommitted changes kept", async () => {
+    writeFileSync(join(checkout, 'notes.md'), 'draft\n');
+    const merged = commit(origin, 'README.md', 'merged\n');
+    expect(await spaces.pullMain()).not.toHaveProperty('problem');
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(merged);
+    expect(readFileSync(join(checkout, 'notes.md'), 'utf8')).toBe('draft\n');
+  });
+
+  test('a rebase that stops on a conflict is taken back', async () => {
+    const own = commit(checkout, 'README.md', 'mine\n');
+    commit(origin, 'README.md', 'merged\n');
+    const r = await spaces.pullMain();
+    expect(r).toEqual({ problem: expect.stringContaining('README.md') });
+    expect(git(checkout, 'rev-parse', 'HEAD')).toBe(own);
+    expect(git(checkout, 'branch', '--show-current')).toBe('main');
+    expect(git(checkout, 'status', '--porcelain')).toBe('');
+  });
+});
+
 describe('clones the configuration no longer names', () => {
   let origin: string;
   let store: Store;

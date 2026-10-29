@@ -175,7 +175,10 @@ approval), its link goes into a comment on the PR once the page is online (the d
 contributor's), and Obeya merges with the repository's allowed method, squash first, pinned to the
 reviewed head. A merge the forge refuses leaves the card waiting for the owner, with the reason.
 Merged, the card is `live`, and where work lands on `main` the checkout pulls the merge as `git pull`
-does it there; a pull that stops on a conflict is undone, and the card says so. A PR closed without
+does it there. Where neither the repository nor the global git configuration sets a way of pulling
+and the local `main` has commits of its own, it pulls with a rebase, as Obeya brings its own work
+onto `main`; without commits of its own it fast-forwards, uncommitted changes outside the merge
+kept. A pull that stops on a conflict is undone, and the card says so. A PR closed without
 a merge asks the owner whether the card can go; „Ja“ closes it as done.
 
 The watcher follows review cards in every repository, also one that lands on `main`. For them the
@@ -296,6 +299,11 @@ A card no agent worked on, a prototype or an archived card has no field.
   planned, not started: the owner decides when, often after the merge it builds on. Rejected: the
   worker proposing the card (a second decision for one already made); only asking Obeya for a
   follow-up in words (it works, but is not found beside the other two choices).
+- **The pull after a merge rebases where git sets no way of pulling** (2026-10-29): without one,
+  git refuses to pull diverged branches. A way the owner set (`pull.rebase`, `pull.ff`,
+  `branch.<name>.rebase`) still decides. Rejected: rebasing whatever is set (overrides the owner's
+  choice); rebasing also where nothing diverged (git then refuses beside uncommitted changes, which a
+  fast-forward keeps); merging (a merge commit on `main` where Obeya otherwise keeps it linear).
 - **The review reads the diff before anything of it runs; its findings go to the owner** (2026-10-27),
   to the contributor only when the owner sends them.
 - **The worker keeps workspace and session until done**, so the agent that knows the change does

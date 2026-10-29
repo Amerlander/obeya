@@ -220,6 +220,22 @@ async function rebased(ws: string, base: string, upstream: string): Promise<Land
 }
 
 /**
+ * How `pullMain` pulls `origin`'s `base` into the checkout: the owner's way where their git
+ * configuration sets one (`pull.rebase`, `pull.ff`, `branch.<base>.rebase`), else as git does where
+ * nothing diverged (a fast-forward, which local changes outside it survive), and rebased where the
+ * local `base` has commits of its own, as Obeya brings its own work onto `main`: git would refuse
+ * to pick a way there.
+ */
+async function pullMode(repo: string, base: string): Promise<string[]> {
+  const set = async (key: string) => (await gitRun(repo, ['config', '--get', key])).code === 0;
+  if ((await Promise.all(['pull.rebase', 'pull.ff', `branch.${base}.rebase`].map(set))).some(Boolean)) return [];
+  await gitAsync(repo, 'fetch', '--quiet', 'origin', base);
+  const contains = async (a: string, b: string) => (await gitRun(repo, ['merge-base', '--is-ancestor', a, b])).code === 0;
+  const [behind, ahead] = await Promise.all([contains('HEAD', 'FETCH_HEAD'), contains('FETCH_HEAD', 'HEAD')]);
+  return behind || ahead ? [] : ['--rebase'];
+}
+
+/**
  * Adds `trailer` (`Demo-Video: <url>`) to the message of the workspace's last commit, the one that
  * lands, unless it has it already (a landing tried before). A commit that cannot be amended lands
  * without it.
@@ -1060,7 +1076,8 @@ export class Workspaces implements CardWorkspaces {
   /**
    * After a pull request was merged on the forge where work lands on the local main (a review
    * card's): the checkout gets the merge from `origin` as `git pull` does, the owner's own way of
-   * pulling (rebase or merge) kept, one landing at a time. A pull that fails is undone and says why.
+   * pulling (rebase or merge) kept, else rebased (`pullMode`), one landing at a time. A pull that
+   * fails is undone and says why.
    */
   pullMain(): Promise<Landed | { problem: string }> {
     return oneAtATime(landings, this.o.repoPath, async () => {
@@ -1073,7 +1090,7 @@ export class Workspaces implements CardWorkspaces {
         const busy = await Promise.all(['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD'].map((r) => gitAsync(repo, 'rev-parse', '-q', '--verify', r).then(() => r, () => null)));
         if (busy.some(Boolean)) return { problem: `the checkout is in the middle of a ${busy.find(Boolean)!.split('_')[0]!.toLowerCase().replace('cherry', 'cherry-pick')}` };
         try {
-          await gitAsync(repo, '-c', 'core.editor=true', 'pull', '--quiet', '--no-edit', 'origin', base);
+          await gitAsync(repo, '-c', 'core.editor=true', 'pull', '--quiet', '--no-edit', ...(await pullMode(repo, base)), 'origin', base);
         } catch (e) {
           // a rebase or merge that stopped on a conflict is taken back: the checkout stays as it was
           await gitAsync(repo, 'rebase', '--abort').catch(() => gitAsync(repo, 'merge', '--abort')).catch(() => {});
