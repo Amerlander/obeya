@@ -82,7 +82,10 @@ every minute), the shell runs `bun run app install` itself in the background, wh
 build in its place, and reports it to the server, which installs it without asking, as it restarts
 for landed code: once the workers paused, the server ends for the update, and the shell starts again,
 now the new build, whose server resumes the workers. A build that fails is logged to `app-build.log`
-in the home and tried again with the next change of `app/`.
+in the home and tried again with the next change of `app/`. On a Mac the bundle of the shell that
+still runs is moved aside (`Obeya (checkout).app.old-…` beside it), not removed: macOS decides on
+the microphone by the file the running program was started from and denies it once that file is
+gone. A later install removes the asides nothing has open any more.
 
 linuxdeploy rewrites the library path of every program in an AppDir, which breaks Bun's binary (its
 code sits after the ELF's end), so the server goes into the AppImage after linuxdeploy and the image
@@ -266,6 +269,13 @@ which Chrome leaves stale after a seek. Without JavaScript or the chapters file 
   for the server. Rejected: an app of a release build from the checkout, whose compiled server never
   follows the checkout; a launcher that rebuilds the shell at every start, which would make every
   start wait for cargo.
+- **A rebuilt shell leaves the running one's bundle on disk until it ends** (2026-10-29): the
+  install removed it at once, and from then until the app started again (with an Obeya started
+  from a terminal: until the owner quit it) the window got no sound from the microphone. The
+  system's check failed on the missing file; tried with a bundle of its own, moved aside it
+  passes, removed it denies. Rejected: installing the new build only once the shell ends, which
+  leaves a hand-run `bun run app install` with the same fault and the Dock's copy old after a
+  crash.
 - **Quitting the app stops the Obeya it shows, also one started from a terminal** (owner,
   2026-10-29): to the owner, quitting the app means quitting Obeya, as Ctrl-C does in the terminal.
   Rejected: leaving a server started from a terminal running, which made Cmd+Q close only the window

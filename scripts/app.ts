@@ -19,9 +19,10 @@
 // The first build takes some minutes; it goes into app/target/checkout/ and is reused after that.
 
 import { spawn } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { replace } from './app-replace';
 import { cargoPath } from './common';
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -82,37 +83,12 @@ if (!install) {
 
 if (args.includes('--build-only')) process.exit(0);
 
-/**
- * Puts `from` at `to` in one step for whoever starts it, also while the app at `to` runs (the
- * running shell installs its own new build): copied beside it first, then renamed into its place.
- */
-function replace(from: string, to: string) {
-  const fresh = `${to}.new`;
-  rmSync(fresh, { recursive: true, force: true });
-  // ditto keeps the bundle's signature and extended attributes as they are
-  const copy = process.platform === 'darwin' ? Bun.spawnSync(['ditto', from, fresh]).exitCode === 0 : (copyFileSync(from, fresh), true);
-  if (!copy) fail(`could not copy ${from}`);
-  if (process.platform === 'darwin') {
-    // a directory does not rename over another: the old one goes aside first
-    const old = `${to}.old`;
-    rmSync(old, { recursive: true, force: true });
-    if (existsSync(to)) renameSync(to, old);
-    renameSync(fresh, to);
-    rmSync(old, { recursive: true, force: true });
-  } else if (process.platform === 'win32') {
-    // Windows renames a running program but does not overwrite it
-    const old = to.replace(/\.exe$/, '.old.exe');
-    rmSync(old, { force: true });
-    if (existsSync(to)) renameSync(to, old);
-    renameSync(fresh, to);
-    try {
-      rmSync(old, { force: true });
-    } catch {
-      // still running: the next install removes it
-    }
-  } else {
-    chmodSync(fresh, 0o755);
-    renameSync(fresh, to);
+/** Puts `from` at `to`, also while the app at `to` runs (app-replace.ts). */
+function put(from: string, to: string) {
+  try {
+    replace(from, to);
+  } catch (e) {
+    fail((e as Error).message);
   }
 }
 
@@ -121,14 +97,14 @@ if (process.platform === 'darwin') {
   const apps = join(homedir(), 'Applications');
   mkdirSync(apps, { recursive: true });
   const dest = join(apps, `${NAME}.app`);
-  replace(join(built, 'bundle', 'macos', 'Obeya.app'), dest);
+  put(join(built, 'bundle', 'macos', 'Obeya.app'), dest);
   console.log(`app: installed ${dest}`);
   start = ['open', dest];
 } else if (process.platform === 'win32') {
   const dir = join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'Programs', 'Obeya checkout');
   mkdirSync(dir, { recursive: true });
   const exe = join(dir, 'obeya.exe');
-  replace(program, exe);
+  put(program, exe);
   const menu = join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
   const link = join(menu, `${NAME}.lnk`);
   const quote = (s: string) => `'${s.replace(/'/g, "''")}'`;
@@ -146,7 +122,7 @@ if (process.platform === 'darwin') {
   const dir = join(data, 'obeya-checkout');
   mkdirSync(dir, { recursive: true });
   const exe = join(dir, 'obeya');
-  replace(program, exe);
+  put(program, exe);
   const icon = join(dir, 'obeya.png');
   copyFileSync(join(APP, 'icons', '128x128@2x.png'), icon);
   const entries = join(data, 'applications');
