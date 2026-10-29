@@ -541,10 +541,11 @@ describe('the Koordinator remembers', () => {
     runtime.last.call('reply', { confirm: 'Nein.' });
     runtime.last.emit({ type: 'idle' });
     await forwarded;
-    expect(board.events(a.id).filter((e) => e.author === 'koordinator').map((e) => [e.text, !!e.reply])).toEqual([
-      ['Nein, Login ändert nur die Anmeldung.', true],
-      ['„Export“ startet.', false],
-      ['Nein.', true],
+    // the reply to what the card's agent passed on is marked, to stand under the agent's message
+    expect(board.events(a.id).filter((e) => e.author === 'koordinator').map((e) => [e.text, !!e.reply, !!e.forwarded])).toEqual([
+      ['Nein, Login ändert nur die Anmeldung.', true, false],
+      ['„Export“ startet.', false, false],
+      ['Nein.', true, true],
     ]);
   });
 

@@ -355,7 +355,7 @@ export class Commander {
     // card it stands in the conversation, where a confirmation folds away
     const reply = (confirm: string, lookUp?: { question: string; about: string | null }, wish?: Wish, waits = false) => {
       this.o.board.replyTalk(talk, confirm, lookUp, wish, waits);
-      if (card) this.o.board.log(card, 'say', 'koordinator', confirm, { ...(wish ? { wish } : {}), ...(waits ? { reply: true as const } : {}) });
+      if (card) this.o.board.log(card, 'say', 'koordinator', confirm, { ...(wish ? { wish } : {}), ...(waits ? { reply: true as const } : {}), ...(input.forwarded ? { forwarded: true as const } : {}) });
     };
     let decision: Decision;
     try {
@@ -421,7 +421,7 @@ export class Commander {
     const t = this.o.board.t;
     const confirm = t.voice.held(t.when(this.heldUntil));
     const card = h.focus.card && this.o.board.item(h.focus.card) ? h.focus.card : undefined;
-    if (!this.held.has(talk) && card) this.o.board.log(card, 'say', 'koordinator', confirm, { reply: true });
+    if (!this.held.has(talk) && card) this.o.board.log(card, 'say', 'koordinator', confirm, { reply: true, ...(h.input.forwarded ? { forwarded: true as const } : {}) });
     this.held.set(talk, h);
     const until = new Date(this.heldUntil).toISOString();
     for (const [id, { focus, input }] of this.held) this.o.board.holdTalk(id, { until, reading: { focus, input } });

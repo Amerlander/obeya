@@ -13,7 +13,11 @@ under it after a dashed line as „Übergabe“); and what the Koordinator looke
 them mark state changes (started, pull request, approved, landed, the demo's link put on the pull
 request, stopped, errors, usage limit); an address in them is a link (the comment on the pull
 request, say). Everything else (tool calls, thoughts, status
-lines, Obeya's notes) folds away as „Verlauf“ under the agent's next message. A note the worker
+lines, Obeya's notes) folds away as „Verlauf“ under the agent's next message. Obeya's reply to what
+the agent passed on (`to_obeya`) answers a step in that „Verlauf“, so it stands under that message,
+with what Obeya says after it until then (the answer it looked up); while that message has not come
+yet, below the agent at work. The owner's words or a state line before the message keep it where it
+came, below the agent's steps up to there. A note the worker
 answered without `reply` counts as answered by its next words, unless a reply follows before the
 owner says more. Once no agent works on the card and no question is open, steps after the last
 message stand where they happened, the agent's last words among them as its message. A card that was
@@ -314,6 +318,11 @@ image.
   step, so it knows where they were read and can take them back. Rejected: passing a note straight
   into the session; Obeya learned only at turn end what it took, and the SDK takes one back only by
   a control request.
+- **Obeya's reply to a passed-on request under the agent's message** (owner, 2026-10-29): the agent
+  passes the owner's words on and then says so; standing where it was logged, Obeya's „Moment, ich
+  sehe nach“ came above the agent's message that triggered it. The passing-on step folds under that
+  message, so the reply follows it. Rejected: holding the reply back in the server until the
+  agent's message (it would be lost in a restart, and each kind of agent would need it).
 - **Words read after an open question stand below it** (2026-10-22), also while it waits at the
   end. Rejected: holding them back until the owner answers, which keeps from the worker what it
   could take in at once.

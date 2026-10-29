@@ -887,6 +887,11 @@ export interface CardEvent {
    * back): it stands in the conversation, where the confirmation of actions folds away.
    */
   reply?: true;
+  /**
+   * Obeya's reply to what the card's agent passed on from the owner's words (`to_obeya`): it answers
+   * a step of the agent's, so it stands under the agent's message that step leads to.
+   */
+  forwarded?: true;
 }
 
 /** Obeya's line that a worker started on the card afresh: what it handed over before belongs to an earlier run. */

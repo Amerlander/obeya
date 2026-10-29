@@ -439,10 +439,12 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN new_repo TEXT; ALTER TABLE talk ADD COLUMN moved TEXT;',
   // what a card's worker last heard of its demo's page (JSON `PageHeard` in workers.ts)
   'ALTER TABLE cards ADD COLUMN page_heard TEXT;',
+  // Obeya's reply on a card to what its agent passed on from the owner's words (`to_obeya`)
+  'ALTER TABLE events ADD COLUMN forwarded INTEGER;',
 ];
 
-const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply';
-type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'unread' | 'readAfter' | 'wish' | 'reply'> & {
+const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply, forwarded';
+type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'unread' | 'readAfter' | 'wish' | 'reply' | 'forwarded'> & {
   code: CardEvent['code'] | null;
   images: string | null;
   mocks: string | null;
@@ -454,8 +456,9 @@ type EventRow = Omit<CardEvent, 'images' | 'mocks' | 'replyTo' | 'spot' | 'answe
   readAfter: number | null;
   wish: string | null;
   reply: number | null;
+  forwarded: number | null;
 };
-const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, readAfter, wish, reply, ...e }: EventRow): CardEvent => ({
+const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, readAfter, wish, reply, forwarded, ...e }: EventRow): CardEvent => ({
   ...e,
   ...(code ? { code } : {}),
   ...(images ? { images: JSON.parse(images) as string[] } : {}),
@@ -468,6 +471,7 @@ const eventOf = ({ code, images, mocks, replyTo, spot, answer, picks, unread, re
   ...(readAfter ? { readAfter } : {}),
   ...(wish ? { wish: JSON.parse(wish) as Wish } : {}),
   ...(reply ? { reply: true as const } : {}),
+  ...(forwarded ? { forwarded: true as const } : {}),
 });
 
 export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
@@ -712,7 +716,7 @@ export class Store {
     const at = e.at ?? now();
     const { id } = this.db
       .query(
-        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer, picks, unread, wish, reply) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer, $picks, $unread, $wish, $reply) RETURNING id',
+        'INSERT INTO events (card_id, at, kind, author, text, code, images, mocks, reply_to, spot, answer, picks, unread, wish, reply, forwarded) VALUES ($cardId, $at, $kind, $author, $text, $code, $images, $mocks, $replyTo, $spot, $answer, $picks, $unread, $wish, $reply, $forwarded) RETURNING id',
       )
       .get({
         ...e,
@@ -726,6 +730,7 @@ export class Store {
         unread: e.unread ? 1 : null,
         wish: e.wish ? JSON.stringify(e.wish) : null,
         reply: e.reply ? 1 : null,
+        forwarded: e.forwarded ? 1 : null,
         at,
       }) as { id: number };
     return { ...e, id, at };

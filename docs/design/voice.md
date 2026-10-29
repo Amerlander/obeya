@@ -136,7 +136,9 @@ request of the owner's.
 
 The result is actions with a confirmation and „Rückgängig“ (above the mic, as a notice on every open
 page, in the card's conversation), a reply or a look-up, returned as the tool's result. Nothing goes
-back to the agent as a note, answer or feedback (refused if it tries): it has the words. An agent at
+back to the agent as a note, answer or feedback (refused if it tries): it has the words. In the card's
+conversation Obeya's reply stands under the agent's message its passing-on leads to (see The
+conversation). An agent at
 work may see the words only at its next tool call, so "gib frei" typed on a card costs a turn of
 several seconds where the button „Freigeben“ is immediate.
 

@@ -487,16 +487,17 @@ export class Board {
    * the id); `replyTo`: the message the owner's words reply to (`quoted`); `spot`: the place in the
    * demo video they are about; `picks`: the options an answer picked; `answer`: a looked-up answer's
    * exchange and files; `at` keeps a message's time when a thread is copied onto its Question card;
-   * `wish`: on a reply of Obeya's, what a draft for its makers starts from.
+   * `wish`: on a reply of Obeya's, what a draft for its makers starts from; `forwarded`: Obeya's
+   * reply to what the card's agent passed on.
    */
   log(
     cardId: string,
     kind: CardEvent['kind'],
     author: CardEvent['author'],
     text: string,
-    extra: Partial<Pick<CardEvent, 'code' | 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'at' | 'wish' | 'reply'>> & { unread?: boolean } = {},
+    extra: Partial<Pick<CardEvent, 'code' | 'images' | 'mocks' | 'replyTo' | 'spot' | 'answer' | 'picks' | 'at' | 'wish' | 'reply' | 'forwarded'>> & { unread?: boolean } = {},
   ): CardEvent {
-    const { code, images, mocks, replyTo, spot, answer, picks, at, unread, wish, reply } = extra;
+    const { code, images, mocks, replyTo, spot, answer, picks, at, unread, wish, reply, forwarded } = extra;
     const e = this.store.addEvent({
       cardId,
       kind,
@@ -513,6 +514,7 @@ export class Board {
       ...(picks?.length ? { picks } : {}),
       ...(wish ? { wish } : {}),
       ...(reply ? { reply } : {}),
+      ...(forwarded ? { forwarded } : {}),
     });
     for (const fn of this.eventListeners) fn(e);
     return e;
