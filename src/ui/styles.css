@@ -720,7 +720,10 @@ textarea.p-body:focus { border-color: var(--muted); }
 .p-plan { margin-bottom: 18px; }
 .split-main .p-plan .p-h { margin-top: 0; }
 .p-plan .p-h + *, .p-plan .fold > :first-child { margin-top: 0; }
-.split .split-talk .talk { flex: 1; min-height: 0; max-height: none; max-width: none; }
+/* the lane of a scrollbar that takes room (WebKit on a Mac set to show them always, Windows, Linux) stays
+   whether the conversation scrolls or not: WebKit kept the height its text had wrapped to beside the scrollbar,
+   which shows while the panel is measured, and every key typed laid it out anew, so the field jumped */
+.split .split-talk .talk { flex: 1; min-height: 0; max-height: none; max-width: none; scrollbar-gutter: stable; }
 .split-talk .composer { margin-top: 10px; max-width: none; }
 /* a proposal's text box grows with the text (detail.tsx) and leaves the reason below it in view */
 .proposal-grid textarea.p-body { min-height: min(360px, calc(100vh - 440px)); max-height: calc(100vh - 440px); resize: none; }
