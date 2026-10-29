@@ -23,9 +23,10 @@ landed there and nobody pushed yet is under it, so the fast-forward cannot fail 
 once more. Commits that conflict one by one but not as a whole land squashed. The last commit landed for a card
 with a shared demo carries the trailer `Demo-Video: <url>` (see Publishing on approval). Uncommitted
 work or a real conflict sends the card back to its worker with the approval kept: its next handover
-lands by itself, without a new demo. What blocks the local checkout (not on `main`, local changes
-the fast-forward would overwrite) goes to the owner, the card back in review; its worker hears so
-with its next message, so it does not answer the owner as if the approval had not happened.
+lands by itself, without a new demo. What blocks the landing outside the work (the local checkout
+not on `main`, local changes there the fast-forward would overwrite, a push the remote turns away)
+goes to the owner, the card back in review; its worker hears so with its next message, unless the
+work has landed by then, so it does not answer the owner as if the approval had not happened.
 
 Where a `pr` repository's settings allow `direct`, the owner may approve „Direkt auf main“: in the
 card's clone or worktree Obeya fetches, rebases onto `origin/<default>` and runs `git push origin

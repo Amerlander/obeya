@@ -264,6 +264,14 @@ describe('a worktree per card', () => {
     workers.message(c.id, 'Warum ist das nicht gelandet?');
     expect(sc.inbox.at(-1)).toContain('the owner approved your work, but Obeya could not land it on main');
     expect(sc.inbox.at(-1)).toContain('Warum ist das nicht gelandet?');
+    // approved again in vain, then once the owner cleared the checkout: the worker hears it landed, not an earlier failure
+    sc.emit({ type: 'idle' });
+    await workers.approve(c.id).catch(() => {});
+    rmSync(join(main, 'mine.ts'));
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('live');
+    expect(sc.inbox.at(-1)).toContain('is on main now');
+    expect(sc.inbox.at(-1)).not.toContain('could not land');
   });
 
   test('an approval while a restart is due that cannot land: the worker leaves the conflict until Obeya resumes it', async () => {
