@@ -18,7 +18,7 @@ import { inQueue } from '../core/queue';
 import { QueueList, scrollerOf, useMenuClose, useQueueMove, useQueueSort, waitedOn } from './queue';
 import { dimensions, shownTags } from '../core/page-tags';
 import { Inline, plain } from './markdown';
-import { Body, goToMessage, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
+import { Body, Cards, goToMessage, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
 import { appended, cardDraft, giveBack, questionsKey, typeAtCursor, updateDraft, useDraft } from './draft';
 import { eventQuote, type Reply, setReply, useReplyKnown } from './reply';
 import { CiteButton } from './cite';
@@ -2104,13 +2104,15 @@ function useZoom(video: RefObject<HTMLVideoElement | null>) {
 /**
  * What a review card's agent found, beside its demo: the checks on the PR's head and the merge probe
  * on one line, then each finding of the review, which its agent keeps as the conversation goes on.
- * On an open finding the owner decides („An Beitragenden“, „Selbst ändern“, a second click takes it
- * back) while their words reach its agent (`decides`); the decisions stand in the card's draft and
- * go out with the field's one Send. „Selbst ändern“ is greyed with its reason where the contributor
- * allows no edits by maintainers. A finding something came of says what.
+ * On an open finding the owner decides („An Beitragenden“, „Selbst ändern“, „Als Folgeaufgabe“, a
+ * second click takes it back) while their words reach its agent (`decides`); the decisions stand in
+ * the card's draft and go out with the field's one Send. „Selbst ändern“ is greyed with its reason
+ * where the contributor allows no edits by maintainers. A finding something came of says what; one
+ * made a follow-up task links that task.
  */
 function Findings({ item, decides }: { item: Item; decides: boolean }) {
   const c = item.contribution!;
+  const cards = useContext(Cards);
   const draft = cardDraft(item.id);
   const picks = useDraft(draft).findings ?? {};
   const findings = c.findings ?? [];
@@ -2127,49 +2129,59 @@ function Findings({ item, decides }: { item: Item; decides: boolean }) {
       {c.findings && (
         <h4 className="p-h">{t.review.findings(findings.length, open.length, open.filter((f) => f.security).length)}</h4>
       )}
-      {findings.map((f) => (
-        <div key={f.id} className={['finding', f.security && 'security', f.status !== 'open' && 'settled'].filter(Boolean).join(' ')}>
-          <div className="f-head">
-            <span className="f-no">{f.id}</span>
-            <b>{f.title}</b>
-            {f.security && <span className="f-tag">{t.review.security}</span>}
-          </div>
-          <div className="f-text">
-            <Inline md={f.text} />
-          </div>
-          {f.status !== 'open' ? (
-            <div className="f-status">
-              {f.url ? (
-                <a href={f.url} target="_blank" rel="noreferrer">
-                  {t.review.status[f.status](c.author)} ↗
-                </a>
-              ) : (
-                t.review.status[f.status](c.author)
-              )}
+      {findings.map((f) => {
+        const task = f.status === 'later' && f.card ? cards.items.find((x) => x.id === f.card) : undefined;
+        return (
+          <div key={f.id} className={['finding', f.security && 'security', f.status !== 'open' && 'settled'].filter(Boolean).join(' ')}>
+            <div className="f-head">
+              <span className="f-no">{f.id}</span>
+              <b>{f.title}</b>
+              {f.security && <span className="f-tag">{t.review.security}</span>}
             </div>
-          ) : f.decided ? (
-            <div className="f-status pending">{f.decided === 'self' ? t.review.goingSelf : t.review.goingTo(c.author)}</div>
-          ) : (
-            decides && (
-              <div className="choices single f-choices" role="group">
-                <button className={`choice${picks[f.id] === 'contributor' ? ' on' : ''}`} aria-pressed={picks[f.id] === 'contributor'} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(f, 'contributor')}>
-                  {t.review.toContributor}
-                </button>
-                <button
-                  className={`choice${picks[f.id] === 'self' ? ' on' : ''}`}
-                  aria-pressed={picks[f.id] === 'self'}
-                  disabled={!c.canModify}
-                  title={c.canModify ? t.review.selfHint : t.review.selfOff(c.author)}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => pick(f, 'self')}
-                >
-                  {t.review.self}
-                </button>
+            <div className="f-text">
+              <Inline md={f.text} />
+            </div>
+            {f.status !== 'open' ? (
+              <div className="f-status">
+                {task ? (
+                  <a href="#" onClick={(e) => (e.preventDefault(), cards.open(task))}>
+                    {t.review.laterCard(plain(task.title))} →
+                  </a>
+                ) : f.url ? (
+                  <a href={f.url} target="_blank" rel="noreferrer">
+                    {t.review.status[f.status](c.author)} ↗
+                  </a>
+                ) : (
+                  t.review.status[f.status](c.author)
+                )}
               </div>
-            )
-          )}
-        </div>
-      ))}
+            ) : f.decided ? (
+              <div className="f-status pending">{f.decided === 'self' ? t.review.goingSelf : t.review.goingTo(c.author)}</div>
+            ) : (
+              decides && (
+                <div className="choices single f-choices" role="group">
+                  <button className={`choice${picks[f.id] === 'contributor' ? ' on' : ''}`} aria-pressed={picks[f.id] === 'contributor'} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(f, 'contributor')}>
+                    {t.review.toContributor}
+                  </button>
+                  <button
+                    className={`choice${picks[f.id] === 'self' ? ' on' : ''}`}
+                    aria-pressed={picks[f.id] === 'self'}
+                    disabled={!c.canModify}
+                    title={c.canModify ? t.review.selfHint : t.review.selfOff(c.author)}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pick(f, 'self')}
+                  >
+                    {t.review.self}
+                  </button>
+                  <button className={`choice${picks[f.id] === 'later' ? ' on' : ''}`} aria-pressed={picks[f.id] === 'later'} title={t.review.laterHint} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(f, 'later')}>
+                    {t.review.later}
+                  </button>
+                </div>
+              )
+            )}
+          </div>
+        );
+      })}
       {decides && open.some((f) => !f.decided) && <p className="hint">{t.review.decideHint}</p>}
     </section>
   );
@@ -2185,7 +2197,7 @@ function DecidedChip({ item, decided }: { item: Item; decided: Record<string, Ch
       <div className="decided-lines">
         {named.map(([id, route]) => (
           <span key={id} className="quote-text">
-            {t.review.decidedLine(Number(id), route === 'self' ? t.review.self : t.review.toContributor)}
+            {t.review.decidedLine(Number(id), route === 'self' ? t.review.self : route === 'later' ? t.review.later : t.review.toContributor)}
           </span>
         ))}
       </div>

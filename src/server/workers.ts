@@ -707,10 +707,11 @@ export class Workers {
   }
 
   /**
-   * What the owner decided for findings of a review card (by number: to the contributor, or the
-   * worker's own change), as the worker reads it above their words; the findings are marked as
-   * decided until the worker records what came of them. Refuses a finding that is not open, and
-   * the worker's own change where the contributor allows no maintainers' edits.
+   * What the owner decided for findings of a review card (by number: to the contributor, the
+   * worker's own change, or a follow-up task), as the worker reads it above their words. The first
+   * two are marked as decided until the worker records what came of them; a follow-up task Obeya
+   * makes at once, beside the card, and the finding is settled with it. Refuses a finding that is
+   * not open, and the worker's own change where the contributor allows no maintainers' edits.
    */
   private decide(cardId: string, decisions: Record<number, ChangeRoute>): { note: string; log: string } {
     const c = contributionOf(this.o.board.row(cardId));
@@ -722,23 +723,35 @@ export class Workers {
       if (route === 'self' && !c.canModify) throw new BadRequest('noEdits', 'the contributor does not allow maintainers to push to the pull request');
       return { f, route };
     });
-    const findings = c.findings!.map((f) => {
+    const tasks = new Map(
+      picked
+        .filter((p) => p.route === 'later')
+        .map((p) => {
+          const card = this.o.board.create({ title: p.f.title, body: `${p.f.text}\n\n${t.findingTask(c.number, c.url)}`, from: cardId });
+          this.o.board.log(card.id, 'state', 'owner', t.findingTaskMade(c.number));
+          return [p.f.id, card] as const;
+        }),
+    );
+    const findings = c.findings!.map((f): Finding => {
       const p = picked.find((x) => x.f.id === f.id);
-      return p ? { ...f, decided: p.route } : f;
+      if (!p) return f;
+      const task = tasks.get(f.id);
+      return task ? { ...f, status: 'later', card: task.id } : { ...f, decided: p.route as Exclude<ChangeRoute, 'later'> };
     });
     this.o.board.work(cardId, { contribution: JSON.stringify({ ...c, findings } satisfies StoredContribution) });
-    const to = picked.filter((p) => p.route === 'contributor');
-    const self = picked.filter((p) => p.route === 'self');
+    const of = (route: ChangeRoute) => picked.filter((p) => p.route === route);
     const name = (f: Finding) => `#${f.id} „${f.title}“`;
+    const what = (p: (typeof picked)[number]) => (p.route === 'self' ? t.findingSelf : p.route === 'later' ? t.findingLater : t.findingTo(c.author));
     return {
       note: [
         'The owner decided on findings of your review, on the card; do it now:',
-        to.length ? `- To ${c.author}: ${to.map((p) => name(p.f)).join(', ')}. Write them as one review asking for changes (request_changes, with their numbers).` : '',
-        self.length ? `- Yourself: ${self.map((p) => name(p.f)).join(', ')}. Make the change, push it onto the PR's branch, comment on the PR what you changed and why (comment_on_pr), mark them fixed (findings), and hand over again with a new demo.` : '',
+        of('contributor').length ? `- To ${c.author}: ${of('contributor').map((p) => name(p.f)).join(', ')}. Write them as one review asking for changes (request_changes, with their numbers).` : '',
+        of('self').length ? `- Yourself: ${of('self').map((p) => name(p.f)).join(', ')}. Make the change, push it onto the PR's branch, comment on the PR what you changed and why (comment_on_pr), mark them fixed (findings), and hand over again with a new demo.` : '',
+        of('later').length ? `- As follow-up tasks: ${of('later').map((p) => name(p.f)).join(', ')}. Obeya made each a task of its own beside your card, which the owner starts when they like; for this PR they are settled (status later in findings), so they go neither to ${c.author} nor into your changes.` : '',
       ]
         .filter(Boolean)
         .join('\n'),
-      log: picked.map((p) => t.findingDecided(p.f.id, p.f.title, p.route === 'self' ? t.findingSelf : t.findingTo(c.author))).join('\n'),
+      log: picked.map((p) => t.findingDecided(p.f.id, p.f.title, what(p))).join('\n'),
     };
   }
 
@@ -758,7 +771,8 @@ export class Workers {
       if (id >= next) next = id + 1;
       seen.add(id);
       const before = had.find((f) => f.id === id);
-      const status = g.status ?? before?.status ?? 'open';
+      // one the owner made a follow-up task stays one
+      const status = before?.status === 'later' ? 'later' : (g.status ?? before?.status ?? 'open');
       const url = g.url ?? (status === before?.status ? before?.url : undefined);
       findings.push({
         id,
@@ -767,6 +781,7 @@ export class Workers {
         ...(g.security ? { security: true } : {}),
         status,
         ...(url ? { url } : {}),
+        ...(status === 'later' && before?.card ? { card: before.card } : {}),
         ...(status === 'open' && before?.decided ? { decided: before.decided } : {}),
       });
     }
@@ -1414,7 +1429,7 @@ export class Workers {
         ...now,
         ...(head && !now.reviewed ? { reviewed: head } : {}),
         // the findings it holds are sent, with the review they went in
-        ...(now.findings ? { findings: now.findings.map((f) => (ids.includes(f.id) ? { id: f.id, title: f.title, text: f.text, ...(f.security ? { security: true } : {}), status: 'sent' as const, ...(url ? { url } : {}) } : f)) } : {}),
+        ...(now.findings ? { findings: now.findings.map((f) => (ids.includes(f.id) && f.status !== 'later' ? { id: f.id, title: f.title, text: f.text, ...(f.security ? { security: true } : {}), status: 'sent' as const, ...(url ? { url } : {}) } : f)) } : {}),
         requested: { ...(url ? { url } : {}), at: new Date().toISOString() },
       } satisfies StoredContribution),
     });
@@ -3308,7 +3323,7 @@ export class Workers {
         ? ([
             {
               name: 'findings',
-              description: `Record your review's findings for the owner, the whole list as it stands now (you keep it like a brief: call it after your review, and again whenever a finding changes, from the owner's words or a push). Each: a short title, a sentence or two in ${language}, whether it is about security, and its status: open; sent (to the contributor, with the review's url); fixed (by you, pushed onto the PR's branch); resolved (a push of the contributor's fixed it, or it no longer applies); dropped (the owner does not pursue it). Give the id of a finding you had; a new one gets the next. The card shows them beside the demo, and the owner decides on each there.`,
+              description: `Record your review's findings for the owner, the whole list as it stands now (you keep it like a brief: call it after your review, and again whenever a finding changes, from the owner's words or a push). Each: a short title, a sentence or two in ${language}, whether it is about security, and its status: open; sent (to the contributor, with the review's url); fixed (by you, pushed onto the PR's branch); resolved (a push of the contributor's fixed it, or it no longer applies); dropped (the owner does not pursue it); later (the owner made it a follow-up task, which Obeya keeps as it is). Give the id of a finding you had; a new one gets the next. The card shows them beside the demo, and the owner decides on each there.`,
               schema: {
                 findings: z.array(
                   z.object({
@@ -3316,7 +3331,7 @@ export class Workers {
                     title: z.string(),
                     text: z.string(),
                     security: z.boolean().optional(),
-                    status: z.enum(['open', 'sent', 'fixed', 'resolved', 'dropped']).optional(),
+                    status: z.enum(['open', 'sent', 'fixed', 'resolved', 'dropped', 'later']).optional(),
                     url: z.string().optional(),
                   }),
                 ),
@@ -3935,7 +3950,8 @@ ${idea.idea.brief}` : '',
         `- To ${c.author}: write the findings as one review of the PR asking for changes (request_changes, with their numbers), in the PR's language, as the owner's words to them (Obeya posts it with the owner's account), without mentioning Obeya or agents. Then end your turn: the card waits for ${c.author}, and Obeya passes you their answers and pushes; review a new head as above, update the findings (resolved where a push fixed one) and hand over again.`,
         c.canModify
           ? `- Yourself: make the change on your branch, run the checks, push it onto the PR's branch (${pushTo(c) ?? 'its repository and branch: the forge shows them (gh pr view on GitHub)'}; ${c.author} allows maintainers' edits), write a short comment on the PR saying what you changed and why (comment_on_pr), mark the finding fixed, and hand over again with a new demo. In the squash merge ${c.author} stays its author.`
-          : `- ${c.author} does not allow maintainers' edits, so findings can only go to them.`,
+          : `- ${c.author} does not allow maintainers' edits, so findings go to them or become follow-up tasks.`,
+        '- As a follow-up task: Obeya makes it a task of its own beside your card, outside this PR, and marks it later in your findings.',
         'Words of the owner\'s that ask the same in so many words („send them finding 1“, „fix that yourself“) count the same. Anything else they say (a question, more to look at) you answer or do on the card, and nothing goes to the PR.',
       ].join('\n'),
     ];

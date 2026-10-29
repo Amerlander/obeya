@@ -198,6 +198,28 @@ describe('a review card', () => {
     ]);
   });
 
+  test('a finding made a follow-up task becomes a card beside the review card, settled for the PR', async () => {
+    const id = await reviewCard(false);
+    await handOver();
+    workers.message(id, '', [], false, undefined, undefined, { 2: 'later' });
+    const finding = board.item(id)!.contribution!.findings![1]!;
+    expect(finding).toMatchObject({ status: 'later' });
+    expect(finding.decided).toBeUndefined();
+    const task = board.item(finding.card!)!;
+    expect(task).toMatchObject({ title: 'No shortcut', state: 'planned', from: id });
+    expect(task.body).toBe(`The menu entry has no keyboard shortcut.\n\nAus dem Review von PR #5: ${URL_}`);
+    expect(runtime.last.inbox.at(-1)!).toContain('As follow-up tasks: #2 „No shortcut“');
+    expect(board.events(id).at(-1)!.text).toContain('Befund 2 „No shortcut“: als Folgeaufgabe');
+    // not again, and it stays one when the worker rewrites its list or sends the others
+    expect(() => workers.message(id, '', [], false, undefined, undefined, { 2: 'later' })).toThrow();
+    runtime.last.call('findings', { findings: [{ id: 1, title: 'Path in the file name', text: 'T' }, { id: 2, title: 'No shortcut', text: 'T', status: 'open' }] });
+    await runtime.last.call('request_changes', { body: 'Please keep the file in its folder.', findings: [1, 2] });
+    expect(board.item(id)!.contribution!.findings!.map((f) => [f.id, f.status, f.card])).toEqual([
+      [1, 'sent', undefined],
+      [2, 'later', task.id],
+    ]);
+  });
+
   test('„Selbst ändern“ only where the contributor allows maintainers’ edits', async () => {
     const id = await reviewCard(false);
     await handOver();

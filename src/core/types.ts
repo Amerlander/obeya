@@ -674,9 +674,10 @@ export interface Contribution {
 
 /**
  * What the owner decides for a finding of a review card: it goes to the contributor as a change
- * request, or (`self`) the worker makes the change and pushes it onto the PR's branch.
+ * request, (`self`) the worker makes the change and pushes it onto the PR's branch, or (`later`)
+ * it becomes a follow-up task of its own, outside the PR.
  */
-export type ChangeRoute = 'contributor' | 'self';
+export type ChangeRoute = 'contributor' | 'self' | 'later';
 
 /** One finding of a review card's review, as its worker keeps it. */
 export interface Finding {
@@ -688,15 +689,17 @@ export interface Finding {
   /**
    * `open` until something came of it: `sent` to the contributor (`url`, the review it went in),
    * `fixed` by the worker on the PR's branch, `resolved` (the contributor's push fixed it, or it no
-   * longer applies), `dropped` (the owner does not pursue it).
+   * longer applies), `dropped` (the owner does not pursue it), `later` (a follow-up task, `card`).
    */
   status: FindingStatus;
   url?: string;
+  /** The follow-up task the owner made of it. */
+  card?: string;
   /** What the owner decided for it, while the worker carries it out. */
-  decided?: ChangeRoute;
+  decided?: Exclude<ChangeRoute, 'later'>;
 }
 
-export type FindingStatus = 'open' | 'sent' | 'fixed' | 'resolved' | 'dropped';
+export type FindingStatus = 'open' | 'sent' | 'fixed' | 'resolved' | 'dropped' | 'later';
 
 /** What the worker of a review card reports with its handover. */
 export interface ReviewResults {

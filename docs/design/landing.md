@@ -136,15 +136,16 @@ each with its number, a short title, a sentence or two and whether it is about s
 keeps them as it keeps nothing else, like an idea's agent its brief: the whole list after its review,
 and again whenever the owner's words or a push change one („Befund 2 ist egal“), each by its number,
 with what came of it: open, sent to the contributor (linking the review it went in), fixed by the
-worker, settled (a push fixed it, or it no longer applies), not pursued. Above them stand the
+worker, settled (a push fixed it, or it no longer applies), not pursued, a follow-up task (linking
+that task). Above them stand the
 checks on the head and the merge probe („✓ bun test · ✓ konfliktfrei“); on the canvas the card
 shows both on one line („Review: 2 Befunde offen (1 Sicherheit)“). The handover brings the checks'
 results and the merge probe; a handover without findings recorded (an empty list where there are
 none) is refused. The findings are for the owner: nothing of them reaches the contributor unless the
 owner sends it. Obeya records the head the worker handed over.
 
-On each open finding the owner decides „An Beitragenden“ or „Selbst ändern“ (a second click takes it
-back), as they pick a question's options: the decisions stand in the card's draft, show above the
+On each open finding the owner decides „An Beitragenden“, „Selbst ändern“ or „Als Folgeaufgabe“ (a
+second click takes it back), as they pick a question's options: the decisions stand in the card's draft, show above the
 field („Befund 1: An Beitragenden“) and go to the worker with the one Send of every card, with words
 of the owner's or alone. The finding then reads what is under way („Geht an amerlander …“) until
 the worker records what came of it. Words alone that ask the same („schick ihm Befund 1“) count the
@@ -160,6 +161,11 @@ same; anything else the owner says (a question, more to look at) stays on the ca
   otherwise the choice is greyed with the reason). The worker makes the change, pushes it onto the
   PR's branch in the contributor's fork, writes a short comment on the PR saying what and why, marks
   the finding fixed and hands over with a new demo. The squash merge keeps the contributor as author.
+- As a follow-up task: for what is worth doing but no reason to hold the PR up (the same gap in
+  files the PR does not touch, say). With the Send, Obeya makes it a task of its own beside the
+  review card, following up on it, in the planned stock: the finding's title and text, and the PR's
+  link. The finding is settled for the PR and links the task; the worker hears of it with the
+  other decisions and keeps it so in its list, and it goes into no change request.
 
 „Mergen (PR #5)“ approves: Obeya reads the PR, and at a head other than the one handed over (the
 contributor pushed since) it merges nothing and the worker reviews the PR as it is. Otherwise the
@@ -284,6 +290,11 @@ A card no agent worked on, a prototype or an archived card has no field.
   the agent); choosing in the conversation alone (a misunderstanding is a public comment or a push
   into a stranger's fork); a click on a choice acting at once, or a button of its own under the list
   (two Sends where every card has one).
+- **„Als Folgeaufgabe“ is a third choice per finding, made by Obeya on the Send** (2026-10-29, the
+  owner: reviews often find something worth fixing that should not hold the PR up). The task is
+  planned, not started: the owner decides when, often after the merge it builds on. Rejected: the
+  worker proposing the card (a second decision for one already made); only asking Obeya for a
+  follow-up in words (it works, but is not found beside the other two choices).
 - **The review reads the diff before anything of it runs; its findings go to the owner** (2026-10-27),
   to the contributor only when the owner sends them.
 - **The worker keeps workspace and session until done**, so the agent that knows the change does
