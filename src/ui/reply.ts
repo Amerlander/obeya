@@ -2,10 +2,8 @@
 // in Obeya's sheet shows it as a quote, and what the owner types or says next goes with it. It is
 // part of the field's draft (`draft.ts`), so it outlives closing the card and a page load.
 
-import { useSyncExternalStore } from 'react';
 import type { CardEvent, TalkQuote, TalkRef } from '../core/types';
 import { draftOf, updateDraft, useDraft } from './draft';
-import { know, known } from './known';
 import { plain } from './markdown';
 import { parseQuestion } from './talk';
 
@@ -43,7 +41,6 @@ export const talkQuote = (q: TalkQuote): Quoted => ({ by: q.by, text: clean(q.te
 
 /** Replies with the field's words to the message, or with null to none. */
 export const setReply = (draft: string, r: Reply | null) => {
-  if (r) knowReply();
   if (draftOf(draft).reply !== (r ?? undefined)) updateDraft(draft, { reply: r ?? undefined });
 };
 
@@ -52,26 +49,3 @@ export const replyOn = (draft: string): Reply | null => draftOf(draft).reply ?? 
 
 /** The same, live. */
 export const useReply = (draft: string): Reply | null => useDraft(draft).reply ?? null;
-
-// Until the owner has replied once, a conversation shows the reply button on every message, not only
-// under the pointer, so they find it (`reply-new` on the conversation).
-const KNOWN = 'obeya-reply-known';
-let replied = known(KNOWN);
-const knownListeners = new Set<() => void>();
-
-function knowReply() {
-  if (replied) return;
-  replied = true;
-  know(KNOWN);
-  for (const fn of knownListeners) fn();
-}
-
-/** Whether the owner has replied to a message before, live. */
-export const useReplyKnown = () =>
-  useSyncExternalStore(
-    (fn) => {
-      knownListeners.add(fn);
-      return () => void knownListeners.delete(fn);
-    },
-    () => replied,
-  );

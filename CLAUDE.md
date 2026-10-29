@@ -68,7 +68,8 @@ into the chapters under `docs/design/` (or the index) and the doc goes.
 - A button that is easy to click by accident and sets a lot in motion gets an undo. What is easy
   to reverse afterwards gets no undo window with a wait: it takes effect at once.
 - Every new feature and every shortcut gets a way for first-time users to discover it: a visible
-  icon, say, or a hint that shows until it has been used once. A tooltip or a key that is only
+  icon, say, or a hint that shows until it has been used once. A button that appears on hover over
+  the thing it acts on is found that way and needs no more. A tooltip or a key that is only
   documented is not enough.
 - Rarely used actions stay out of the way: shown only where they apply, behind hover or an overflow
   menu, so everyday use isn't cluttered with buttons. A button's label makes clear what it does to

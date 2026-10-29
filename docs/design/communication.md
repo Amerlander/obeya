@@ -84,9 +84,8 @@ Confirmation and undo.
 
 A note reaches the worker at any time without stopping it. To stop it mid-work, the conversation's
 bubble that shows the agent at work („Agent arbeitet …“) has a pause mark, faint. At the desk it
-shows only while the pointer is on the bubble, so a long run does not keep a button in view; until
-the owner has paused an agent once, and on a touch screen, it is always there, so newcomers find it.
-By voice „halt mal an“.
+shows only while the pointer is on the bubble, so a long run does not keep a button in view; on a
+touch screen it is always there. By voice „halt mal an“.
 The bubble and the pause exist exactly while an agent runs a turn (background work included): a
 Question card's agent reading, an idea's agent replying, a worker in any card state (at work, taking
 in the owner's words on its handover, in its PR, finishing after the landing). An idle agent (a PR
@@ -254,9 +253,10 @@ as a learned preference does. Older answers agents gave in the owner's name stay
   exactly when a turn runs (also while a worker takes in the owner's words on a waiting card, before
   a paid render, say). „Stoppen“ is named so it does not read like a pause. Rejected: pausing at the
   next safe point, as for a restart: the owner pauses an agent going the wrong way.
-- **The pause shows on hover once the owner knows it** (2026-10-29, owner): always in view, even
-  faint, it drew the eye on every running turn. Rejected: hover-only from the start, which hid it
-  from newcomers and touch screens.
+- **The pause and the reply button show on hover at the desk, from the first use on** (2026-10-29,
+  owner): always in view, even faint, the pause drew the eye on every running turn. A newcomer
+  finds a button that appears where the pointer goes, so neither stays in view until its first use.
+  Rejected: always visible; visible until used once. A touch screen, without hover, shows both.
 - **Waits of hours or days are a snooze Obeya holds** (2026-10-17). Rejected: workers keeping a turn
   open with chained background sleeps (the card looked busy for days and held a slot, every restart
   cut in, some 35 times a day, Obeya knew nothing of the reminders, and a night without network

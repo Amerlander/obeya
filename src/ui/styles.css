@@ -755,10 +755,9 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg:has(> .msg-reply) > .who { padding-right: 24px; }
 .msg-reply { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
   border: 0; border-radius: 3px; background: var(--chip); color: var(--muted); cursor: pointer; }
-/* at the desk the button shows while the pointer is on its message, and on every message until the
-   owner has replied once (`reply-new`, reply.ts); on a touch screen always */
+/* at the desk the button shows while the pointer is on its message; on a touch screen always */
 @media (hover: hover) {
-  .talk:not(.reply-new) .msg > .msg-reply { opacity: 0; transition: opacity .12s; }
+  .talk .msg > .msg-reply { opacity: 0; transition: opacity .12s; }
   .talk .msg:hover > .msg-reply, .talk .msg > .msg-reply:focus-visible { opacity: 1; }
 }
 .msg-reply:hover { color: var(--ink); background: var(--line); }
@@ -823,9 +822,8 @@ textarea.p-body:focus { border-color: var(--muted); }
 .talk .msg.fresh { box-shadow: inset 3px 0 0 var(--waiting), var(--shadow); }
 .talk .msg.thinking .who::after { content: ""; display: inline-block; vertical-align: middle; margin-left: 8px; width: 34px; height: 3px; border-radius: 2px;
   background: linear-gradient(90deg, transparent, var(--idea), transparent); background-size: 200% 100%; animation: flow 1.4s linear infinite; }
-/* the agent at work has its pause at the right of its name, faint and only while the pointer is on
-   the bubble (until the owner first paused an agent, and on a touch screen, always); paused, it
-   stands still in pencil grey with Resume */
+/* the agent at work has its pause at the right of its name, faint; at the desk only while the
+   pointer is on the bubble, on a touch screen always; paused, it stands still in pencil grey with Resume */
 .talk .msg:is(.thinking, .paused) .who { display: flex; align-items: center; column-gap: 8px; min-height: 20px; }
 .talk .msg.thinking .who::after { order: 0; margin-left: 0; }
 .turn-pause, .turn-resume { order: 1; margin-left: auto; flex: none; }
@@ -834,7 +832,7 @@ textarea.p-body:focus { border-color: var(--muted); }
 .turn-pause .btn-mark { margin: 0; }
 .turn-pause:hover, .turn-pause:focus-visible { opacity: 1; color: var(--ink); border-color: var(--muted); }
 @media (hover: hover) {
-  .talk .msg.thinking:not(:hover) .turn-pause:not(.new, :focus-visible) { opacity: 0; }
+  .talk .msg.thinking:not(:hover) .turn-pause:not(:focus-visible) { opacity: 0; }
 }
 .talk .msg.paused .who { color: var(--muted); }
 .talk .msg.paused > :not(.who) { opacity: .7; }

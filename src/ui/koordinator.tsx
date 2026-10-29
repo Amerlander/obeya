@@ -8,7 +8,7 @@ import type { Item, Preference, RepoRef, Reshare, SettingProposal, Talk, TalkQuo
 import { api } from './api';
 import { Inline, plain } from './markdown';
 import { AnswerFiles, Body, Continues, Msg, Quote, Reading, ThreadCard } from './message';
-import { type Reply, setReply, talkEv, talkQuote, useReplyKnown } from './reply';
+import { type Reply, setReply, talkEv, talkQuote } from './reply';
 import { clock, failText, t } from './strings';
 import { CiteButton } from './cite';
 import { Composer } from './composer';
@@ -277,11 +277,10 @@ function Conversation({ talk, fresh, items, onOpen, draft, sheetOf }: { talk: Ta
   // every change on the canvas brings a new snapshot: only what the owner just said takes the
   // conversation back to its end, so they can read further up in the meantime
   const onScroll = useStickToEnd(box, talk.at(-1)?.id, talk);
-  const known = useReplyKnown();
   if (!talk.length) return null;
   return (
     <div
-      className={known ? 'talk conv' : 'talk conv reply-new'}
+      className="talk conv"
       ref={box}
       onScroll={onScroll}
     >

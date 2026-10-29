@@ -20,7 +20,7 @@ import { dimensions, shownTags } from '../core/page-tags';
 import { Inline, plain } from './markdown';
 import { Body, Cards, goToMessage, Msg, Quote, Reading, useAnswer, useReportedHeight } from './message';
 import { appended, cardDraft, giveBack, questionsKey, typeAtCursor, updateDraft, useDraft } from './draft';
-import { eventQuote, type Reply, setReply, useReplyKnown } from './reply';
+import { eventQuote, type Reply, setReply } from './reply';
 import { CiteButton } from './cite';
 import { Composer } from './composer';
 import { useFitHeight } from './fitHeight';
@@ -1242,7 +1242,6 @@ function Conversation({
     () => new Set(turns && events ? unseenTurns(turns, events, seen).filter((x) => !cameInView(came, x.e.id)).map((x) => x.e.id) : []),
     [turns, seen, came],
   );
-  const replyKnown = useReplyKnown();
   if (!events || !turns) return null;
   if (hideEmpty && !turns.shown.length && !turns.pending.length) return null;
   const by = idea ? 'explorer' : question ? 'koordinator' : 'worker';
@@ -1305,12 +1304,7 @@ function Conversation({
           </button>
         ) : (
           pausable(item) && (
-            <button
-              className={known(PAUSE_KNOWN) ? 'turn-pause' : 'turn-pause new'}
-              title={t.pause.hint}
-              aria-label={t.pause.button}
-              onClick={() => turn(item.id, 'pause')}
-            >
+            <button className="turn-pause" title={t.pause.hint} aria-label={t.pause.button} onClick={() => turn(item.id, 'pause')}>
               <PauseMark />
             </button>
           )
@@ -1348,7 +1342,7 @@ function Conversation({
   return (
     <>
       <h4 className="p-h">{t.talk.heading}</h4>
-      <div className={onReply && !replyKnown ? 'talk conv reply-new' : 'talk conv'} ref={box} onScroll={onScroll}>
+      <div className="talk conv" ref={box} onScroll={onScroll}>
         {turns.shown.length === 0 && !turns.unread.length && !working && !turns.asked.length && !seed && <div className="hint">{idea ? t.idea.talkEmpty : question ? t.question.empty : proposal ? t.reviseHint : t.talk.empty}</div>}
         {turns.shown.slice(0, seedAt).map(line)}
         {seed}
@@ -1393,12 +1387,7 @@ function Conversation({
 }
 
 /** Pauses the agent's turn on the card, or lets the paused agent go on; the card shows it once the server has. */
-/** Set once the owner paused an agent: its pause shows only while the pointer is on the bubble. */
-const PAUSE_KNOWN = 'obeya-pause-known';
-const turn = (cardId: string, action: 'pause' | 'resume') => {
-  if (action === 'pause') know(PAUSE_KNOWN);
-  void api.act(cardId, { action }).catch(() => {});
-};
+const turn = (cardId: string, action: 'pause' | 'resume') => void api.act(cardId, { action }).catch(() => {});
 
 /**
  * Takes back words of the owner's the agent has not read (a note waiting for its next step, a
