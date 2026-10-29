@@ -1,8 +1,10 @@
 // The owner's personal demo site: one per person, kept in Obeya's home (`personal-site.json`), not
 // in any repository. Every repository without a site of its own shares there, and every one whose
-// site this machine cannot deploy to (a contributor's Obeya on Obeya's own repository, say). It is
-// always unlisted (site.ts): no overview, no feed, each page under a random part of its URL that is
-// drawn once per card, the manifest under a secret path only the owner's machines know.
+// site this machine cannot deploy to (a contributor's Obeya on Obeya's own repository, say). On
+// Cloudflare Pages or from a private GitHub repository it is unlisted (site.ts): no overview, no
+// feed, each page under a random part of its URL that is drawn once per card, the manifest under a
+// secret path only the owner's machines know. From a public GitHub repository, whose files anyone
+// can list, it is listed like a repository's site.
 //
 // A private repository shares there only once the owner ticked it (`private`), so nothing of a
 // private project goes out unasked. A second machine joins with a connection code, which carries
@@ -28,8 +30,11 @@ const shape = z
     url: z.string().regex(/^https?:\/\/[A-Za-z0-9.-]+(:\d+)?(\/[A-Za-z0-9._~\/-]*)?$/),
     /** The host's project: a Cloudflare Pages project's name, or the GitHub repository (`owner/name`); a word of the deploy line, so nothing else. */
     project: z.string().regex(/^[A-Za-z0-9-]+(\/[A-Za-z0-9._-]+)?$/),
-    /** The directory the manifest is in: only the owner's machines know it. */
-    secret: z.string().regex(/^[a-z0-9]{16,64}$/),
+    /**
+     * An unlisted site's directory the manifest is in: only the owner's machines know it. Without
+     * it the site is listed (a public GitHub repository, whose files anyone can list anyway).
+     */
+    secret: z.string().regex(/^[a-z0-9]{16,64}$/).optional(),
     /** The deploy's credentials, a `KEY=value` file under Obeya's home; none where the machine's own login deploys. */
     env: z.string().optional(),
     /** The private repositories (their checkouts' paths) the owner allowed to share here. */

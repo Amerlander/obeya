@@ -308,8 +308,11 @@ Repositorys auf meiner persönlichen Seite teilen“, and the configuration list
 repositories of the canvases (and those ticked) with a checkbox each, ticked or not, to change it
 there too. A repository whose site publishes on approval does so on the personal site too.
 
-The personal site is unlisted, always; a repository's site is listed, always; there is no setting for
-it. Unlisted means:
+Where the personal site lives decides whether it is listed, without a setting of its own: on
+Cloudflare Pages and from a private GitHub repository it is unlisted; from a public GitHub repository,
+whose files anyone can list, it is listed like a repository's site (overview, feed, a page at
+`<slug>/`, the manifest at the root), and a random part in its addresses would hide nothing. A
+repository's site is listed, always. Unlisted means:
 
 - no overview, no feed, no tag links on the pages, no link to the site's root;
 - a page lies at `<token>/<slug>/`: the slug for reading, the token (16 letters and digits, about 82
@@ -331,17 +334,27 @@ stays behind a login (Cloudflare Access).
 
 Konfiguration → Demos sets it up („Persönliche Demo-Seite“, the host to choose, „Einrichten“), and a
 card's export box, while there is none, offers „Persönliche Demo-Seite einrichten“, which opens it
-there. The setup runs in the background and shows its last line:
+there. The switcher offers, in this order, each with a line under it:
 
-- Cloudflare Pages (free account): a project `obeya-<user name>` (a suffix where taken), as for a
-  repository's site; its address is the one Cloudflare names (`…pages.dev`).
-- GitHub Pages: a private repository `obeya-demos` (a number where the name is taken; an existing one
-  is never reused) under gh's account, with Pages turned on, deployed by the built-in deploy. Obeya
-  never makes a public repository for it: its file list would show every page's token. It creates it
-  with `--private`, checks GitHub's answer on its visibility before anything goes in, and stops
-  otherwise. Pages from a private repository needs GitHub Pro: an account on the free plan is refused
+- „GitHub, öffentliches Repository“ („Geht mit jedem GitHub-Konto.“): a public repository
+  `obeya-demos` (a number where the name is taken; an existing one is never reused) under gh's
+  account, with Pages turned on, deployed by the built-in deploy. First, since anyone's demo
+  repository seen by chance makes Obeya known; what public means for finding the demos goes unsaid,
+  as it is plain.
+- „GitHub, privates Repository“ („Braucht GitHub Pro.“): the same in a private repository, unlisted.
+  Obeya creates it with `--private`, checks GitHub's answer on its visibility before anything goes
+  in, and again before every deploy (a repository made public since, or one named by a connection
+  code, would show every page's token), and stops otherwise. An account on the free plan is refused
   before anything is created, and a refusal when Pages is turned on gives GitHub's reason (the
   repository stays, private); both offer Cloudflare instead.
+- „Cloudflare“ (free account, unlisted): a project `obeya-<user name>` (a suffix where taken), as
+  for a repository's site; its address is the one Cloudflare names (`…pages.dev`). Besides the
+  account of a site this machine deploys to and the machine's own login, „anderes Konto: API-Token“
+  takes another account's token (with „Cloudflare Pages: Bearbeiten“; its account's id where the
+  token covers several) into the new site's env file, so the login other sites deploy with stays.
+
+The setup runs in the background and shows its last line. The sentence that unlisted is not
+protected shows only for the two unlisted hosts.
 
 Another machine of the owner's joins with a connection code: „Verbindungscode kopieren“ (under
 „Weitere Rechner“, with a line saying where to paste it) on one gives
@@ -431,15 +444,16 @@ another machine withdrew loses its link here, with a line naming the machine.
   a site) had only an export. Rejected: an Obeya service to share on (`share.obeya.si`), now or
   later (costs, moderation, duties of a host; Cloudflare or GitHub Pages leave a contributor one step
   of a few minutes).
-- **The personal site is unlisted, also for public repositories** (owner, 2026-10-28): an overview of
-  all projects is another kind of public than links one would have to collect, and an unlisted page
-  can go to one recipient. Rejected: a setting for listed or unlisted (a repository's site is listed,
-  the personal one is not).
+- **The personal site is unlisted, also for public repositories, where its host allows** (owner,
+  2026-10-28): an overview of all projects is another kind of public than links one would have to
+  collect, and an unlisted page can go to one recipient. Rejected: a setting for listed or unlisted
+  (the host decides it).
 - **A private repository shares on the personal site only once ticked** (owner, 2026-10-28), so
   nothing of a private project goes out unasked; one whose forge cannot tell counts as private.
-- **Both hosts for the personal site, and GitHub Pages only from a private repository** (owner,
-  2026-10-28): Cloudflare lists no files and is free; GitHub needs only gh's login but Pro, since a
-  public repository would list every token. Rejected: a public repository on the free plan.
+- **Three hosts for the personal site: a public GitHub repository first, a private one, Cloudflare**
+  (owner, 2026-10-29): it works without GitHub Pro, and public demo repositories make Obeya known.
+  A public repository's site is listed, without random parts (they would hide nothing). Rejected
+  (2026-10-28, then reversed): GitHub only from a private repository.
 - **The setup's warning names no forge's search** (owner, 2026-10-29): a link in a public PR is
   found whatever the host, and a repository need not be on GitHub.
 - **No `robots.txt` on the unlisted site** (2026-10-28): its `Disallow` hides the `noindex` from

@@ -10,7 +10,7 @@ import { parseTagLines, tagLines } from '../core/page-tags';
 import { LANGUAGES } from '../core/locale';
 import { pushKeyFromEvent, type PushKeyView } from '../core/push-key';
 import { AccessSection } from './access';
-import { api, reload } from './api';
+import { api, reload, type SiteHow } from './api';
 import { keepConfigDraft, keptConfigDraft } from './configDraft';
 import { keep } from './keep';
 import { plain } from './markdown';
@@ -1204,28 +1204,64 @@ function DemoBlock({ on }: { on: boolean }) {
   );
 }
 
+/** Which Cloudflare account a new site goes into: that of a site this machine deploys to (its name), this machine's login (''), or another account by its API token ('token'). */
+interface CloudflareWay {
+  account: string;
+  token: string;
+  accountId: string;
+}
+
+/** The choice as the server takes it. */
+const cloudflareHow = (w: CloudflareWay): SiteHow => (w.account === 'token' ? { token: w.token, ...(w.accountId.trim() ? { accountId: w.accountId.trim() } : {}) } : w.account ? { account: w.account } : {});
+
+/** Where Cloudflare's API tokens are made. */
+const CLOUDFLARE_TOKENS = 'https://dash.cloudflare.com/profile/api-tokens';
+
 /**
- * Which Cloudflare account a new site goes into: that of a site this machine deploys to already
- * (`accounts`, by site), or the machine's own login in the browser (''). Shown only where there is a
- * site to take one from.
+ * The Cloudflare account a new site goes into: that of a site this machine deploys to already
+ * (`accounts`, by site), this machine's own login (logging in in the browser where there is none),
+ * or another account, by an API token pasted here, which leaves the machine's login as it is.
  */
-function CloudflareAccount({ accounts, value, onChange, disabled }: { accounts: string[]; value: string; onChange: (account: string) => void; disabled?: boolean }) {
+function CloudflareAccount({ accounts, way, onChange, disabled }: { accounts: string[]; way: CloudflareWay; onChange: (way: CloudflareWay) => void; disabled?: boolean }) {
   const a = t.config.personal;
-  if (!accounts.length) return null;
   return (
-    <label className="site-account">
-      <span className="hint">{a.account}</span>
-      <select aria-label={a.account} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
-        {accounts.map((x) => (
-          <option key={x} value={x}>
-            {a.accountOf(x)}
-          </option>
-        ))}
-        <option value="">{a.accountLogin}</option>
-      </select>
-    </label>
+    <div className="site-account">
+      <label>
+        <span className="hint">{a.account}</span>
+        <select aria-label={a.account} value={way.account} disabled={disabled} onChange={(e) => onChange({ ...way, account: e.target.value })}>
+          {accounts.map((x) => (
+            <option key={x} value={x}>
+              {a.accountOf(x)}
+            </option>
+          ))}
+          <option value="">{a.accountLogin}</option>
+          <option value="token">{a.accountToken}</option>
+        </select>
+      </label>
+      {way.account === 'token' && (
+        <>
+          <label>
+            <span className="hint">
+              {a.tokenLabel}{' '}
+              <a href={CLOUDFLARE_TOKENS} target="_blank" rel="noreferrer">
+                {a.tokenLink}
+              </a>
+            </span>
+            <input className="c-path" type="password" autoComplete="off" spellCheck={false} aria-label={a.tokenLabel} value={way.token} disabled={disabled} onChange={(e) => onChange({ ...way, token: e.target.value })} />
+          </label>
+          <label>
+            <span className="hint">{a.accountIdLabel}</span>
+            <input className="c-path" spellCheck={false} aria-label={a.accountIdLabel} value={way.accountId} disabled={disabled} onChange={(e) => onChange({ ...way, accountId: e.target.value })} />
+          </label>
+        </>
+      )}
+    </div>
   );
 }
+
+/** The hosts the personal site may be set up at, in the switcher's order: a public GitHub repository works with any account. */
+type PersonalHost = 'github-public' | 'github' | 'cloudflare';
+const PERSONAL_HOSTS: PersonalHost[] = ['github-public', 'github', 'cloudflare'];
 
 /** The host chosen for a new site, and a connection code pasted but not sent yet: they survive closing the dialog. */
 const PERSONAL_HOST_KEY = 'obeya-personal-host';
@@ -1238,8 +1274,8 @@ const PERSONAL_CODE_KEY = 'obeya-personal-code';
  */
 function PersonalSiteBlock({ on }: { on: boolean }) {
   const [view, setView] = useState<PersonalSiteView | null>(null);
-  const [host, setHost] = useState<'cloudflare' | 'github'>(() => (sessionStorage.getItem(PERSONAL_HOST_KEY) === 'github' ? 'github' : 'cloudflare'));
-  const [account, setAccount] = useState<string | null>(null);
+  const [host, setHost] = useState<PersonalHost>(() => PERSONAL_HOSTS.find((h) => h === sessionStorage.getItem(PERSONAL_HOST_KEY)) ?? PERSONAL_HOSTS[0]!);
+  const [way, setWay] = useState<CloudflareWay | null>(null);
   const [code, setCode] = useState(() => sessionStorage.getItem(PERSONAL_CODE_KEY) ?? '');
   const [connecting, setConnecting] = useState(() => !!sessionStorage.getItem(PERSONAL_CODE_KEY));
   const [copied, copy] = useCopy(1500);
@@ -1284,10 +1320,10 @@ function PersonalSiteBlock({ on }: { on: boolean }) {
     }
   };
   // the first site's account, until the owner chooses
-  const chosen = account ?? view.cloudflareAccounts[0] ?? '';
-  const setUp = (h: 'cloudflare' | 'github') => {
+  const chosen: CloudflareWay = way ?? { account: view.cloudflareAccounts[0] ?? '', token: '', accountId: '' };
+  const setUp = (h: PersonalHost) => {
     setHost(h);
-    void act(() => api.setUpPersonalSite(h, h === 'cloudflare' ? chosen : undefined));
+    void act(() => (h === 'cloudflare' ? api.setUpPersonalSite('cloudflare', cloudflareHow(chosen)) : api.setUpPersonalSite('github', h === 'github-public' ? { public: true } : {})));
   };
   const job = view.job;
   const site = view.site;
@@ -1297,15 +1333,15 @@ function PersonalSiteBlock({ on }: { on: boolean }) {
       {!site ? (
         <div className="cfg-narrow">
           <div className="seg" role="radiogroup" aria-label={p.title}>
-            {(['cloudflare', 'github'] as const).map((h) => (
+            {PERSONAL_HOSTS.map((h) => (
               <button key={h} type="button" role="radio" aria-checked={host === h} className={host === h ? 'on' : undefined} disabled={running} onClick={() => setHost(h)}>
                 {p.hosts[h]}
               </button>
             ))}
           </div>
           <p className="hint">{p.notes[host]}</p>
-          {host === 'cloudflare' && <CloudflareAccount accounts={view.cloudflareAccounts} value={chosen} onChange={setAccount} disabled={running} />}
-          <button className="btn primary" disabled={running} onClick={() => setUp(host)}>
+          {host === 'cloudflare' && <CloudflareAccount accounts={view.cloudflareAccounts} way={chosen} onChange={setWay} disabled={running} />}
+          <button className="btn primary" disabled={running || (host === 'cloudflare' && chosen.account === 'token' && !chosen.token.trim())} onClick={() => setUp(host)}>
             {running ? p.settingUp : p.setup}
           </button>
           {job && (job.running || !job.error) && job.lines.length > 0 && <p className="hint c-install">{job.lines.at(-1)}</p>}
@@ -1319,7 +1355,7 @@ function PersonalSiteBlock({ on }: { on: boolean }) {
               {p.tryCloudflare}
             </button>
           )}
-          <p className="hint">{p.unlistedNote}</p>
+          {host !== 'github-public' && <p className="hint">{p.unlistedNote}</p>}
           {!connecting ? (
             <button className="link" onClick={() => setConnecting(true)}>
               {p.connect}
@@ -1350,13 +1386,13 @@ function PersonalSiteBlock({ on }: { on: boolean }) {
             <a href={site.url} target="_blank" rel="noreferrer">
               {site.url.replace(/^https:\/\//, '').replace(/\/$/, '')}
             </a>
-            <span className="hint"> · {p.at(p.hosts[site.host], site.project)}</span>
+            <span className="hint"> · {p.at(p.hostNames[site.host], site.project)}</span>
           </p>
           <p className="hint">
             {p.example} <code>{site.example.replace(/^https:\/\//, '')}</code>
           </p>
           {site.needs && <p className="p-error">{p.needs(site.needs)}</p>}
-          <p className="hint">{p.unlistedNote}</p>
+          {!site.listed && <p className="hint">{p.unlistedNote}</p>}
           <Field label={p.privateRepos} hint={p.privateHint}>
             {view.privateRepos.length ? (
               <div className="personal-private">
@@ -2091,7 +2127,7 @@ function SiteSetupRow({ path, name, empty, onSite }: { path: string; name: strin
   const [open, setOpen] = useState(false);
   const [host, setHost] = useState<'cloudflare' | 'github'>('cloudflare');
   const [accounts, setAccounts] = useState<string[]>([]);
-  const [account, setAccount] = useState<string | null>(null);
+  const [way, setWay] = useState<CloudflareWay | null>(null);
   const [job, setJob] = useState<SiteSetupJob | null>(null);
   const [done, setDone] = useState(false);
   const [status, setStatus] = useState('');
@@ -2111,7 +2147,7 @@ function SiteSetupRow({ path, name, empty, onSite }: { path: string; name: strin
   useEffect(() => {
     if (open) api.personalSite().then((v) => setAccounts(v.cloudflareAccounts), console.error);
   }, [open]);
-  const chosen = account ?? accounts[0] ?? '';
+  const chosen: CloudflareWay = way ?? { account: accounts[0] ?? '', token: '', accountId: '' };
   const running = !!job?.running;
   useEffect(() => {
     if (!running) return;
@@ -2137,7 +2173,7 @@ function SiteSetupRow({ path, name, empty, onSite }: { path: string; name: strin
             ))}
           </div>
           <p className="hint">{c.siteSetupNotes[host]}</p>
-          {host === 'cloudflare' && <CloudflareAccount accounts={accounts} value={chosen} onChange={setAccount} disabled={running} />}
+          {host === 'cloudflare' && <CloudflareAccount accounts={accounts} way={chosen} onChange={setWay} disabled={running} />}
           <button
             type="button"
             className="btn small primary"
@@ -2145,7 +2181,7 @@ function SiteSetupRow({ path, name, empty, onSite }: { path: string; name: strin
             onClick={async () => {
               setStatus('');
               try {
-                take((await api.setUpRepoSite(path, host, name, host === 'cloudflare' ? chosen : undefined)).job);
+                take((await api.setUpRepoSite(path, host, name, host === 'cloudflare' ? cloudflareHow(chosen) : {})).job);
               } catch (e) {
                 setStatus(failText(e));
               }

@@ -119,6 +119,18 @@ export const undoShownMs = (undoMs: number) => Math.max(0, undoMs - 400);
 /** How long a confirmation stays: 7 s, unless its undo window is longer (above the microphone and in the app's panel alike). */
 export const confirmShownMs = (undoMs = 0) => Math.max(7000, undoMs + 1500);
 
+/**
+ * How a new site is set up at its host: in the Cloudflare account of a site this machine deploys to
+ * (`account`, by site), with another account's API token, or (neither) with the machine's own login;
+ * at GitHub in a public repository (`public`) or a private one.
+ */
+export interface SiteHow {
+  account?: string;
+  token?: string;
+  accountId?: string;
+  public?: true;
+}
+
 export const api = {
   canvases: () => call<CanvasInfo[]>('GET', '/api/canvases'),
   /** Obeya's configuration, for all canvases. */
@@ -181,13 +193,13 @@ export const api = {
   useLocalVoice: () => call<VoiceSetupView>('DELETE', '/api/voice-setup/cloud'),
   /** The owner's personal demo site on this machine: set up at a host, connected by code, removed; private repositories ticked for it. */
   personalSite: () => call<PersonalSiteView>('GET', '/api/personal-site'),
-  setUpPersonalSite: (host: 'cloudflare' | 'github', account?: string) => call<PersonalSiteView>('POST', '/api/personal-site/setup', { host, ...(account ? { account } : {}) }),
+  setUpPersonalSite: (host: 'cloudflare' | 'github', how: SiteHow = {}) => call<PersonalSiteView>('POST', '/api/personal-site/setup', { host, ...how }),
   connectPersonalSite: (code: string) => call<PersonalSiteView>('POST', '/api/personal-site/connect', { code }),
   personalSiteCode: () => call<{ code: string }>('GET', '/api/personal-site/code'),
   removePersonalSite: () => call<PersonalSiteView>('DELETE', '/api/personal-site'),
   allowPrivateRepo: (path: string, on: boolean) => call<PersonalSiteView>('POST', '/api/personal-site/private', { path, on }),
   /** „Demo-Seite einrichten“ for a repository: started, followed, and taken into its settings. */
-  setUpRepoSite: (path: string, host: 'cloudflare' | 'github', name: string, account?: string) => call<{ job: SiteSetupJob | null }>('POST', '/api/site-setup', { path, host, name, ...(account ? { account } : {}) }),
+  setUpRepoSite: (path: string, host: 'cloudflare' | 'github', name: string, how: SiteHow = {}) => call<{ job: SiteSetupJob | null }>('POST', '/api/site-setup', { path, host, name, ...how }),
   repoSiteSetup: (path: string) => call<{ job: SiteSetupJob | null }>('GET', `/api/site-setup?path=${encodeURIComponent(path)}`),
   repoSiteTaken: (path: string) => call<object>('DELETE', `/api/site-setup?path=${encodeURIComponent(path)}`),
   demoSettings: () => call<DemoSettingsView>('GET', '/api/demo-settings'),

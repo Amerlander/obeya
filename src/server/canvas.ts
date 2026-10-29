@@ -2677,7 +2677,7 @@ function shareRef(site: DemoSite | null, home: string, path: string, isPublic: b
   if (!p || siteMissing(home, personalDemoSite(p))) return { ...needs, sharePersonal: 'none' };
   if (!allowedHere(p, path, isPublic)) return { ...needs, sharePersonal: 'private' };
   // a repository whose site publishes each approved demo does so on the personal site too
-  return { share: true, shareUnlisted: true, ...(site?.publish === 'approved' ? { shareOnApproval: true as const } : {}) };
+  return { share: true, ...(p.secret ? { shareUnlisted: true as const } : {}), ...(site?.publish === 'approved' ? { shareOnApproval: true as const } : {}) };
 }
 
 /** Tells the UI about sharing on the repository what `share` says, in place of what it was told before. */

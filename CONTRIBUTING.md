@@ -53,7 +53,7 @@ updates the design doc and shows the change: a demo video linked from the pull r
 screenshots.
 
 With Obeya, set up a personal demo site once (Konfiguration → Demos → „Persönliche Demo-Seite“:
-Cloudflare Pages with a free account, or GitHub Pages with GitHub Pro; a few minutes). Your
-Obeya cannot deploy to the project's own demo site, so "Teilen" puts your demo there instead, on
-a page only those with the link find, and Obeya writes the link into your pull request's
-description by itself.
+GitHub Pages from a public repository with any GitHub account, from a private one with GitHub
+Pro, or Cloudflare Pages with a free account; a few minutes). Your Obeya cannot deploy to the
+project's own demo site, so "Teilen" puts your demo there instead, and Obeya writes the link into
+your pull request's description by itself.

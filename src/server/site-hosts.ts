@@ -76,7 +76,7 @@ export function cloudflareAccounts(home: string): { site: string; env: Record<st
  * or without one with the machine's wrangler login, logging in through the browser first where there
  * is none. A name taken gets a suffix. Returns its address.
  */
-export async function setupCloudflare(o: { home: string; name: string; account?: string; log: (line: string) => void; x?: Exec; wait?: number[] }): Promise<{ url: string; project: string; env?: Record<string, string> }> {
+export async function setupCloudflare(o: { home: string; name: string; account?: string; token?: Record<string, string>; log: (line: string) => void; x?: Exec; wait?: number[] }): Promise<{ url: string; project: string; env?: Record<string, string> }> {
   // wrangler runs in an empty directory of its own: in another one it reads (and writes) what it
   // finds there, and a command it hands on to Workers uploads that directory (2026-10-29: Obeya's
   // checkout went up as a Worker)
@@ -91,9 +91,11 @@ export async function setupCloudflare(o: { home: string; name: string; account?:
 async function cloudflareIn(cwd: string, o: Parameters<typeof setupCloudflare>[0]): Promise<{ url: string; project: string; env?: Record<string, string> }> {
   const base = o.x ?? exec;
   const x: Exec = (argv, opts) => base(argv, { ...opts, cwd });
-  const env = o.account ? cloudflareAccounts(o.home).find((a) => a.site === o.account)?.env : undefined;
-  if (o.account && !env) throw new SetupRefused(`no Cloudflare credentials of ${o.account} on this machine`);
-  if (env) o.log(`Using the Cloudflare account of ${o.account}.`);
+  // another account's API token, the account of a site this machine deploys to, or the machine's login
+  const env = o.token ?? (o.account ? cloudflareAccounts(o.home).find((a) => a.site === o.account)?.env : undefined);
+  if (!o.token && o.account && !env) throw new SetupRefused(`no Cloudflare credentials of ${o.account} on this machine`);
+  if (o.token) o.log('Using the API token given.');
+  else if (env) o.log(`Using the Cloudflare account of ${o.account}.`);
   // without a token of the site's, the machine's own wrangler login deploys, in the site's account
   if (!env?.CLOUDFLARE_API_TOKEN) {
     o.log('Checking the Cloudflare login on this machine…');

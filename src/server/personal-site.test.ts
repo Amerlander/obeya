@@ -45,7 +45,7 @@ const URL_ = `http://localhost:${server.port}/`;
 const personal = (extra: Partial<PersonalSite> = {}): PersonalSite => ({ host: 'cloudflare', url: URL_, project: 'obeya-ada', secret: 's3cr3tdirectory000000000', ...extra });
 /** The personal site as a target, deploying with the stand-in in place of wrangler. */
 const unlisted = (at = home, machine = 'a') =>
-  siteTarget({ title: 'Demos', url: URL_, deploy: `deploy.ts {dir} ${dir}` }, repo, at, MESSAGES.en.share, { machine, checkWaits: [0, 10, 10], by: 'Ada Lovelace', unlisted: { secret: personal().secret } });
+  siteTarget({ title: 'Demos', url: URL_, deploy: `deploy.ts {dir} ${dir}` }, repo, at, MESSAGES.en.share, { machine, checkWaits: [0, 10, 10], by: 'Ada Lovelace', unlisted: { secret: personal().secret! } });
 const siteDir = (at = home) => join(at, 'sites', siteKey(URL_), 'site');
 const deployed = () => join(dir, 'deployed');
 const page = (slug: string, extra: Partial<SharePage> = {}): SharePage => ({ slug, title: `Title ${slug}`, text: 'One sentence.', kind: 'video', chapters: [[0, 'Before']], pr: null, language: 'en', dir: demo, shared: [], ...extra });
@@ -215,6 +215,18 @@ describe('sharing without a site of the repository', () => {
     expect(board.events(id).some((e) => e.kind === 'error')).toBe(true);
   });
 
+  test('a listed personal site (a public GitHub repository): no random part, an overview listing the page', async () => {
+    const { secret: _, ...listed } = personal({ host: 'github', project: 'ada/obeya-demos' });
+    writePersonal(home, listed);
+    const id = card();
+    sharing.share(id);
+    const url = (await settled(id, 'shared'))!.url!;
+    expect(url).toMatch(new RegExp(`^${URL_}sync-button-[0-9a-z]+/$`));
+    expect(board.item(id)!.share!.unlisted).toBeUndefined();
+    expect(readFileSync(join(deployed(), 'index.html'), 'utf8')).toContain('Sync button');
+    expect(existsSync(join(deployed(), MANIFEST))).toBe(true);
+  });
+
   test('a repository whose site this machine cannot deploy to falls back to the personal site', async () => {
     source = { site: { title: 'Team', url: 'https://demos.example.dev', deploy: 'true', env: 'sites/team/cloudflare.env' }, repo, isPublic: true };
     const id = card();
@@ -281,7 +293,17 @@ describe('setting up at GitHub', () => {
     expect((await setupGithub({ name: 'obeya-demos', private: true, log: () => {}, x, wait: [] })).project).toBe('ada/obeya-demos-2');
   });
 
-  test('every setup through the configuration makes the personal site private', async () => {
+  test('a public repository, as chosen: any account, no check of the plan, a listed site', async () => {
+    answers[0] = ['api user', { code: 0, out: JSON.stringify({ login: 'ada', plan: { name: 'free' } }) }];
+    const setup = new SiteSetup({ home, changed: () => {}, x, wait: [] });
+    setup.setupPersonal({ host: 'github', public: true });
+    for (let i = 0; i < 100 && setup.view().job?.running; i++) await Bun.sleep(5);
+    expect(setup.view().site).toMatchObject({ host: 'github', listed: true });
+    expect(calls.find((c) => c[2] === 'create')).toContain('--public');
+    expect(readPersonal(home)!.secret).toBeUndefined();
+  });
+
+  test('every setup through the configuration without the public choice makes the personal site private', async () => {
     const setup = new SiteSetup({ home, changed: () => {}, x, wait: [] });
     setup.setupPersonal({ host: 'github' });
     for (let i = 0; i < 100 && setup.view().job?.running; i++) await Bun.sleep(5);
@@ -386,6 +408,12 @@ describe('setting up at Cloudflare', () => {
     expect(r).toMatchObject({ url: 'https://obeya-ada-x1y2.pages.dev', env: { CLOUDFLARE_API_TOKEN: 'tok', CLOUDFLARE_ACCOUNT_ID: 'acc' } });
     expect(r.project).toMatch(/^obeya-ada-[a-z0-9]{1,4}$/);
     expect(calls.some((c) => c.includes('login'))).toBe(false);
+  });
+
+  test('another account by its API token: no login, the token for the new site', async () => {
+    const r = await setupCloudflare({ home, name: 'obeya-ada', token: { CLOUDFLARE_API_TOKEN: 'another-token-0123456789' }, log: () => {}, wait: [], x: x(() => ({ code: 0, out: 'created https://obeya-ada.pages.dev/' })) });
+    expect(calls.some((c) => c.includes('login') || c.includes('whoami'))).toBe(false);
+    expect(r.env).toEqual({ CLOUDFLARE_API_TOKEN: 'another-token-0123456789' });
   });
 
   test('without one, logs in through the browser with wrangler', async () => {

@@ -40,7 +40,8 @@ export class SiteSetup {
             host: p.host,
             url: p.url,
             project: p.project,
-            example: `${p.url.replace(/\/+$/, '')}/${newToken()}/…/`,
+            example: `${p.url.replace(/\/+$/, '')}/${p.secret ? `${newToken()}/` : ''}…/`,
+            ...(p.secret ? {} : { listed: true as const }),
             ...(siteMissing(this.o.home, personalDemoSite(p)) ? { needs: p.env! } : {}),
           }
         : null,
@@ -73,18 +74,21 @@ export class SiteSetup {
   setupPersonal(input: unknown): PersonalSiteView {
     const host = hostOf(input);
     const account = accountOf(input);
+    const token = tokenOf(input);
+    // a public repository: any GitHub account, and a listed site, since anyone can list its files
+    const open = host === 'github' && (input as { public?: unknown } | null)?.public === true;
     if (readPersonal(this.o.home)) throw new BadRequest('invalid', 'this machine has a personal demo site already; remove it first');
     this.run(PERSONAL, host, async (log) => {
       const name = `obeya-${slug(this.o.user ?? '') || 'demos'}`.slice(0, 50);
       let site: PersonalSite;
       if (host === 'cloudflare') {
-        const r = await setupCloudflare({ home: this.o.home, name, log, ...(account ? { account } : {}), ...(this.o.x ? { x: this.o.x } : {}), ...(this.o.wait ? { wait: this.o.wait } : {}) });
+        const r = await setupCloudflare({ home: this.o.home, name, log, ...(account ? { account } : {}), ...(token ? { token } : {}), ...(this.o.x ? { x: this.o.x } : {}), ...(this.o.wait ? { wait: this.o.wait } : {}) });
         site = { host, url: r.url, project: r.project, secret: newToken(128) };
         if (r.env) writeEnv(this.o.home, (site.env = envFileFor(r.url, host)), r.env);
       } else {
-        // always private: a public repository would list every page's random address
-        const r = await setupGithub({ name: 'obeya-demos', private: true, log, ...(this.o.x ? { x: this.o.x } : {}), ...(this.o.wait ? { wait: this.o.wait } : {}) });
-        site = { host, url: r.url, project: r.project, secret: newToken(128) };
+        // a private repository keeps the site unlisted; a public one lists its files, so its site is listed
+        const r = await setupGithub({ name: 'obeya-demos', private: !open, log, ...(this.o.x ? { x: this.o.x } : {}), ...(this.o.wait ? { wait: this.o.wait } : {}) });
+        site = { host, url: r.url, project: r.project, ...(open ? {} : { secret: newToken(128) }) };
       }
       writePersonal(this.o.home, site);
       this.o.changed();
@@ -142,12 +146,13 @@ export class SiteSetup {
     if (typeof path !== 'string' || !path) throw new BadRequest('invalid', 'expected { path, host }');
     const host = hostOf({ host: h });
     const account = accountOf(input);
+    const token = tokenOf(input);
     const title = typeof name === 'string' && name.trim() ? name.trim() : basename(path);
     const project = `${slug(title) || 'demos'}-demos`.slice(0, 50);
     this.run(path, host, async (log) => {
       let site: DemoSite;
       if (host === 'cloudflare') {
-        const r = await setupCloudflare({ home: this.o.home, name: project, log, ...(account ? { account } : {}), ...(this.o.x ? { x: this.o.x } : {}), ...(this.o.wait ? { wait: this.o.wait } : {}) });
+        const r = await setupCloudflare({ home: this.o.home, name: project, log, ...(account ? { account } : {}), ...(token ? { token } : {}), ...(this.o.x ? { x: this.o.x } : {}), ...(this.o.wait ? { wait: this.o.wait } : {}) });
         site = { title: `${title} demos`, url: r.url, deploy: cloudflareDeploy(r.project) };
         if (r.env) writeEnv(this.o.home, (site.env = envFileFor(r.url, host)), r.env);
       } else {
@@ -205,6 +210,16 @@ function hostOf(input: unknown): SiteHost {
 function accountOf(input: unknown): string | undefined {
   const a = (input as { account?: unknown } | null)?.account;
   return typeof a === 'string' && a ? a : undefined;
+}
+
+/** An API token of another Cloudflare account, with its account's id where given: the new site's credentials. */
+function tokenOf(input: unknown): Record<string, string> | undefined {
+  const { token, accountId } = (input ?? {}) as { token?: unknown; accountId?: unknown };
+  if (typeof token !== 'string' || !token.trim()) return undefined;
+  if (!/^[A-Za-z0-9_-]{20,200}$/.test(token.trim())) throw new BadRequest('invalid', 'that is not a Cloudflare API token');
+  const id = typeof accountId === 'string' ? accountId.trim() : '';
+  if (id && !/^[a-f0-9]{32}$/.test(id)) throw new BadRequest('invalid', 'a Cloudflare account id is 32 hexadecimal characters');
+  return { CLOUDFLARE_API_TOKEN: token.trim(), ...(id ? { CLOUDFLARE_ACCOUNT_ID: id } : {}) };
 }
 
 const slug = (s: string) =>

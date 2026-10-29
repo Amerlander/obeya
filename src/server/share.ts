@@ -921,7 +921,7 @@ export class Sharing {
     const site = (this.o.personalSite ?? personalDemoSite)(p);
     if (siteMissing(this.o.home, site)) return null;
     const language = this.o.languageFor?.(card);
-    return siteTarget(site, src.repo, this.o.home, this.o.board.t.share, { unlisted: { secret: p.secret }, ...(language ? { language } : {}) });
+    return siteTarget(site, src.repo, this.o.home, this.o.board.t.share, { ...(p.secret ? { unlisted: { secret: p.secret } } : {}), ...(language ? { language } : {}) });
   }
 
   private personal(): PersonalSite | null {
@@ -949,7 +949,9 @@ export class Sharing {
   private fresh(card: Item, s: StoredShare | null): StoredShare {
     const { personal: _, ...base } = s ? atRest(s) : { slug: slugOf(card) };
     if (s?.url) return atRest(s);
-    return this.onPersonal(card) ? { ...base, personal: true, token: base.token ?? newToken() } : base;
+    if (!this.onPersonal(card)) return base;
+    // a listed personal site (a public repository) has no random part in its addresses
+    return this.personal()?.secret ? { ...base, personal: true, token: base.token ?? newToken() } : { ...base, personal: true };
   }
 
   private card(cardId: string): Item {

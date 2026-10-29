@@ -2079,5 +2079,7 @@ button.link:hover { text-decoration: underline; }
 .site-setup > .hint { margin: 0; }
 .personal-actions { display: flex; gap: 8px; align-items: center; margin: 10px 0 4px; }
 .cfg-narrow > .btn.primary { margin: 4px 0 8px; }
-.site-account { display: flex; gap: 8px; align-items: center; margin: 2px 0 8px; }
+.site-account { display: grid; gap: 6px; margin: 2px 0 10px; max-width: 520px; }
+.site-account label { display: flex; flex-direction: column; gap: 3px; }
+.site-account label:first-child { flex-direction: row; align-items: center; gap: 8px; }
 .site-account select { font: inherit; font-size: 13px; }

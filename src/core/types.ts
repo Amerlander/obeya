@@ -833,7 +833,7 @@ export interface Share {
   /** The card's latest demo is not on the page. */
   stale?: boolean;
   /** The page shows the card's demo, but pages changed since it was published ("Erneut teilen"): those changes, oldest first. */
-  outdated?: PageChangeId[];  /** The page is on the owner's personal demo site, unlisted. */
+  outdated?: PageChangeId[];  /** The page is on the owner’s personal demo site, unlisted (behind a random part of its address). */
   unlisted?: true;
 }
 
@@ -1650,6 +1650,8 @@ export interface PersonalSiteView {
     example: string;
     /** The env file with its credentials this machine lacks, relative to Obeya's home. */
     needs?: string;
+    /** A public GitHub repository's site: listed, without a random part in its addresses. */
+    listed?: true;
   } | null;
   job?: SiteSetupJob;
   /**
