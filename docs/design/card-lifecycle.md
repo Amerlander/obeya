@@ -100,11 +100,13 @@ geantwortet, wartet auf dich“ instead of „Demo bereit“; a new demo reads �
 words for the owner count as an answer (a reply, what the worker says, Obeya's result of
 `to_obeya`), from this turn; an answer to earlier words does not count. A turn that ends without any
 (an error, the session ended) leaves the card at „Demo bereit“, and the conversation says the agent
-stopped without answering. A turn that ends with words for the owner while background work it left
-running goes on (the app served for them to try) also gives the card back: only that work shows as
-running. A turn that ends without such words while its background work runs is still at the owner's
-words. A worker that a background command wakes later (a test run it said a new handover waits for)
-is at work again until its turn ends.
+stopped without answering. A turn that ends with words for the owner while only the app it serves
+for them to try runs on also gives the card back: only that app shows as running. Background work
+the worker waits for (a test run, a render it said a new handover waits for) keeps the card at work
+until it wakes the worker and its turn ends, words or not, and so does any background work after a
+turn without such words. The app is what the worker started in the turn in which it said the app
+runs (`app_running`) and still runs then: nothing else tells the two apart, so a worker names the app
+again each time it starts it anew.
 
 A question in the demo report is an open question like a worker's (see Questions go to the owner).
 The card's one field (see The conversation) takes the answer and feedback together; the worker hears
@@ -215,9 +217,13 @@ sheet), lists its decisions and links the idea or task its plan doc came from (s
   which took the approval away and held the feedback for „Rückgängig“ like a command.
 - **Only words for the owner count as an answer** (2026-10-19). Rejected: counting any end of a
   turn, which left „Agent hat geantwortet“ under a question no agent had seen.
-- **An answer given while the app it started runs on gives the card back** (2026-10-28). Rejected:
-  keeping the card at work as long as any background work of that turn ran, which showed an agent
-  at work on the owner's words for hours while only the test server it had restarted for them ran.
+- **An answer given while only the app it started runs on gives the card back** (2026-10-28,
+  narrowed 2026-10-29). Rejected: keeping the card at work as long as any background work of that
+  turn ran, which showed an agent at work on the owner's words for hours while only the test server
+  it had restarted for them ran; and giving the card back whatever background work ran, which read
+  „wartet auf dich“ while the tests and render the agent had said it would hand over after still
+  ran. The app is told apart by `app_running` rather than by the work's duration or the agent's
+  words: the SDK says neither which task serves what nor whether the agent waits for it.
 - **A demo a worker reworks after an answer is at work, not the owner's** (2026-10-07). Rejected:
   keeping the badge, where a worker paused for a restart was never resumed.
 - **A later handover says only what is new; a reply that changes nothing ends the turn**

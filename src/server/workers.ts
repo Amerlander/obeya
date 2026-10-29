@@ -242,6 +242,32 @@ interface PausedState {
   held?: { text: string; images: string[] }[];
 }
 
+/**
+ * A background task of the worker as Obeya follows it: whether it runs since an earlier turn, and
+ * whether it serves the app the worker said runs, which wakes nobody: the worker waits for no app.
+ */
+interface RunningTask extends BackgroundTask {
+  earlier?: true;
+  app?: true;
+}
+
+/**
+ * The worker said its app runs (or no longer does). The work it started in this turn and runs now
+ * serves it (the dev server it started, then checked); work from an earlier turn (a test run it
+ * waits for) does not. The SDK links no task to the app, so this is what tells the two apart.
+ */
+function appRunning(live: Live, runs: boolean) {
+  for (const t of live.tasks.values()) {
+    if (!runs) delete t.app;
+    else if (!t.earlier) t.app = true;
+  }
+}
+
+/** Whether all the worker's background work that runs serves its app. */
+function onlyApp(live: Live): boolean {
+  return live.tasks.size > 0 && [...live.tasks.values()].every((t) => t.app);
+}
+
 interface Live {
   session: AgentSession;
   /** The machine its workspace is on (null: the one Obeya runs on), where it holds a slot while in a turn. */
@@ -274,7 +300,7 @@ interface Live {
   /** How many of the worker's background tasks run, as the session last said. */
   background: number;
   /** Those tasks by the session's id, as the agent described them and since when Obeya saw them run, the oldest first: on the card while they run. */
-  tasks: Map<string, BackgroundTask>;
+  tasks: Map<string, RunningTask>;
   /** When the usage limit that stopped the worker lifts (or, not knowing, when to try again); gone once it works. */
   limited?: number;
   /** The card's status line from before the worker waited for the limit, back once it works again. */
@@ -2321,7 +2347,7 @@ export class Workers {
 
   /** The cards whose worker is in a turn, each with its background work that runs and whether the turn waits only for that work. */
   private turnsShown(): Map<string, WorkerTurn> {
-    return new Map([...this.live].filter(([, l]) => l.busy).map(([id, l]) => [id, { tasks: [...l.tasks.values()], over: !!l.waiting }]));
+    return new Map([...this.live].filter(([, l]) => l.busy).map(([id, l]) => [id, { tasks: [...l.tasks.values()].map(({ description, since }) => ({ description, since })), over: !!l.waiting }]));
   }
 
   /** How many of these workers are in a turn on a machine (null: the one Obeya runs on). */
@@ -2679,6 +2705,7 @@ export class Workers {
         if (live.held !== undefined) this.o.board.log(cardId, 'say', 'worker', live.held);
         live.held = undefined;
         if (!e.name.startsWith('mcp__obeya__')) this.o.board.log(cardId, 'activity', 'worker', describeTool(e.name, e.input, this.o.board.t));
+        else if (e.name === 'mcp__obeya__app_running') appRunning(live, String(e.input.url ?? '').trim() !== '');
         break;
       case 'denied': {
         const t = this.o.board.t;
@@ -2731,6 +2758,8 @@ export class Workers {
     void this.folder?.settle(cardId);
     const handedOver = live.handedOver;
     const acted = live.acted || waited;
+    // what runs now was started before any later turn
+    for (const t of live.tasks.values()) t.earlier = true;
     const closing = live.held;
     const snoozed = live.snoozed;
     const spoke = !!live.spoke;
@@ -2757,9 +2786,10 @@ export class Workers {
       // while its render runs): a restart now would cut it off
       this.waitForWorker(cardId, live);
       if (!handedOver) {
-        // words for the owner on its handover answer theirs though work it left running goes on (the
-        // app served for them to try): the card is theirs again, and is at work once that work wakes it
-        if (spoke && answering(card)) this.answerTaken(cardId, true);
+        // words for the owner on its handover answer theirs though the app it serves for them to try
+        // runs on: the card is theirs again. Other work (a test run, a render) wakes the worker to go
+        // on towards what it told them, so the card stays at work while it runs.
+        if (spoke && answering(card) && onlyApp(live)) this.answerTaken(cardId, true);
         return;
       }
     }
@@ -2908,7 +2938,7 @@ export class Workers {
     // what it changes in a folder without git meanwhile is the card's
     this.folder?.background(cardId, running.length > 0);
     const now = Date.now();
-    live.tasks = new Map(running.map((t) => [t.id, { description: t.description, since: live.tasks.get(t.id)?.since ?? now }]));
+    live.tasks = new Map(running.map((t) => [t.id, { ...live.tasks.get(t.id), description: t.description, since: live.tasks.get(t.id)?.since ?? now }]));
     // the card shows what runs while the worker is in a turn
     if (live.busy) this.o.board.changed();
     if (live.waiting) this.waitForWorker(cardId, live);
@@ -3635,7 +3665,7 @@ export class Workers {
       },
       {
         name: 'app_running',
-        description: `The app runs in your workspace and opens in a browser: its address as you open it (http://localhost:5173, say), so the owner can open it from the card to try it by hand while it runs. Again when the address changes; an empty url once you stop it.`,
+        description: `The app runs in your workspace and opens in a browser: its address as you open it (http://localhost:5173, say), so the owner can open it from the card to try it by hand while it runs. Again each time you start it anew or its address changes; an empty url once you stop it.`,
         schema: { url: z.string() },
         run: ({ url }) => {
           const u = String(url).trim();

@@ -455,6 +455,7 @@ describe('handing over with a demo', () => {
     workers.message(c.id, 'Starte den Testserver nochmal.');
     runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun run dev', run_in_background: true } });
     runtime.last.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Start dev server' }] });
+    runtime.last.emit({ type: 'tool', name: 'mcp__obeya__app_running', input: { url: 'http://localhost:5173' } });
     runtime.last.call('reply', { text: 'Läuft wieder.' });
     runtime.last.emit({ type: 'idle', background: 1 });
     const item = board.item(c.id)!;
@@ -469,6 +470,42 @@ describe('handing over with a demo', () => {
     runtime.last.emit({ type: 'idle', background: 2 });
     expect(board.item(c.id)).toMatchObject({ answering: true, inTurn: true });
     expect(needsYou(board.item(c.id)!)).toBe(false);
+  });
+
+  test('a worker that answers while work it waits for runs (a test run, a render) stays at work until that work wakes it', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    runtime.last.emit({ type: 'idle' });
+    // the app it served for the owner runs since an earlier turn
+    workers.message(c.id, 'Starte den Testserver.');
+    runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun run dev', run_in_background: true } });
+    runtime.last.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Start dev server' }] });
+    runtime.last.emit({ type: 'tool', name: 'mcp__obeya__app_running', input: { url: 'http://localhost:5173' } });
+    runtime.last.call('reply', { text: 'Läuft.' });
+    runtime.last.emit({ type: 'idle', background: 1 });
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', answered: true });
+    workers.message(c.id, 'Die Reihenfolge bitte umdrehen.');
+    runtime.last.emit({ type: 'tool', name: 'Bash', input: { command: 'bun test && bun demo.ts', run_in_background: true } });
+    runtime.last.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Start dev server' }, { id: 'b2', description: 'Full tests, then render' }] });
+    runtime.last.emit({ type: 'text', text: 'Umgedreht. Die Tests laufen, danach nehme ich das Video auf und übergebe.' });
+    runtime.last.emit({ type: 'idle', background: 2 });
+    const item = board.item(c.id)!;
+    expect(item).toMatchObject({ answering: true, inTurn: true });
+    expect(item.answered).toBeUndefined();
+    expect(needsYou(item)).toBe(false);
+    // the work it said it waits for is not the app, even should it name the app's address again
+    runtime.last.emit({ type: 'tool', name: 'mcp__obeya__app_running', input: { url: 'http://localhost:5173' } });
+    runtime.last.emit({ type: 'idle', background: 2 });
+    expect(board.item(c.id)).toMatchObject({ answering: true, inTurn: true });
+    // that work done, the worker goes on and hands over
+    runtime.last.emit({ type: 'background', tasks: [{ id: 'b1', description: 'Start dev server' }] });
+    runtime.last.emit({ type: 'text', text: 'Tests grün, Video fertig.' });
+    await runtime.last.call('ready_for_review', { summary: 'S2', demo: { dir: demoDir(), chapters: ['Vorher', 'Nachher'] } });
+    runtime.last.emit({ type: 'idle', background: 1 });
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'demo' });
+    expect(board.item(c.id)!.answering).toBeUndefined();
+    expect(needsYou(board.item(c.id)!)).toBe(true);
   });
 
   test('a worker taking in an answer resumes after a restart; a session that ends gives the demo back to the owner', async () => {
