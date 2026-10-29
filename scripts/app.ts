@@ -1,8 +1,7 @@
-// The app's shell (app/) started from the checkout, for what only the app does (its push-to-talk
-// key anywhere on the machine, say): it opens a window on the Obeya that runs on the home, or starts
-// this checkout's server (`bun src/server/main.ts`, which updates itself from the checkout as `bun
-// start` does) and stops it when the app quits. No compiled server and no installer: those are
-// scripts/build-app.ts.
+// The app's shell (app/) started from the checkout: it opens a window on the Obeya that runs on
+// the home, or starts this checkout's server (`bun src/server/main.ts`, which updates itself from
+// the checkout as `bun start` does) and stops it when the app quits. No compiled server and no
+// installer: those are scripts/build-app.ts.
 //
 //   bun run app [--debug]            builds the shell and runs it from this terminal
 //   bun run app install [--no-open]  installs it as an app of its own, "Obeya (checkout)", and opens it
@@ -18,9 +17,6 @@
 //
 // Needs Rust (rustup) and, on Linux, WebKitGTK's development files, as scripts/build-app.ts says.
 // The first build takes some minutes; it goes into app/target/checkout/ and is reused after that.
-// On a Mac the key needs the "Input Monitoring" permission for the program the shell runs in:
-// started from a terminal, macOS asks for the terminal; installed, for "Obeya (checkout)", again
-// after each new build of it (an ad-hoc signature changes with every build).
 
 import { spawn } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';

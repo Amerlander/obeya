@@ -153,7 +153,7 @@ describe('who may', () => {
     expect((await at('/', link)).status).toBe(200);
     expect((await at(api('/cards'), link)).status).toBe(403);
     expect((await at('/', link, { method: 'POST' })).status).toBe(403);
-    expect((await at('/panel', { host: 'rebound.evil.example' })).status).toBe(421);
+    expect((await at('/', { host: 'rebound.evil.example' })).status).toBe(421);
     expect((await at('/nothing', { host: 'rebound.evil.example' })).status).toBe(421);
     expect(await opens({ origin: own() })).toBe(true);
     expect(await opens({ origin: 'https://evil.example' })).toBe(false);
@@ -242,7 +242,6 @@ describe('only the owner', () => {
     const page = await bare('/');
     expect(page.status).toBe(401);
     expect(await page.text()).toContain('nicht bei Obeya angemeldet');
-    expect((await bare('/panel')).status).toBe(401);
     expect(await opens({})).toBe(false);
     expect(board.snapshot().items).toEqual([]);
   });
@@ -417,8 +416,6 @@ describe('voice', () => {
     expect(body.confirm).toBe('Neue Karte „Export“, der Agent fängt an.');
     expect(body.token).toBeTruthy();
     expect((body as { undoMs?: number }).undoMs).toBe(DELAY_MS);
-    // what was heard, for the app's panel
-    expect((body as { text?: string }).text).toBe('Neue Karte Export');
     // Obeya does not speak
     expect(body.audio).toBeUndefined();
     expect(executed).toEqual([]);
@@ -580,9 +577,8 @@ describe('voice', () => {
     const typed = (await (await post(api(`/command?card=${c.id}`), JSON.stringify({ text: 'gib das frei', field: 'feedback' }))).json()) as { quiet?: boolean };
     expect(typed).toMatchObject({ quiet: true });
     whisper = () => 'Mach den Knopf größer';
-    const spoken = (await (await fetch(new URL(api(`/voice?card=${c.id}`), server.url), { method: 'POST', body: 'AUDIO' })).json()) as { quiet?: boolean; text?: string };
-    // the app's panel shows what was heard
-    expect(spoken).toMatchObject({ quiet: true, text: 'Mach den Knopf größer' });
+    const spoken = (await (await fetch(new URL(api(`/voice?card=${c.id}`), server.url), { method: 'POST', body: 'AUDIO' })).json()) as { quiet?: boolean };
+    expect(spoken).toMatchObject({ quiet: true });
     expect(told).toEqual([
       [c.id, 'gib das frei', [], false],
       [c.id, 'Mach den Knopf größer', [], true],
@@ -640,7 +636,7 @@ describe('voice', () => {
       f.set('text', text);
       return f;
     };
-    expect(await voice('', form(' Siehe Log: '))).toMatchObject({ quiet: true, text: 'Siehe Log: und hier fehlt der zweite Knopf' });
+    expect(await voice('', form(' Siehe Log: '))).toMatchObject({ quiet: true });
     // a browser sends the form's line breaks as CRLF
     await voice('', form('Zwei Dinge.\r\n- erstens'));
     expect(told).toEqual(['Siehe Log: und hier fehlt der zweite Knopf', 'Zwei Dinge.\n- erstens\n\nund hier fehlt der zweite Knopf']);
@@ -852,7 +848,7 @@ describe('a newer version of the app', () => {
     const restarter = new Restarter({ busy: () => busy, go: (reason) => gone.push(reason), patienceMs: 60_000, intervalMs: 10 });
     const updates = new AppUpdates();
     server.stop(true);
-    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter, undefined, undefined, undefined, undefined, updates);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter, undefined, undefined, undefined, updates);
     const messages: ServerMessage[] = [];
     const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
     ws.onmessage = (e) => messages.push(JSON.parse(e.data));
@@ -885,7 +881,7 @@ describe('a newer version of the app', () => {
     const restarter = new Restarter({ busy: () => [], go: () => {} });
     const updates = new AppUpdates();
     server.stop(true);
-    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter, undefined, undefined, undefined, undefined, updates);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter, undefined, undefined, undefined, updates);
     await post('/api/app-update', JSON.stringify({ version: '0.2.0', download: 'https://github.com/sadilek/obeya/releases/tag/v0.2.0' }));
     expect(updates.current()).toEqual({ version: '0.2.0', download: 'https://github.com/sadilek/obeya/releases/tag/v0.2.0' });
     expect(await codeOf(post('/api/app-update/install', ''))).toBe('invalid');
@@ -901,7 +897,7 @@ describe('a newer version of the app', () => {
     const restarter = new Restarter({ busy: () => busy, go: (reason) => gone.push(reason), patienceMs: 60_000, intervalMs: 10 });
     const updates = new AppUpdates();
     server.stop(true);
-    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter, undefined, undefined, undefined, undefined, updates);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter, undefined, undefined, undefined, updates);
     expect(await (await post('/api/app-update', JSON.stringify({ rebuilt: true }))).json()).toEqual({ updating: true });
     // no button in the bar: the restart shows what it waits for
     expect(updates.current()).toBeNull();
@@ -925,7 +921,7 @@ describe('new commits on the upstream of the checkout Obeya runs from', () => {
     git(up, 'commit', '--quiet', '-am', 'Faster');
     const sources = new SourceUpdates(clone);
     server.stop(true);
-    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, sources);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, sources);
     const messages: ServerMessage[] = [];
     const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
     ws.onmessage = (e) => messages.push(JSON.parse(e.data));
@@ -965,7 +961,7 @@ describe('the usage limits in the bar', () => {
     let closed = 0;
     const usage = new UsageMeter(() => ({ fetch: async () => ({ at: '2026-10-28T08:00:00.000Z', limits: [{ kind: 'session', group: 'session', percent: 7, severity: 'normal' }] }), close: () => void closed++ }), { on: true });
     server.stop(true);
-    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, usage);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, usage);
     const messages: ServerMessage[] = [];
     const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
     ws.onmessage = (e) => messages.push(JSON.parse(e.data));
@@ -982,7 +978,7 @@ describe('the usage limits in the bar', () => {
 test('a page that froze has its stall logged, with this machine and the canvas as where', async () => {
   const lines: string[] = [];
   server.stop(true);
-  server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, new Stalls({ home: dir, log: (l) => lines.push(l) }));
+  server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, new Stalls({ home: dir, log: (l) => lines.push(l) }));
   const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
   await new Promise((r) => (ws.onopen = r));
   ws.send(JSON.stringify({ type: 'stall', ms: 200, scripts: [], before: [] } satisfies ClientMessage));
@@ -1416,52 +1412,6 @@ describe('freeing and discarding workspaces', () => {
     shop.shutdown();
     tools.shutdown();
   }, 20_000);
-});
-
-describe("the app's push-to-talk key in another app", () => {
-  test('a command goes where the page the owner looked at last has its focus', async () => {
-    const c = card();
-    const focus = async () => (await (await fetch(new URL('/api/focus', server.url))).json()) as Record<string, string>;
-    // no page: the first canvas, nothing in focus
-    expect(await focus()).toEqual({ canvas: 'main' });
-    const open = async () => {
-      const ws = new WebSocket(new URL(api('/ws'), server.url.href.replace('http', 'ws')));
-      await until(() => ws.readyState === WebSocket.OPEN);
-      return ws;
-    };
-    const [a, b] = [await open(), await open()];
-    a.send(JSON.stringify({ type: 'focus', card: c.id, target: 'Obeya · Aufgabe: A', title: 'A' } satisfies ClientMessage));
-    await until(async () => (await focus()).card === c.id);
-    expect(await focus()).toEqual({ canvas: 'main', card: c.id, target: 'Obeya · Aufgabe: A', title: 'A' });
-    await sleep(5);
-    b.send(JSON.stringify({ type: 'focus', target: 'Obeya' } satisfies ClientMessage));
-    await until(async () => !(await focus()).card);
-    expect(await focus()).toEqual({ canvas: 'main', target: 'Obeya' });
-    // the page that reported last closed: the other one's focus stands
-    b.close();
-    await until(async () => (await focus()).card === c.id);
-    a.close();
-    await until(async () => !(await focus()).card);
-  });
-
-  test('the shell reports what it hears and gets the key; without a configuration the key is the default', async () => {
-    const view = async () => (await (await fetch(new URL('/api/push-to-talk', server.url))).json()) as { key: string; shell: unknown };
-    expect(await view()).toMatchObject({ shell: null });
-    const res = await post('/api/push-to-talk/shell', JSON.stringify({ state: 'permission', platform: 'macos' }));
-    expect(await res.json()).toMatchObject({ key: process.platform === 'darwin' ? 'AltRight' : 'ControlRight', shell: { state: 'permission', platform: 'macos' } });
-    expect(await view()).toMatchObject({ shell: { state: 'permission' } });
-    expect(await codeOf(post('/api/push-to-talk/shell', JSON.stringify({ state: 'on' })))).toBe('invalid');
-    expect((await fetch(new URL('/api/push-to-talk', server.url), { method: 'PUT', body: JSON.stringify({ key: 'F13' }) })).status).toBe(404);
-  });
-
-  // Bun bundles the page on its first request, on its work pool. Before 1.3.14, closing an
-  // fs.watch on Linux while Bun still listed the directory deadlocked a thread of that pool, and
-  // the bundle then waited for it forever: this request hung after the plan-doc watch tests.
-  test('the panel is served beside the canvas', async () => {
-    const res = await fetch(new URL('/panel', server.url));
-    expect(res.status).toBe(200);
-    expect(await res.text()).toContain('lines');
-  });
 });
 
 test("what a worker on another machine reaches: Obeya's narration clips, inline, and nothing else", async () => {

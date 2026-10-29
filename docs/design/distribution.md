@@ -79,8 +79,7 @@ every minute), the shell runs `bun run app install` itself in the background, wh
 build in its place, and reports it to the server, which installs it without asking, as it restarts
 for landed code: once the workers paused, the server ends for the update, and the shell starts again,
 now the new build, whose server resumes the workers. A build that fails is logged to `app-build.log`
-in the home and tried again with the next change of `app/`. On a Mac a new build has a new ad-hoc
-signature, so macOS asks for Input Monitoring again.
+in the home and tried again with the next change of `app/`.
 
 linuxdeploy rewrites the library path of every program in an AppDir, which breaks Bun's binary (its
 code sits after the ELF's end), so the server goes into the AppImage after linuxdeploy and the image
@@ -253,14 +252,13 @@ which Chrome leaves stale after a seek. Without JavaScript or the chapters file 
 
 - **Installed, Obeya is an app: a Tauri shell around the server compiled into one file; the UI is
   served locally to the browser too.** Someone without Bun or a checkout can download and start
-  it, and the shell can hear a key held anywhere on the machine (global push-to-talk). Tauri
-  brings installers, updater and global keys, and its window is the system's webview, so the shell
+  it. Tauri brings installers and updater, and its window is the system's webview, so the shell
   adds a few MB and the UI stays what the browser shows. The browser stays a way in; the checkout
   (`bun start`, updating itself) stays how Obeya is developed.
 - **From a checkout, Obeya can be an installed app that follows the checkout** (2026-10-26): whoever
-  develops Obeya on its checkout gets what only the app does (push-to-talk anywhere) without
-  installing again after each landing. The server already follows the checkout; the shell changes
-  rarely and rebuilds itself when `app/` does. It installs a rebuilt shell without asking, unlike a
+  develops Obeya on its checkout gets the app (a window of its own, in the Dock or the Start menu)
+  without installing again after each landing. The server already follows the checkout; the shell
+  changes rarely and rebuilds itself when `app/` does. It installs a rebuilt shell without asking, unlike a
   release (see App updates), since what lands on the checkout's `main` is already installed that way
   for the server. Rejected: an app of a release build from the checkout, whose compiled server never
   follows the checkout; a launcher that rebuilds the shell at every start, which would make every

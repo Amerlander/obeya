@@ -38,11 +38,11 @@ refused, else 403. A top-level navigation from another site to a page outside `/
 (`Sec-Fetch-Mode: navigate`, `Sec-Fetch-Dest: document`) passes: it only shows the page, and a phone
 scanning the QR code often arrives that way; in another site's frame the page gets nothing. Requests
 with neither header (the app's shell, scripts)
-pass. Bun serves an HTML bundle past any handler, so the page and the push-to-talk panel live at a
+pass. Bun serves an HTML bundle past any handler, so the page lives at a
 path made up at every start, fetched from there once the request passed.
 
 *The owner's key.* 32 random bytes in `owner.key` in the home, readable by the owner alone. The
-app's shell and Obeya's scripts send it as `X-Obeya-Key`; the page and the panel carry it in an
+app's shell and Obeya's scripts send it as `X-Obeya-Key`; the page carries it in an
 `HttpOnly; SameSite=Strict` cookie `obeya-<port>` (browsers keep cookies per host, not port).
 Without it the API answers 401 `notOwner`, the page says „Dieser Browser ist nicht bei Obeya
 angemeldet“ with how to sign in, and no WebSocket opens. A page opened by a link from another site
@@ -53,7 +53,7 @@ sets it and goes on from a page of its own, since a redirect in a cross-site nav
 app, the app shell's `tauri:` page) carries no `Strict` cookie. The token is made at every server
 start and signs in any number of browsers until it stops; an older link says it no longer holds. Only
 a holder of the key gets it (`POST /api/login-link`, local only): Obeya prints it at every start, and
-a second start prints the running one's; the app's window and panel sign in through it; „Im Browser
+a second start prints the running one's; the app's window signs in through it; „Im Browser
 öffnen“ (File menu on a Mac, the configuration) opens the default browser with a one-time token
 (`once`), through the system's `open`, whose command line other accounts see;
 `scripts/scratch-obeya.ts` prints it as `url` (`--login <port>` again). Once signed in, the address

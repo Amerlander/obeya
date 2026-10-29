@@ -34,7 +34,7 @@ use tauri::{utils::config::BundleType, AppHandle, Url};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
-use crate::{main_window, no_window, ptt, say, Obeya};
+use crate::{main_window, no_window, post, say, Obeya};
 
 /// The exit code with which the server asks the shell to install the update (src/server/self-update.ts).
 pub const EXIT: i32 = 77;
@@ -171,7 +171,7 @@ fn report(obeya: &Obeya, updates: &Updates) {
       "download": bytes.is_none().then(|| format!("{RELEASES}/tag/v{}", update.version)),
     }),
   };
-  ptt::post(port, "/api/app-update", &body);
+  post(port, "/api/app-update", &body);
 }
 
 /// The server ended to be updated: installs the update and starts the app again, the new version

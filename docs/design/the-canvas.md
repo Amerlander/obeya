@@ -157,7 +157,7 @@ Index cards pinned to a wall, so that nobody takes Obeya for the stock AI-genera
   never confusable, orange the loudest.
 - *Light or dark*: as the system until the owner picks Hell or Dunkel (or the system again) in Konfiguration (`theme` in
   Obeya's `settings.json`). The page reads it before its first render and applies a change without
-  reload (the push-to-talk panel, which stays loaded, reads it each time it opens); `color-scheme`
+  reload; `color-scheme`
   follows so native controls and framed pages (a worker's HTML artifact, a mock) match. The site and shared demo pages follow the system.
 - *Type*: titles and headings in Newsreader (a plan doc in the sheet too), the rest in IBM Plex
   Sans Condensed, code in the system monospace; both fonts SIL OFL and self-hosted, no Google Fonts.

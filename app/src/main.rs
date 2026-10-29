@@ -11,15 +11,14 @@
 //   cut its workers off mid-turn. The app ends when the server does.
 // - Single instance: starting the app again brings its window to the front.
 // - Every request to the server names the owner's key from the home (`owner.key`,
-//   src/server/owner.ts); the window and the panel sign in through a link the shell asks the server
-//   for (`POST /api/login-link`).
+//   src/server/owner.ts); the window signs in through a link the shell asks the server for
+//   (`POST /api/login-link`).
 // - Links to anything but the canvas, and new windows, open in the default browser; so does
 //   "Im Browser öffnen" (the page offers it when it finds `window.obeyaApp`, the macOS menu too),
 //   through a link that signs that one browser in.
 // - The page gets the microphone without asking (it records only while Space or the mic button is
 //   held); the system asks once for the app. WebKitGTK has media streams off until turned on here.
 // - Downloads go into the Downloads folder and are shown there.
-// - A key held anywhere on the machine records a command while another app is in front (ptt.rs).
 // - A newer release is downloaded in the background, shown in the bar and installed when the owner
 //   says so, once the workers paused (update.rs).
 // - OBEYA_APP_CHECK=<url of a module>: the page imports it once the canvas has loaded
@@ -32,9 +31,6 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod keys;
-mod mic;
-mod ptt;
 mod update;
 
 use std::{
@@ -64,13 +60,13 @@ const SERVER: &str = if cfg!(windows) { "obeya-server.exe" } else { "obeya-serve
 const DEFAULT_PORT: u16 = 4417;
 /// How long the server may take to answer after it was started.
 const START_PATIENCE: Duration = Duration::from_secs(120);
-pub(crate) const KEY_HEADER: &str = "X-Obeya-Key";
+const KEY_HEADER: &str = "X-Obeya-Key";
 
 /// Obeya's home, once known.
 static HOME: OnceLock<PathBuf> = OnceLock::new();
 
 /// The owner's key in the home, which the server makes when it first starts.
-pub(crate) fn key() -> Option<String> {
+fn key() -> Option<String> {
   let key = fs::read_to_string(HOME.get()?.join("owner.key")).ok()?;
   Some(key.trim().to_string()).filter(|k| !k.is_empty())
 }
@@ -79,7 +75,7 @@ pub(crate) fn key() -> Option<String> {
 /// goes through the system's `open` is seen by other accounts in the process list. The plain address
 /// from an Obeya that has no such link.
 pub(crate) fn login_link(port: u16, next: &str, once: bool) -> String {
-  ptt::post(port, "/api/login-link", &serde_json::json!({ "next": next, "once": once }))
+  post(port, "/api/login-link", &serde_json::json!({ "next": next, "once": once }))
     .and_then(|v| v["url"].as_str().map(String::from))
     .unwrap_or_else(|| format!("http://127.0.0.1:{port}{next}"))
 }
@@ -152,6 +148,17 @@ fn http(port: u16, method: &str, path: &str) -> Option<u16> {
   let mut head = [0u8; 12];
   s.read_exact(&mut head).ok()?;
   std::str::from_utf8(&head[9..12]).ok()?.parse().ok()
+}
+
+/// A JSON request to the server that names the owner's key; its answer, or none when it fails.
+pub(crate) fn post(port: u16, path: &str, body: &serde_json::Value) -> Option<serde_json::Value> {
+  let req = ureq::post(&format!("http://127.0.0.1:{port}{path}")).timeout(Duration::from_secs(2));
+  let req = match key() {
+    Some(key) => req.set(KEY_HEADER, &key),
+    None => req,
+  };
+  let res = req.set("content-type", "application/json").send_string(&body.to_string()).ok()?;
+  Some(serde_json::from_str(&res.into_string().ok()?).unwrap_or(serde_json::Value::Null))
 }
 
 fn answers(port: u16) -> bool {
@@ -550,9 +557,7 @@ fn main() {
     .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
-    .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .plugin(tauri_plugin_updater::Builder::new().build())
-    .invoke_handler(tauri::generate_handler![ptt::panel_fit])
     .setup(move |app| {
       let handle = app.handle().clone();
       let _ = HOME.set(home(&handle));
@@ -570,7 +575,6 @@ fn main() {
         }
       });
       window(&handle, for_setup.clone())?;
-      ptt::start(&handle, for_setup.clone());
       let updates = update::start(&handle, for_setup.clone());
       let obeya = for_setup.clone();
       thread::spawn(move || serve(handle, obeya, updates));
