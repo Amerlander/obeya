@@ -834,6 +834,7 @@ function Canvas({
     (h) =>
       !cOnRef.current &&
       ((kOnRef.current && snapshotRef.current.talk.some((x) => x.id === h.talk)) ||
+        (!!h.inCard && focusRef.current?.type === 'card' && focusRef.current.id === h.inCard) ||
         (!!h.project && sheetOnRef.current && !readingRef.current && focusRef.current?.type === 'project' && focusRef.current.id === h.project)),
   );
   const { tellAbout, tellTyped } = tellers(byId, told, fail, placeNow);
@@ -881,7 +882,7 @@ function Canvas({
             void open(i);
           } else openSoon.current = { id: n.cardId, until: Date.now() + 10_000 };
         }
-        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: noticeLine(n.text), ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}), ...(n.project ? { project: n.project } : {}) });
+        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: noticeLine(n.text), ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}), ...(n.project ? { project: n.project } : {}), ...(n.inTalk && n.cardId ? { inCard: n.cardId } : {}) });
       }),
     [],
   );

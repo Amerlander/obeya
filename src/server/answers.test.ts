@@ -88,7 +88,7 @@ describe('a question the Koordinator looks up', () => {
       ['say', 'project', '1. Liest das Plan-Doc.\n2. Fragt nach dem Go.'],
     ]);
     // above the microphone too, written
-    expect(notices).toEqual([{ cardId: w4.id, text: '1. Liest das Plan-Doc.\n2. Fragt nach dem Go.' }]);
+    expect(notices).toEqual([{ cardId: w4.id, text: '1. Liest das Plan-Doc.\n2. Fragt nach dem Go.', inTalk: true }]);
     // the project agent keeps its session: it knows the plan and the history
     expect(board().row(w4.parent!).session_id).toBe('project-1');
     expect(board().talk().at(-1)).toMatchObject({ question: 'What would the worker do on W4 if the owner started it now?', answer: '1. Liest das Plan-Doc.\n2. Fragt nach dem Go.', answerBy: 'project' });

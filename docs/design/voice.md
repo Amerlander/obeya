@@ -253,7 +253,9 @@ wird verstanden …“, for a card's agent „… · wird aufgeschrieben …“)
 first; the server reads them in order. A typed command gets no line while read (its conversation
 shows it), except one typed in the configuration dialog. A confirmation for a card other than the
 open one, for a request an agent passed on, or an answer looked up starts with the card it is about.
-A reply standing in the open sheet gets no line, unless it has „Rückgängig“, which the sheet lacks.
+A reply standing in the open sheet gets no line, unless it has „Rückgängig“, which the sheet lacks;
+nor does an answer Obeya looked up while the conversation of the card it stands on is open (on the
+phone, that card's conversation panel).
 
 ### Voice latency
 
@@ -340,6 +342,8 @@ as an app (see Distribution: The app from a checkout).
 - **A Koordinator reply that does not act stays in the conversation** (2026-10-21): folded away like
   a confirmation, a question on a proposal seemed unanswered.
 - **A reply in the open sheet gets no line above the mic** (2026-10-17): the owner reads it there.
+  The same for a looked-up answer in the open card's conversation (owner, 2026-10-29): the line
+  repeated what stood beside it.
 - **A new card starts unless told to wait**: left to judge, the Koordinator kept one in five plainly
   asked-for tasks planned.
 - **A new card for a named later time is snoozed until then** (2026-10-22), in the same action that

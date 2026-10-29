@@ -358,7 +358,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   // ---------------------------------------------------------------- voice and confirmations
   const { showAck, showWait, fail, line: ackLine } = useAck(true);
   // the reply stands in Obeya's conversation, open in front of the owner: no line above the microphone
-  const told = useTold(() => {}, (h) => talkRef.current && !!snapsRef.current[obeyaRef.current]?.talk.some((x) => x.id === h.talk));
+  const told = useTold(() => {}, (h) => talkRef.current && (h.inCard ? openRef.current === h.inCard : !!snapsRef.current[obeyaRef.current]?.talk.some((x) => x.id === h.talk)));
   const { tellAbout, tellTyped } = tellers(byId, told, fail, () => undefined);
   const where = (): Where => (openRef.current ? { card: openRef.current } : null);
   /** The draft of the field that speaks to `target`: the open card's, or the one under Obeya's conversation. */
@@ -398,7 +398,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     () =>
       onNotice((n) => {
         const i = n.cardId ? byId(n.cardId) : undefined;
-        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: noticeLine(n.text), ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}) });
+        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: noticeLine(n.text), ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}), ...(n.inTalk && n.cardId ? { inCard: n.cardId } : {}) });
       }),
     [],
   );

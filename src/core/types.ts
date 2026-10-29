@@ -2616,6 +2616,8 @@ export interface Notice {
   talk?: number;
   /** The project whose sheet shows that exchange in full too: a page with that sheet open needs no line either. */
   project?: string;
+  /** The conversation of the card (`cardId`) shows it in full, as it came: a page with that conversation open needs no line. */
+  inTalk?: true;
   /** The page opens the card (`cardId`), unless the owner has another one open: the one a review of its PR asked for. */
   open?: true;
   /** The card (`cardId`) moved to this canvas: a page that has it open follows it there. */

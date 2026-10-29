@@ -114,6 +114,8 @@ export interface Heard {
   talk?: number;
   /** The project whose sheet shows that exchange too. */
   project?: string;
+  /** The card whose conversation shows the reply in full. */
+  inCard?: string;
 }
 /** How long "Rückgängig" shows: until shortly before the command stops waiting. */
 export const undoShownMs = (undoMs: number) => Math.max(0, undoMs - 400);
