@@ -242,6 +242,13 @@ A demo is recorded at one pixel per point and compressed to CRF 30 (about 2.5 MB
 enough to share, though flat colours go grainy on a large screen. A public video sets `sharp`: twice
 the pixels, frames at JPEG quality 100 and CRF 18, so it looks as the app does live (2026-10-15).
 
+#### The graphics card
+
+The recording browser asks for the stronger graphics chip. On a Windows or macOS laptop with two (a
+Windows laptop with an NVIDIA card, say, where it would otherwise take the integrated Intel chip) it
+paints on that one while it records; Linux ignores the request, and a machine with one graphics chip
+records as before.
+
 #### Re-voicing
 
 A demo that kept its frames (`.work/`) can be narrated anew in another language without recording it
@@ -485,6 +492,12 @@ translate or install, the first-fullscreen hint), which would catch taps meant f
 - **Frames are timed by a clock painted into the page** (2026-10-08): on a busy machine the
   screencast handed frames over 1 to 5 s after they were painted, stamped with the hand-over, so the
   picture trailed the narration.
+- **The recording browser asks for the stronger graphics chip** (2026-10-28): on a busy Windows
+  laptop with an NVIDIA card, the screencast of a test page handed over 28–44 frames a second
+  instead of 22–27 on the Intel chip. The cost: the stronger chip draws power while a demo records.
+- **Encoding stays with libx264 on the processor** (2026-10-28). Rejected: NVIDIA's encoder, no
+  faster (reading the JPEG frames takes most of the time) and, at the same quality, files twice the
+  size.
 - **A highlight ring takes only what can be seen** (2026-10-14): a ring around whole boxes took in
   a task message scrolled out of view and covered half the card.
 - **A held voice that stops answering fails its clip** (2026-10-21): one sat at 0 % CPU for 40
