@@ -552,7 +552,7 @@ ol.p-list > li::before { content: none; }
 .p-copy:hover { color: var(--ink); background: var(--line); }
 .p-copy.copied { color: var(--ink); }
 @media (hover: hover) {
-  .p-copy:not(.fresh, .copied, .selected) { opacity: 0; transition: opacity .12s; }
+  .p-copy:not(.copied, .selected) { opacity: 0; transition: opacity .12s; }
   .p-code-box:hover > .p-copy, .p-copy:focus-visible { opacity: 1; }
 }
 @media (pointer: coarse) { .p-copy { min-width: 34px; height: 34px; } .p-code-box > .p-code { padding-right: 44px; } }

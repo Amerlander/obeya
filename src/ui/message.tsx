@@ -2,7 +2,7 @@
 // and when above, the text below as paragraphs and lists; a reply quotes the message it answers
 // above its words, as chat apps do.
 
-import { createContext, type ReactNode, type RefObject, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createContext, type ReactNode, type RefObject, useContext, useEffect, useRef, useState } from 'react';
 import type { AnswerFile, CardEvent, Item } from '../core/types';
 import { answerFile, api } from './api';
 import { type Block, blocks, Inline, ListTree, plain, Table } from './markdown';
@@ -10,7 +10,6 @@ import { clock as time, t } from './strings';
 import type { Quoted } from './reply';
 import { clip } from '../core/text';
 import { copyOrSelect } from './copy';
-import { know, known } from './known';
 
 /**
  * A message's frame: `by` places and colours it (the owner's on the right), `who` heads it with its
@@ -160,15 +159,6 @@ export function Body({ md }: { md: string }) {
   return <>{nodes(blocks(md, { breaks: true }))}</>;
 }
 
-/** Whether the owner has copied a code block once: until then its button shows without the pointer on it, so it is found. */
-const COPY_KNOWN = 'obeya-copy-code-known';
-const copyKnownSeen = new Set<() => void>();
-const watchCopyKnown = (on: () => void) => {
-  copyKnownSeen.add(on);
-  return () => void copyKnownSeen.delete(on);
-};
-const copyKnown = () => known(COPY_KNOWN);
-
 /**
  * A code block, with a button in its corner that puts its text on the clipboard as it is (a command,
  * a message the owner is to send on) and says so for a moment; where the page may not write the
@@ -178,14 +168,10 @@ const copyKnown = () => known(COPY_KNOWN);
 function Code({ text }: { text: string }) {
   const pre = useRef<HTMLPreElement>(null);
   const [done, setDone] = useState<'copied' | 'selected' | null>(null);
-  // once one block is copied, every block in view hides its button until the pointer is on it
-  const fresh = !useSyncExternalStore(watchCopyKnown, copyKnown, copyKnown);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
   const copy = async () => {
     const how = await copyOrSelect(text, pre.current!);
-    know(COPY_KNOWN);
-    for (const on of copyKnownSeen) on();
     setDone(how);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setDone(null), how === 'copied' ? 2000 : 4000);
@@ -197,7 +183,7 @@ function Code({ text }: { text: string }) {
         {text}
       </pre>
       <button
-        className={['p-copy', done, fresh && 'fresh'].filter(Boolean).join(' ')}
+        className={['p-copy', done].filter(Boolean).join(' ')}
         title={t.talk.copy}
         aria-label={label}
         onMouseDown={(e) => e.preventDefault()}

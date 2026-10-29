@@ -253,10 +253,11 @@ as a learned preference does. Older answers agents gave in the owner's name stay
   exactly when a turn runs (also while a worker takes in the owner's words on a waiting card, before
   a paid render, say). „Stoppen“ is named so it does not read like a pause. Rejected: pausing at the
   next safe point, as for a restart: the owner pauses an agent going the wrong way.
-- **The pause and the reply button show on hover at the desk, from the first use on** (2026-10-29,
-  owner): always in view, even faint, the pause drew the eye on every running turn. A newcomer
-  finds a button that appears where the pointer goes, so neither stays in view until its first use.
-  Rejected: always visible; visible until used once. A touch screen, without hover, shows both.
+- **The pause, the reply and the copy button show on hover at the desk, from the first use on**
+  (2026-10-29, owner): always in view, even faint, the pause drew the eye on every running turn. A
+  newcomer finds a button that appears where the pointer goes, so none stays in view until its
+  first use. Rejected: always visible; visible until used once. A touch screen, without hover,
+  shows them all.
 - **Waits of hours or days are a snooze Obeya holds** (2026-10-17). Rejected: workers keeping a turn
   open with chained background sleeps (the card looked busy for days and held a slot, every restart
   cut in, some 35 times a day, Obeya knew nothing of the reminders, and a night without network

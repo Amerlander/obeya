@@ -63,8 +63,8 @@ the conversation is in view gets none; one that came while the page was hidden k
 
 A code block in a message (and in any Markdown text a card shows) wraps its lines and has a copy
 button in its corner: agents put there what the owner is to take elsewhere as it is (a command, a
-message to send). At the desk the button shows while the pointer is on the block, and on every block
-until the owner has copied one once; on a touch screen, which has no hover, always. The button puts the block's exact text on the
+message to send). At the desk the button shows while the pointer is on the block, for newcomers too; on a
+touch screen, which has no hover, always. The button puts the block's exact text on the
 clipboard and reads „Kopiert“ for a moment. Where the page may not write the clipboard (served over
 plain HTTP to another machine, as through a VPN, where browsers offer no clipboard API) it selects
 the block's text and copies the selection; where even that fails, the text stays selected and the
