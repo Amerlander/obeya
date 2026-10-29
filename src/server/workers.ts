@@ -2160,6 +2160,8 @@ export class Workers {
     // as the SDK checks a call against the tool's schema
     const args = z.object(tool.schema).safeParse(act.args ?? {});
     if (!args.success) throw new BadRequest('invalid', `${act.tool}: ${args.error.message}`);
+    // a tool call is a step of the turn, as the agent's own calls are
+    if (live) live.acted = true;
     return await tool.run(args.data);
   }
 

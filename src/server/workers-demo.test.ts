@@ -342,6 +342,19 @@ describe('handing over with a demo', () => {
     expect(runtime.last.inbox.at(-1)).toContain('They picked „Datum“, „Notiz“.');
   });
 
+  test('a stand-in that replies to the answer and ends the turn gives the card back to the owner', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: demo(demoDir()) });
+    runtime.last.emit({ type: 'idle' });
+    workers.answer(c.id, 'Semikolon.');
+    expect(board.item(c.id)!.answering).toBe(true);
+    await workers.standIn(c.id, { tool: 'reply', args: { text: 'Bleibt beim Semikolon.' } });
+    await workers.standIn(c.id, { end: true });
+    expect(board.item(c.id)!.answering).toBeUndefined();
+    expect(board.item(c.id)!.answered).toBe(true);
+  });
+
   test('a handover that keeps the demo leaves its answered question with the handover it came with', async () => {
     const c = manual();
     await workers.start(c.id);
