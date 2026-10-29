@@ -244,6 +244,15 @@ describe('sharing without a site of the repository', () => {
     expect(readPersonal(home)!.approved).toBeUndefined();
   });
 
+  test('a page shared there by hand, the repository not ticked for approval: the landing commit links it all the same', async () => {
+    const id = card();
+    sharing.share(id);
+    const url = (await settled(id, 'shared'))!.url!;
+    expect(sharing.approved(id)).toBe(`Demo-Video: ${url}`);
+    // nothing more went out for the approval
+    expect(board.item(id)!.share?.state).toBe('shared');
+  });
+
   test('the tick for approval does not reach a repository whose card shares on its own site', async () => {
     shareApproved(home, repo, true);
     const own = { title: 'Team', url: 'https://demos.example.dev', deploy: 'true' };
