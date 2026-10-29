@@ -1305,7 +1305,12 @@ function Conversation({
           </button>
         ) : (
           pausable(item) && (
-            <button className="turn-pause" title={t.pause.hint} aria-label={t.pause.button} onClick={() => turn(item.id, 'pause')}>
+            <button
+              className={known(PAUSE_KNOWN) ? 'turn-pause' : 'turn-pause new'}
+              title={t.pause.hint}
+              aria-label={t.pause.button}
+              onClick={() => turn(item.id, 'pause')}
+            >
               <PauseMark />
             </button>
           )
@@ -1388,7 +1393,12 @@ function Conversation({
 }
 
 /** Pauses the agent's turn on the card, or lets the paused agent go on; the card shows it once the server has. */
-const turn = (cardId: string, action: 'pause' | 'resume') => void api.act(cardId, { action }).catch(() => {});
+/** Set once the owner paused an agent: its pause shows only while the pointer is on the bubble. */
+const PAUSE_KNOWN = 'obeya-pause-known';
+const turn = (cardId: string, action: 'pause' | 'resume') => {
+  if (action === 'pause') know(PAUSE_KNOWN);
+  void api.act(cardId, { action }).catch(() => {});
+};
 
 /**
  * Takes back words of the owner's the agent has not read (a note waiting for its next step, a
