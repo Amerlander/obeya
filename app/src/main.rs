@@ -555,7 +555,9 @@ fn main() {
   let for_setup = obeya.clone();
   let app = tauri::Builder::default()
     .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
-    .plugin(tauri_plugin_opener::init())
+    // the opener's functions only, not its plugin: that puts a script into the page that takes each click
+    // on a link with target=_blank and hands it to the plugin over IPC, which the page may not call
+    // (capabilities/window.json), so the click would do nothing; the shell opens such links itself
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .setup(move |app| {
