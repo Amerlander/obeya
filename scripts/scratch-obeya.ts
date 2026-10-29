@@ -388,7 +388,8 @@ const idle = !args.includes('--real-workers') && !record && !replay;
 const canIdle = !!binary || readFileSync(join(code, 'src/server/main.ts'), 'utf8').includes("'idle-workers'");
 if (idle && !canIdle) console.error(`scratch-obeya: ${commit} has no --idle-workers; a started card gets a real agent`);
 
-// the server, in its own process group so --stop ends it with everything it started
+// the server, in its own process group so --stop ends it with everything it started (on Windows,
+// which has none, its process tree)
 const log = join(dir, 'server.log');
 const out = openSync(log, 'a');
 // not supervised: a scratch Obeya restarts itself only when asked to
@@ -828,6 +829,7 @@ function stop(d: string) {
 function stopServer(d: string) {
   const pid = pidIn(d);
   if (!pid) return;
+  if (process.platform === 'win32') return stopTree(pid);
   try {
     process.kill(-pid, 'SIGTERM');
   } catch {
@@ -849,6 +851,16 @@ function stopServer(d: string) {
   try {
     process.kill(-pid, 'SIGKILL');
   } catch {}
+}
+
+/**
+ * Windows has no process groups to signal: ends the server's process tree, which a console process
+ * without a window lets end only forcefully, and waits until it is gone and lets go of its files.
+ */
+function stopTree(pid: number) {
+  if (!alive(pid)) return;
+  spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
+  for (let i = 0; i < 50 && alive(pid); i++) Bun.sleepSync(100);
 }
 
 function ago(s: string): string {
