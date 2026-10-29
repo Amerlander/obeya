@@ -368,6 +368,8 @@ export class Board {
   /** The docs whose projects were on the canvas at the last snapshot, to see one end or come back. */
   private open: string | null = null;
   private cache: CanvasSnapshot | null = null;
+  /** The archive as `archived` built it; gone with `cache`, since it changes with the same writes. */
+  private archiveItems: Item[] | null = null;
   private eventListeners = new Set<(e: CardEvent) => void>();
   private goneListeners = new Set<(cardId: string, id: number) => void>();
   private noticeListeners = new Set<(n: Notice) => void>();
@@ -436,6 +438,7 @@ export class Board {
   /** A card changed. */
   changed() {
     this.cache = null;
+    this.archiveItems = null;
     for (const fn of this.listeners) fn();
   }
 
@@ -1290,16 +1293,20 @@ export class Board {
   archived(): Item[] {
     // the docs as they are now decide what is archived
     this.snapshot();
+    if (this.archiveItems) return this.archiveItems;
     const rows = this.store.archived(this.canvas.id);
     const projects = rows.filter((r) => r.plan_ref);
     const docs = projects.map((r) => JSON.parse(r.plan!) as PlanDoc);
     const kids = this.store.children(projects.map((r) => r.id));
     const items = this.withPrototypes(toItems([...rows, ...kids], docs, this.home));
-    return rows.flatMap((r) => {
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const kidsOf = Map.groupBy(items.filter((i) => i.parent), (i) => i.parent!);
+    this.archiveItems = rows.flatMap((r) => {
       const at = { archivedAt: r.archived_at! };
-      const own = items.find((i) => i.id === r.id);
-      return own ? [{ ...own, ...at }, ...items.filter((i) => i.parent === r.id).map((i) => ({ ...i, ...at }))] : [];
+      const own = byId.get(r.id);
+      return own ? [{ ...own, ...at }, ...(kidsOf.get(r.id) ?? []).map((i) => ({ ...i, ...at }))] : [];
     });
+    return this.archiveItems;
   }
 
   /** Any card of the canvas as the UI sees it: on the canvas, or in the archive. */
@@ -1395,6 +1402,7 @@ export class Board {
     if (this.docs && this.docsOf !== repos) {
       this.docs = null;
       this.cache = null;
+      this.archiveItems = null;
     }
     if (this.cache) return this.cache;
     const read = !this.docs;
