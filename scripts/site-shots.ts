@@ -107,8 +107,9 @@ try {
   await page.goto(staged.url);
   await page.locator('.card').first().waitFor();
   await page.waitForTimeout(1000);
-  await shots(page, staged.cards as Record<string, string>);
+  // the phone first: the voice shot's held Space sends what the fake microphone hears to App icon's agent, and the card no longer waits
   await phoneShots(staged.url);
+  await shots(page, staged.cards as Record<string, string>);
 } finally {
   await browser.close();
   if (!process.argv.includes('--keep')) execFileSync('bun', [join(ROOT, 'scripts', 'scratch-obeya.ts'), '--stop', String(PORT)]);
