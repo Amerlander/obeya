@@ -330,6 +330,9 @@ credentials for: a contributor's Obeya on Obeya's own repository shares there, a
 link as any page's (see The page and the pull request).
 
 A public repository shares there at once; its forge says whether it is public (gh, the Forgejo API).
+Obeya keeps the forge's last answer across restarts and starts from it until the forge answers
+again, so workers resumed in that time get the tools and brief of a repository that shares; a
+question that fails leaves the last answer standing.
 A private one, or one whose forge cannot tell (no remote, a folder), shares there only once the owner
 ticks it: the export box on its cards says the repository is private and offers „Demos dieses
 Repositorys auf meiner persönlichen Seite teilen“, and the configuration lists the private
@@ -491,6 +494,10 @@ another machine withdrew loses its link here, with a line naming the machine.
   resumed after a restart got its tools before the forge said the repository was public, so the
   page the worker sent was dropped and every handover refused for lacking it. Rejected: the page in
   every repository's tools (workers without a site would write pages nobody reads).
+- **A repository is as public as its forge said last, until it answers again** (2026-10-29): after
+  every restart a public repository counted as private until the forge answered, so its resumed
+  workers wrote no page. Rejected: resuming its workers only after the answer (a slow or unreachable
+  forge would hold them up). A repository made private since shares as public for those seconds.
 - **Three hosts for the personal site: a public GitHub repository first, a private one, Cloudflare**
   (owner, 2026-10-29): it works without GitHub Pro, and public demo repositories make Obeya known.
   A public repository's site is listed, without random parts (they would hide nothing). Rejected

@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:tes
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { z } from 'zod';
 import { MESSAGES } from '../core/messages';
 import { Board } from './board';
 import { Store } from './db';
@@ -12,7 +13,7 @@ import { MANIFEST, siteKey, siteTarget } from './site';
 import { cloudflareAccounts, type Exec, exec, githubPagesDeploy, setupCloudflare, setupGithub, SetupRefused } from './site-hosts';
 import { SiteSetup } from './site-setup';
 import { CanvasRuntime } from './canvas';
-import { FakeRuntime, gitRepo, noForge } from './testing';
+import { FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 
 let dir: string;
 let home: string;
@@ -495,6 +496,44 @@ test('the canvas says where a repository without a site shares: nowhere without 
     }
   } finally {
     canvas.shutdown();
+  }
+});
+
+test("a worker resumed after a restart on a public repository writes the page, though the forge answers only later", async () => {
+  const shop = gitRepo(join(dir, 'shop'), { 'docs/plan/plan.md': '# Shop\n\nG.\n', '.obeya/settings.json': '{ "land": "main" }\n' });
+  identify(shop);
+  writePersonal(home, personal());
+  const store = new Store(':memory:');
+  // the page a handover sends, as the agent's runtime lets it through the tool's schema (it drops what the schema does not take)
+  const page = (r: FakeRuntime) => {
+    const tool = r.last.spec.tools!.find((t) => t.name === 'ready_for_review')!;
+    const sent = { title: 'Orders as CSV', text: 'Shop owners download their orders as a CSV file.' };
+    return (z.object(tool.schema as z.ZodRawShape).parse({ summary: 'S', demo: { dir: demo, chapters: ['Before'], page: sent } }) as { demo: { page?: unknown } }).demo.page;
+  };
+  const before = new FakeRuntime();
+  const canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store, home, runtime: new FakeRuntime(), workerRuntime: before, forge: { ...noForge, visibility: async () => 'public' } });
+  let card: string;
+  try {
+    await until(() => canvas.board.canvas.repos[0]!.share);
+    card = canvas.board.create({ title: 'A', x: 0, y: 0 }).id;
+    await canvas.repos[0]!.workers.start(card);
+    expect(page(before)).toBeDefined();
+    before.last.emit({ type: 'session', id: 'sess-a' });
+  } finally {
+    canvas.shutdown();
+  }
+  // after the restart the forge takes its time to answer
+  let answer!: (v: 'public') => void;
+  const after = new FakeRuntime();
+  const again = new CanvasRuntime({ repos: [{ path: shop }] }, { store, home, runtime: new FakeRuntime(), workerRuntime: after, forge: { ...noForge, visibility: () => new Promise((r) => (answer = r)) } });
+  try {
+    await until(() => after.sessions.length);
+    expect(after.last.spec.resume).toBe('sess-a');
+    expect(page(after)).toBeDefined();
+    expect(again.board.canvas.repos[0]).toMatchObject({ share: true, shareOnPersonal: true });
+    answer('public');
+  } finally {
+    again.shutdown();
   }
 });
 

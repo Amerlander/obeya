@@ -607,11 +607,13 @@ export class CanvasRuntime {
     const isHome = index === 0;
     for (const p of this.shared.get(info.path)?.problems ?? []) console.warn(`Obeya: ${info.path}: ${p} (ignored)`);
     const site = siteOf(adapter);
+    // public as its forge said last time: workers resumed before it answers again get the tools of a repository that shares
+    const isPublic = !info.folder && board.setting(visibilityKey(info.path)) === 'public';
     // whether the repository shares here, which the UI shows
-    Object.assign(ref, shareRef(site, deps.home, info.path, false));
+    Object.assign(ref, shareRef(site, deps.home, info.path, isPublic));
     const stops: (() => void)[] = [];
     // filled in below; what is set up here reaches it once it is
-    const repo = { config: rc, stops, from: { resolved, index } } as Repo;
+    const repo = { config: rc, stops, from: { resolved, index }, ...(isPublic ? { isPublic } : {}) } as Repo;
     repo.problemSources = this.problemSources(info.path, this.adapterModules.get(info.path));
     // where work lands on the local main, the checkout is the Lesestand; otherwise it is a pool clone on a card's branch
     const folder = !!info.folder;
@@ -740,14 +742,19 @@ export class CanvasRuntime {
 
   /**
    * Asks the repository's forge whether it is public: a public one shares on the owner's personal
-   * site without a tick. Until the answer, and where the forge cannot tell, it counts as private.
+   * site without a tick. Until the answer it is as the forge said last time (kept across restarts),
+   * private where it never answered; where the forge cannot tell, it counts as private. A question
+   * that fails leaves the last answer standing.
    */
   private async lookVisibility(r: Repo) {
     if (r.info.folder || !this.deps.forge.visibility) return;
-    let v: 'public' | 'private' | null = null;
+    let v: 'public' | 'private' | null;
     try {
       v = await this.deps.forge.visibility(r.info.path);
-    } catch {}
+    } catch {
+      return;
+    }
+    this.board.setSetting(visibilityKey(r.info.path), v ?? 'unknown');
     if ((v === 'public') === !!r.isPublic) return;
     r.isPublic = v === 'public';
     this.siteCredentials();
@@ -2680,6 +2687,9 @@ function shareRef(site: DemoSite | null, home: string, path: string, isPublic: b
   const approved = site?.publish === 'approved' || approvedHere(p, path);
   return { share: true, shareOnPersonal: true, ...(p.secret ? { shareUnlisted: true as const } : {}), ...(approved ? { shareOnApproval: true as const } : {}) };
 }
+
+/** The canvas setting that keeps the forge's last answer on whether the repository at `path` is public. */
+const visibilityKey = (path: string) => `visibility:${path}`;
 
 /** Tells the UI about sharing on the repository what `share` says, in place of what it was told before. */
 function setShare(ref: RepoRef, share: ShareRef) {
