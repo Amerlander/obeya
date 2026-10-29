@@ -3,7 +3,7 @@
 import type { ServerWebSocket } from 'bun';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir, userInfo } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { agentListens, type CanvasInfo, type CardAction, type ClientMessage, type CardPatch, type Item, type NewCard, type PendingRestart, type ServerMessage, type SpotInput, type TalkRef, isTalkRef, MAX_FILE_BYTES, needsYou, waitingOn } from '../core/types';
 import index from '../ui/index.html';
 import panel from '../ui/panel.html';
@@ -139,7 +139,7 @@ export function serve(
     ? new SiteSetup({
         home: config.home,
         changed: () => canvases.all().forEach((c) => c.personalSiteChanged()),
-        repoName: (path) => canvases.all().flatMap((c) => c.board.canvas.repos).find((r) => resolve(r.path) === resolve(path))?.name,
+        repos: () => canvases.all().flatMap((c) => c.repos.map((r) => ({ path: r.info.path, name: r.ref.name, isPublic: !!r.isPublic, ownSite: !!r.ref.share && !r.ref.shareUnlisted }))),
         user: (() => {
           try {
             return userInfo().username;

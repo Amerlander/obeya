@@ -1256,7 +1256,9 @@ function PersonalSiteBlock({ on }: { on: boolean }) {
   useEffect(() => {
     if (!on || !view || !sessionStorage.getItem(PERSONAL_SHOW_KEY)) return;
     sessionStorage.removeItem(PERSONAL_SHOW_KEY);
-    box.current?.scrollIntoView({ block: 'start' });
+    // the demo settings above load meanwhile and push it down: scrolled once they stand
+    const at = setTimeout(() => box.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 400);
+    return () => clearTimeout(at);
   }, [on, !!view]);
   const running = !!view?.job?.running;
   // a setup runs on the server, with a login in the browser maybe: follow it until it ends
@@ -1355,24 +1357,29 @@ function PersonalSiteBlock({ on }: { on: boolean }) {
           </p>
           {site.needs && <p className="p-error">{p.needs(site.needs)}</p>}
           <p className="hint">{p.unlistedNote}</p>
-          <Field label={p.privateRepos}>
+          <Field label={p.privateRepos} hint={p.privateHint}>
             {view.privateRepos.length ? (
-              <ul className="personal-private">
+              <div className="personal-private">
                 {view.privateRepos.map((r) => (
-                  <li key={r.path}>
-                    <span title={r.path}>{r.name}</span>
-                    <RemoveButton label={p.privateRemove(r.name)} onClick={() => void act(() => api.allowPrivateRepo(r.path, false))} />
-                  </li>
+                  <label key={r.path} className="c-check" title={r.path}>
+                    <input type="checkbox" checked={r.allowed} aria-label={p.privateAllow(r.name)} onChange={(e) => void act(() => api.allowPrivateRepo(r.path, e.target.checked))} />
+                    {r.name}
+                    {r.ownSite && <span className="hint"> · {p.ownSite}</span>}
+                  </label>
                 ))}
-              </ul>
+              </div>
             ) : (
               <p className="hint">{p.privateNone}</p>
             )}
           </Field>
+          <Field label={p.codeLabel} hint={p.codeHint}>
+            <div className="personal-actions">
+              <button className="btn small" disabled={!connection} onClick={() => copy(connection)}>
+                {copied ? p.copied : p.code}
+              </button>
+            </div>
+          </Field>
           <div className="personal-actions">
-            <button className="btn small" title={p.codeHint} disabled={!connection} onClick={() => copy(connection)}>
-              {copied ? p.copied : p.code}
-            </button>
             {!removing ? (
               <button className="btn small" title={p.removeHint} onClick={() => setRemoving(true)}>
                 {p.remove}

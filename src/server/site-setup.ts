@@ -2,7 +2,7 @@
 // and a repository's own site („Demo-Seite einrichten“ at its settings). Each setup runs in the
 // background, since a login in the browser may take minutes; the dialog follows its lines.
 
-import { basename } from 'node:path';
+import { basename, resolve } from 'node:path';
 import type { DemoSite } from '../adapters/types';
 import type { PersonalSiteView, SiteSetupJob } from '../core/types';
 import { BadRequest } from './board';
@@ -15,8 +15,8 @@ export interface SiteSetupOptions {
   home: string;
   /** The personal site changed: every canvas tells its cards where they share now. */
   changed: () => void;
-  /** The repositories on the canvases, by checkout, for the list of private ones ticked. */
-  repoName?: (path: string) => string | undefined;
+  /** The repositories on the canvases: their checkouts, names, whether public and whether they have a site of their own this machine deploys to. */
+  repos?: () => { path: string; name: string; isPublic: boolean; ownSite: boolean }[];
   /** Who runs Obeya here, for the personal site's name at Cloudflare. */
   user?: string;
   /** Runs wrangler, gh and git; a stand-in in tests. */
@@ -45,9 +45,23 @@ export class SiteSetup {
           }
         : null,
       ...(job ? { job } : {}),
-      privateRepos: (p?.private ?? []).map((path) => ({ path, name: this.o.repoName?.(path) ?? basename(path) })),
+      privateRepos: this.privateRepos(p),
       cloudflareAccounts: this.accounts(),
     };
+  }
+
+  /** The private repositories on the canvases, and those ticked that are not on them, each once. */
+  private privateRepos(p: PersonalSite | null): PersonalSiteView['privateRepos'] {
+    const ticked = (p?.private ?? []).map((x) => resolve(x));
+    const repos = this.o.repos?.() ?? [];
+    const out: PersonalSiteView['privateRepos'] = [];
+    for (const r of repos) {
+      const path = resolve(r.path);
+      if (r.isPublic || out.some((x) => x.path === path)) continue;
+      out.push({ path, name: r.name, allowed: ticked.includes(path), ...(r.ownSite ? { ownSite: true as const } : {}) });
+    }
+    for (const path of ticked) if (!out.some((x) => x.path === path)) out.push({ path, name: basename(path), allowed: true });
+    return out;
   }
 
   /** The Cloudflare accounts of the sites this machine deploys to, by site, for a new site to go into. */

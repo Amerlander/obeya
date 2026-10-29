@@ -1652,8 +1652,12 @@ export interface PersonalSiteView {
     needs?: string;
   } | null;
   job?: SiteSetupJob;
-  /** The private repositories ticked to share there. */
-  privateRepos: { path: string; name: string }[];  /** The sites this machine deploys to on Cloudflare, each of another account: a new site may go into one of them. */
+  /**
+   * The private repositories (those on the canvases whose forge does not say they are public, and
+   * those ticked), each with whether it is ticked to share there and whether it has a site of its
+   * own this machine deploys to.
+   */
+  privateRepos: { path: string; name: string; allowed: boolean; ownSite?: true }[];  /** The sites this machine deploys to on Cloudflare, each of another account: a new site may go into one of them. */
   cloudflareAccounts: string[];
 }
 

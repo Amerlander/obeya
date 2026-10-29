@@ -304,8 +304,9 @@ link as any page's (see The page and the pull request).
 A public repository shares there at once; its forge says whether it is public (gh, the Forgejo API).
 A private one, or one whose forge cannot tell (no remote, a folder), shares there only once the owner
 ticks it: the export box on its cards says the repository is private and offers „Demos dieses
-Repositorys auf meiner persönlichen Seite teilen“, and the configuration lists the ticked ones with ×
-to untick. A repository whose site publishes on approval does so on the personal site too.
+Repositorys auf meiner persönlichen Seite teilen“, and the configuration lists the private
+repositories of the canvases (and those ticked) with a checkbox each, ticked or not, to change it
+there too. A repository whose site publishes on approval does so on the personal site too.
 
 The personal site is unlisted, always; a repository's site is listed, always; there is no setting for
 it. Unlisted means:
@@ -324,9 +325,9 @@ it. Unlisted means:
   a `Disallow` keeps search engines from reading the `noindex`, so a link found in a public PR could
   still show as a bare address.
 
-Unlisted is not protected: whoever has a link can pass it on, and in a public PR GitHub's search finds
-it. The setup says so in one sentence; for real protection a project's site stays behind a login
-(Cloudflare Access).
+Unlisted is not protected: whoever has a link can pass it on (and a link in a public PR is found by
+the forge's search). The setup says the first in one sentence; for real protection a project's site
+stays behind a login (Cloudflare Access).
 
 Konfiguration → Demos sets it up („Persönliche Demo-Seite“, the host to choose, „Einrichten“), and a
 card's export box, while there is none, offers „Persönliche Demo-Seite einrichten“, which opens it
@@ -342,7 +343,8 @@ there. The setup runs in the background and shows its last line:
   before anything is created, and a refusal when Pages is turned on gives GitHub's reason (the
   repository stays, private); both offer Cloudflare instead.
 
-Another machine of the owner's joins with a connection code: „Verbindungscode kopieren“ on one gives
+Another machine of the owner's joins with a connection code: „Verbindungscode kopieren“ (under
+„Weitere Rechner“, with a line saying where to paste it) on one gives
 `obeya-site:` and the site, its secret directory and the env file's values, base64url-encoded;
 „Mit vorhandener Seite verbinden“ on the other takes it and writes them under its home. Without
 credentials in it (a site deploying with the machine's own login), the other machine deploys with its
@@ -438,6 +440,8 @@ another machine withdrew loses its link here, with a line naming the machine.
 - **Both hosts for the personal site, and GitHub Pages only from a private repository** (owner,
   2026-10-28): Cloudflare lists no files and is free; GitHub needs only gh's login but Pro, since a
   public repository would list every token. Rejected: a public repository on the free plan.
+- **The setup's warning names no forge's search** (owner, 2026-10-29): a link in a public PR is
+  found whatever the host, and a repository need not be on GitHub.
 - **No `robots.txt` on the unlisted site** (2026-10-28): its `Disallow` hides the `noindex` from
   search engines, which may then list a linked address without its content.
 - **Several machines pull before they push** (2026-10-09). Rejected: refusing deploys while the live
