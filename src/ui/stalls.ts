@@ -55,12 +55,12 @@ export function scriptsOf(frames: LongFrame[]): PageStall['scripts'] {
 
 /**
  * What the page took in shortly before a stall from `from` to `to`, as the log reads it; a message
- * whose handling began the stall is in it too.
+ * whose handling began the stall is in it too (its reading time says so).
  */
 export function beforeOf(noted: Noted[], from: number, to: number): string[] {
   return noted
     .filter((n) => n.at >= from - BEFORE_MS && n.at <= to)
-    .map((n) => `${n.what} ${from - n.at >= TICK_MS ? `${((from - n.at) / 1000).toFixed(1)} s before` : 'as it began'}`);
+    .map((n) => `${n.what} ${(Math.max(0, from - n.at) / 1000).toFixed(1)} s before`);
 }
 
 const noted: Noted[] = [];
@@ -101,7 +101,9 @@ export function watchPageStalls(send: (s: PageStall) => boolean) {
       const f = found.shift()!;
       const ms = f.to - f.from - TICK_MS;
       const long = supported ? framesWithin(frames, f.from, f.to) : [];
-      if (supported ? long.length : ms < SLEPT_MS) unsent.push({ ms: Math.round(ms), scripts: scriptsOf(long), before: f.before });
+      // the ticks see a stall up to one tick short; the long frames tell its length to the millisecond
+      const length = Math.max(ms, long.reduce((sum, l) => sum + l.duration, 0));
+      if (supported ? long.length : ms < SLEPT_MS) unsent.push({ ms: Math.round(length), scripts: scriptsOf(long), before: f.before });
     }
     while (unsent.length > KEPT) unsent.shift();
     while (unsent.length && send(unsent[0]!)) unsent.shift();

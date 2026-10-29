@@ -27,5 +27,5 @@ test('what the page took in within the three seconds before a stall goes with it
     { at: 10_020, what: 'snapshot (2 MB, read in 900 ms)' },
     { at: 11_200, what: 'usage' },
   ];
-  expect(beforeOf(noted, 10_000, 11_000)).toEqual(['snapshot (412 KB) 0.2 s before', 'snapshot (2 MB, read in 900 ms) as it began']);
+  expect(beforeOf(noted, 10_000, 11_000)).toEqual(['snapshot (412 KB) 0.2 s before', 'snapshot (2 MB, read in 900 ms) 0.0 s before']);
 });
