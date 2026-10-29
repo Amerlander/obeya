@@ -146,7 +146,9 @@ Index cards pinned to a wall, so that nobody takes Obeya for the stock AI-genera
   shadow, the state as a rule across the top in its ink (a band when zoomed out). No ruled lines.
   The owner's turn is an orange frame and a pulsing pushpin with "!"; an idea is on rose stock; a
   proposal only pencilled in (dashed, no stock); a queued card's rule dashed; done and live cards
-  fade and yellow slightly (not while their agent still works after landing: then only their state line is in the working ink, with the moving line). Under the pointer a
+  fade and yellow slightly (not while their agent still works after landing: then only their state line is in the working ink, with the moving line). The state line at the
+  card's foot stays one line, cut short with an ellipsis when it is longer, so it never runs into
+  the text above it. Under the pointer a
   card lifts; dragged, it tilts as if held. "At work" is a pencil stroke drawn again and again.
 - *Inks*: planned pencil grey, working clear blue, waiting for the owner strong orange (also every
   count of what waits), approved yellow-green, in PR petrol, proposal violet, idea madder red, live

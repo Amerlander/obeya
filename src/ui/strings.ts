@@ -317,7 +317,7 @@ const de = {
   proposalShots: 'Die Screenshots beim Text gehen mit der Aufgabe mit.',
   proposalQuestionsHint: 'Mit „Antworten“ schreibt ein Agent den Vorschlag nach deiner Wahl neu. Übernimmst du gleich, steht deine Wahl als entschieden im Text; der Rest geht als offene Frage mit.',
   proposedByRetro: (basis: string) => `Aus der Arbeitsrückschau: ${basis}`,
-  revisingShort: 'wird überarbeitet',
+  revisingShort: 'Wird überarbeitet',
   /** A proposal its agent wants started later: when, on the proposal and short on its canvas card; the menu to change it, and accepting it. */
   startAt: {
     line: (when: string) => `Startet ${when}`,
@@ -2229,7 +2229,7 @@ const en: Strings = {
   proposalShots: 'The screenshots with the text go along with the task.',
   proposalQuestionsHint: 'With “Answer” an agent rewrites the proposal by your choice. If you accept it right away, your choice goes into the text as decided; the rest goes along as an open question.',
   proposedByRetro: (basis: string) => `From the work retrospective: ${basis}`,
-  revisingShort: 'being reworked',
+  revisingShort: 'Being reworked',
   startAt: {
     line: (when: string) => `Starts ${when}`,
     short: (when: string) => `starts ${when}`,
@@ -2245,7 +2245,7 @@ const en: Strings = {
   acceptWaitsHint: 'It is accepted once reworked, unless it still has questions then.',
   acceptWaits: (idea: boolean) => (idea ? 'Accepts after the rework …' : 'Starts after the rework …'),
   unaccept: 'Don’t accept after all',
-  acceptsAfterRevision: 'accepted after',
+  acceptsAfterRevision: 'then accepted',
   reviseHint: 'Say or type what should change: add, drop, decide. An agent rewrites text and questions by it; what you do not mention stays.',
   followUpOf: (title: string) => `Follows from the task “${title}”.`,
   fromElsewhere: (title: string, canvas: string) => `Comes from “${title}” on the canvas “${canvas}”.`,

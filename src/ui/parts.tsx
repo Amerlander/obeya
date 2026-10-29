@@ -133,6 +133,8 @@ export function CardFace({ item, where, underway, since, chip }: { item: Item; w
       : item.state === 'inPr' && item.pr
         ? t.pr.short(item.pr.number, item.pr.checks.filter((c) => c.state === 'failure').length, item.pr.conflict, item.pr.ready, item.pr.held?.score)
         : undefined;
+  // a proposal being reworked says that in place of its state: the kind line above already calls it a proposal
+  const revising = item.state === 'proposal' && item.proposal?.revising;
   const asked = openQuestions(item)[0]?.text;
   const meta =
     (item.repoDown ? t.repoDown.short : undefined) ??
@@ -159,15 +161,17 @@ export function CardFace({ item, where, underway, since, chip }: { item: Item; w
       {meta && <div className="meta">{meta}</div>}
       <div className="state">
         {item.snoozed && !underway && <ClockMark />}
-        {underway ?? stateLabel(item)}
-        {item.landedPart && <span className="landed-part">{t.landedPart.short} · {landedRef(item.landedPart)}</span>}
-        {item.buildProposal && ` · ${t.idea.proposesBuild}`}
-        {item.state === 'proposal' && item.proposal?.startAt && !item.proposal.idea && ` · ${t.startAt.short(snoozeWhen(item.proposal.startAt))}`}
-        {item.proposal?.revising && ` · ${t.revisingShort}`}
-        {item.proposal?.acceptAfterRevision && ` · ${t.acceptsAfterRevision}`}
-        {item.idea?.buildAfterReply && ` · ${t.idea.buildsAfterReply}`}
-        {item.idea?.next && needsYou(item) && ` · ${t.idea.suggests[item.idea.next.step]}`}
-        {since && <span className="since"> · {since}</span>}
+        {/* one line on the card, cut short rather than running into the text above it */}
+        <span className="state-text">
+          {underway ?? (revising ? t.revisingShort : stateLabel(item))}
+          {item.landedPart && <span className="landed-part">{t.landedPart.short} · {landedRef(item.landedPart)}</span>}
+          {item.buildProposal && ` · ${t.idea.proposesBuild}`}
+          {item.proposal?.acceptAfterRevision && ` · ${t.acceptsAfterRevision}`}
+          {item.state === 'proposal' && item.proposal?.startAt && !item.proposal.idea && ` · ${t.startAt.short(snoozeWhen(item.proposal.startAt))}`}
+          {item.idea?.buildAfterReply && ` · ${t.idea.buildsAfterReply}`}
+          {item.idea?.next && needsYou(item) && ` · ${t.idea.suggests[item.idea.next.step]}`}
+          {since && <span className="since"> · {since}</span>}
+        </span>
       </div>
       {needsYou(item) && !underway && <div className="badge pulse">{item.state === 'proposal' ? '✦' : '!'}</div>}
     </>

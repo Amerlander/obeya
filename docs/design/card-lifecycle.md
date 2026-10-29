@@ -68,7 +68,8 @@ with the proposal's text and are the task's once accepted.
 The conversation stands beside the proposal as on an idea, its open questions at the end, a settled
 question where it was asked (see The conversation). Options picked and sent („Antworten“) go to the
 reviser at once; accepting instead takes the picks into the text. While the rework runs the proposal
-shows „wird überarbeitet“, cannot be edited or accepted with „Übernehmen“ alone, and does not count
+shows „Wird überarbeitet“ (on the canvas card in place of its state, which the kind line already
+names), cannot be edited or accepted with „Übernehmen“ alone, and does not count
 as needing the owner; words said meanwhile wait for the next rework. Then the conversation shows the
 reviser's reply, „Vorschlag überarbeitet.“ when the text changed, and any new questions. A reviser
 that ends without a text leaves the proposal as it was, with the error; a rework running at a
@@ -78,7 +79,7 @@ restart starts again.
 the rework, like "So bauen" on an idea: clicked during one, the proposal is accepted once the new text
 is there, unless it still has questions, in which case it stays a proposal and the conversation says
 why. Meanwhile the button reads „Startet nach der Überarbeitung …“ with „Doch nicht übernehmen“, and
-the canvas card says „danach übernommen“. Accepting by voice during a rework is refused (see Commands
+the canvas card's state line adds „danach übernommen“. Accepting by voice during a rework is refused (see Commands
 to the Koordinator).
 
 ### At work
