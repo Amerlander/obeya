@@ -44,8 +44,17 @@ export function workDirs(dir: string): string[] {
     }
   };
   const found: string[] = [];
-  for (const demo of subdirs(dir)) for (const d of [demo, ...subdirs(demo)]) if (existsSync(join(d, '.work'))) found.push(join(d, '.work'));
+  for (const demo of subdirs(dir)) for (const d of [demo, ...subdirs(demo)]) if (realDir(join(d, '.work'))) found.push(join(d, '.work'));
   return found;
+}
+
+/** A directory itself, not a link to one: deleting in a linked one would reach wherever it points. */
+function realDir(p: string): boolean {
+  try {
+    return lstatSync(p).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /** When a render last wrote into its work directory: the newest of it and what lies directly in it. */
@@ -112,10 +121,13 @@ export async function sweep(dir: string, days: number, now = Date.now()): Promis
   for (const work of workDirs(dir)) {
     const frames = join(work, 'frames');
     const list = join(work, 'frames.txt');
-    if (!existsSync(frames) && !existsSync(list)) continue;
-    if (now - lastRender(work) < days * DAY_MS || rendering(work)) continue;
+    if (!realDir(frames) && !existsSync(list)) continue;
+    const due = () => now - lastRender(work) >= days * DAY_MS && !rendering(work);
+    if (!due()) continue;
     const { bytes } = await usage(frames);
-    await rm(frames, { recursive: true, force: true });
+    // a render may have started while they were counted
+    if (!due()) continue;
+    if (realDir(frames)) await rm(frames, { recursive: true, force: true });
     await rm(list, { force: true });
     freed.demos++;
     freed.bytes += bytes;
@@ -130,8 +142,9 @@ export async function sweep(dir: string, days: number, now = Date.now()): Promis
  * opened counts again when the last count is old.
  */
 export class DemoSpace {
-  private used?: DemoSpaceView['used'];
-  private freed?: DemoSpaceView['freed'];
+  /** The last count and the last deletion, each of the demo directory it was of. */
+  private used?: DemoSpaceView['used'] & { dir: string };
+  private freed?: DemoSpaceView['freed'] & { dir: string };
   /** The jobs queued or running, one after the other. */
   private tail: Promise<void> = Promise.resolve();
   private pending = 0;
@@ -139,7 +152,11 @@ export class DemoSpace {
   private ahead: { sweep?: Promise<void>; count?: Promise<void> } = {};
   private timers: ReturnType<typeof setTimeout>[] = [];
 
-  constructor(private readonly o: { home: string; settings: () => DemoSettings; log?: (line: string) => void }) {}
+  /**
+   * `settings` are the demo settings as read; `file` is where they are saved, so a file that does
+   * not read (which `settings` then gives as the defaults) deletes nothing, whatever it said.
+   */
+  constructor(private readonly o: { home: string; settings: () => DemoSettings; file?: string; log?: (line: string) => void }) {}
 
   start(): this {
     this.timers.push(setTimeout(() => this.sweepSoon(), FIRST_SWEEP_MS), setInterval(() => this.sweepSoon(), SWEEP_EVERY_MS));
@@ -153,14 +170,18 @@ export class DemoSpace {
 
   /** What the Demos section shows; counts again in the background when the last count is old. */
   view(): DemoSpaceView {
-    if (!this.pending && (!this.used || Date.now() - Date.parse(this.used.at) > STALE_MS)) void this.queue(false);
     const s = this.o.settings();
+    const dir = demoDirectory(s);
+    // what was counted and deleted in another directory than the settings name now is not shown
+    const used = this.used?.dir === dir ? this.used : undefined;
+    const freed = this.freed?.dir === dir ? this.freed : undefined;
+    if (!this.pending && (!used || Date.now() - Date.parse(used.at) > STALE_MS)) void this.queue(false);
     return {
       keepDays: keepDays(s, this.o.home),
       defaultDays: defaultDays(this.o.home),
       busy: this.pending > 0,
-      ...(this.used ? { used: this.used } : {}),
-      ...(this.freed ? { freed: this.freed } : {}),
+      ...(used ? { used: { bytes: used.bytes, work: used.work, at: used.at } } : {}),
+      ...(freed ? { freed: { demos: freed.demos, bytes: freed.bytes, at: freed.at } } : {}),
     };
   }
 
@@ -186,19 +207,33 @@ export class DemoSpace {
     const s = this.o.settings();
     const dir = demoDirectory(s);
     try {
-      const days = keepDays(s, this.o.home);
+      const days = this.unreadable() ? null : keepDays(s, this.o.home);
       // an Obeya that keeps every frame has nothing to delete, and counts only for the owner looking
-      if (sweeping) {
-        if (days === null) return;
+      // (or for a directory it has no count of)
+      if (sweeping && days === null && this.used?.dir === dir) return;
+      if (sweeping && days !== null) {
         const freed = await sweep(dir, days);
         if (freed.demos) {
-          this.freed = { at: new Date().toISOString(), ...freed };
+          this.freed = { at: new Date().toISOString(), ...freed, dir };
           this.o.log?.(`Obeya: deleted the frames of ${freed.demos} demo${freed.demos === 1 ? '' : 's'} in ${dir} last rendered more than ${days} days ago (${(freed.bytes / 1e9).toFixed(1)} GB)`);
         }
       }
-      this.used = { ...(await usage(dir)), at: new Date().toISOString() };
+      this.used = { ...(await usage(dir)), at: new Date().toISOString(), dir };
     } catch (e) {
       this.o.log?.(`Obeya: counting or tidying the demos in ${dir} failed: ${(e as Error).message}`);
+    }
+  }
+
+  /** The settings file is there and does not read: its `keepFrames` is unknown. */
+  private unreadable(): boolean {
+    const file = this.o.file;
+    if (!file || !existsSync(file)) return false;
+    try {
+      JSON.parse(readFileSync(file, 'utf8'));
+      return false;
+    } catch {
+      this.o.log?.(`Obeya: ${file} does not read; no demo frames are deleted until it does`);
+      return true;
     }
   }
 }

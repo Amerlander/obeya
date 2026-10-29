@@ -68,7 +68,7 @@ import { serve, serveNarration } from './server';
 import { LocalTranscriber, VoiceIn } from './voice';
 import { VoiceSetup } from './voice-setup';
 import { useLib } from '../../plugin/skills/demo/lib/here.ts';
-import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
+import { DEMO_SETTINGS_FILE, expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { DemoSpace } from './demo-space';
 import { qwen3Serve } from '../../plugin/skills/demo/lib/voices.ts';
 import { agentSetting, conversationLanguage, ownerLanguage, usageMeterView } from './settings';
@@ -232,7 +232,7 @@ const narration = new NarrationHost({ argv: (voice, language) => qwen3Serve(voic
 const narrationServer = serveNarration(narration);
 const narrationUrl = `http://127.0.0.1:${narrationServer.port}`;
 // the disk space demos take, and the frames of old renders deleted (demo-space.ts)
-const demoSpace = new DemoSpace({ home, settings: () => readDemoSettings(home), log: (line) => console.log(line) }).start();
+const demoSpace = new DemoSpace({ home, settings: () => readDemoSettings(home), file: join(home, DEMO_SETTINGS_FILE), log: (line) => console.log(line) }).start();
 const config = new Config({
   file: configFile,
   source,

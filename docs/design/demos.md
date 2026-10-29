@@ -103,7 +103,10 @@ list `.work/frames.txt`), about half a gigabyte a demo, which only re-voicing ne
 is made. Obeya deletes them a set time after the demo's last render: „Einzelbilder behalten“ in the
 dialog's Demos section (`keepFrames` in `demo.json`: whole days, or `always`), two weeks unless set.
 A render's last time is the newest change in its work directory (a re-voicing or a retake counts),
-and a demo a render still holds (its `render.pid` names a running process) is left alone. The rest
+and a demo a render still holds (its `render.pid` names a running process) is left alone, checked
+again right before deleting. A work directory or frames that are a link are not followed, and a
+`demo.json` that does not read deletes nothing (read as the defaults, it would delete against an
+owner's `always`). The rest
 of the work directory stays: the narration's clips, so a render with the same words does not
 synthesise them again (a hosted voice would be paid again), and the take's cuts, which are small.
 Obeya looks a minute after it starts, every six hours after that, and at once when the setting or
@@ -117,7 +120,8 @@ default would go against an owner's `always`).
 
 Below the setting the section shows what the demo directory takes and how much of it is in work
 directories, counted in the background (some 30 s for two million files): after each deletion,
-and when the section is opened and the last count is older than ten minutes. The last deletion
+and when the section is opened and the last count is older than ten minutes or of another
+directory than the settings name now. The last deletion
 since Obeya started shows beside it (when, how many demos, how much freed).
 
 #### Installing voices

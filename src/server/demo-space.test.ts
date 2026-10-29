@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_KEEP_DAYS, DemoSpace, keepDays, sweep, usage, workDirs } from './demo-space';
@@ -52,6 +52,25 @@ describe('the frames of old demos', () => {
     expect(existsSync(join(work, 'frames'))).toBe(true);
   });
 
+  test('behind a link are not touched', async () => {
+    // a work directory that is a link, and frames that are one, both to a render outside the demo directory
+    const outside = mkdtempSync(join(tmpdir(), 'obeya-demo-space-outside-'));
+    try {
+      const kept = render(join(outside, 'kept'), 30);
+      mkdirSync(join(demos, 'linked'));
+      symlinkSync(kept, join(demos, 'linked', '.work'), 'dir');
+      const real = render(join(demos, 'real'), 30);
+      rmSync(join(real, 'frames'), { recursive: true });
+      symlinkSync(join(kept, 'frames'), join(real, 'frames'), 'dir');
+      expect(workDirs(demos)).toEqual([real]);
+      await sweep(demos, 14);
+      expect(readdirSync(join(kept, 'frames'))).toHaveLength(3);
+      expect(existsSync(join(kept, 'frames.txt'))).toBe(true);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   test('a recent file in the work directory counts as a recent render', async () => {
     const work = render(join(demos, 'revoiced'), 30);
     writeFileSync(join(work, 'state.json'), '{}');
@@ -89,4 +108,26 @@ test('the view counts in the background, and a sweep deletes per the settings', 
   expect(view.busy).toBe(false);
   expect(view.freed).toMatchObject({ demos: 1 });
   expect(view.used!.bytes).toBeGreaterThan(0);
+});
+
+test('a settings file that does not read deletes nothing', async () => {
+  const work = render(join(demos, 'old'), 20);
+  const file = join(demos, 'demo.json');
+  writeFileSync(file, '{ not json');
+  const space = new DemoSpace({ home: join(homedir(), '.obeya'), settings: () => ({ language: 'en', voice: 'piper', directory: demos }), file });
+  await space.sweepSoon();
+  expect(existsSync(join(work, 'frames'))).toBe(true);
+});
+
+test('what was counted in another directory is not shown', async () => {
+  render(join(demos, 'a'), 1);
+  let directory = demos;
+  const space = new DemoSpace({ home: join(demos, 'home'), settings: () => ({ language: 'en', voice: 'piper', directory, keepFrames: 'always' }) });
+  await space.sweepSoon();
+  expect(space.view().used!.bytes).toBeGreaterThan(0);
+  directory = join(demos, 'none');
+  expect(space.view().used).toBeUndefined();
+  // a sweep that deletes nothing still counts a directory it has no count of
+  await space.sweepSoon();
+  expect(space.view().used).toMatchObject({ bytes: 0, work: 0 });
 });
