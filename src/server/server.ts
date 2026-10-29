@@ -924,12 +924,13 @@ export function serve(
         if (!c) return ws.close();
         sockets.get(c.id)!.add(ws);
         ws.send(JSON.stringify({ type: 'hello', server: started, ...(oldLinuxBun() ? { oldBun: Bun.version } : {}) } satisfies ServerMessage));
-        ws.send(JSON.stringify({ type: 'snapshot', snapshot: c.board.snapshot() } satisfies ServerMessage));
+        // what the bar shows comes before the snapshot, which draws the bar: it is there from the first frame
         ws.send(JSON.stringify({ type: 'restart', restart: pending(c.id) } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'update', update: updates.current() } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'source', source: sources?.current() ?? null } satisfies ServerMessage));
         ws.send(JSON.stringify({ type: 'usage', usage: usage?.current() ?? null } satisfies ServerMessage));
         if (usage) unwatch.set(ws.data.page, usage.watch());
+        ws.send(JSON.stringify({ type: 'snapshot', snapshot: c.board.snapshot() } satisfies ServerMessage));
         ws.send(waitingMessage());
         // a page that reloads within a command's undo window offers "Rückgängig" again
         for (const n of c.commander.undoable()) ws.send(JSON.stringify({ type: 'notice', ...n } satisfies ServerMessage));

@@ -959,7 +959,7 @@ describe('new commits on the upstream of the checkout Obeya runs from', () => {
 describe('the usage limits in the bar', () => {
   test('a page gets them once fetched for it, and its closing ends the session that fetched them', async () => {
     let closed = 0;
-    const usage = new UsageMeter(() => ({ fetch: async () => ({ at: '2026-10-28T08:00:00.000Z', limits: [{ kind: 'session', group: 'session', percent: 7, severity: 'normal' }] }), close: () => void closed++ }), { on: true });
+    const usage = new UsageMeter(() => ({ fetch: async () => ({ at: '2026-10-28T08:00:00.000Z', limits: [{ kind: 'session', group: 'session', percent: 7, severity: 'normal' }] }), close: () => void closed++ }), { on: true, lingerMs: 10 });
     server.stop(true);
     server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, usage);
     const messages: ServerMessage[] = [];
