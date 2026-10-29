@@ -65,7 +65,7 @@ below cards.
 The arrow before a project's title collapses it to its head („Zuklappen“, „Aufklappen“), for
 projects the owner does not work on (on a shared repository every colleague's plan docs are
 projects). Collapsed, it shows title, progress, start button, the badge of workstreams that need the
-owner, and a mark per workstream in its state's colour that names and opens it. Its workstreams stay
+owner, the bubble of its agent's unread answers (see Asking in a project's sheet), and a mark per workstream in its state's colour that names and opens it. Its workstreams stay
 in the project's sheet and the queue, and an edge indicator for one that needs the owner points to
 the project. Nothing around it moves. Collapsing is stored in this Obeya, not in the plan doc, so it
 holds across reloads, devices and the archive.

@@ -784,6 +784,7 @@ export const ProjectView = memo(
     item,
     b,
     kids,
+    replies,
     els,
     onStartAll,
     onArrange,
@@ -793,6 +794,8 @@ export const ProjectView = memo(
     item: Item;
     b: Bounds;
     kids: Item[];
+    /** Answers of its project agent that wait unread. */
+    replies: number;
     els: Map<string, HTMLElement>;
     onStartAll: (project: Item, count: number) => void;
     onArrange: (project: Item) => void;
@@ -877,12 +880,33 @@ export const ProjectView = memo(
             ))}
           </div>
         )}
-        {waiting > 0 && <div className="badge">{waiting}</div>}
+        {(replies > 0 || waiting > 0) && (
+          <div className="badges">
+            {/* its project agent's answers: a speech bubble, unlike the count of workstreams that need the owner */}
+            {replies > 0 && (
+              <button
+                className="badge replied pulse"
+                title={t.plan.replied(replies)}
+                aria-label={t.plan.replied(replies)}
+                onPointerDown={own}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen(item);
+                }}
+              >
+                <TalkIcon />
+                {replies > 1 && <span>{replies}</span>}
+              </button>
+            )}
+            {waiting > 0 && <div className="badge">{waiting}</div>}
+          </div>
+        )}
       </div>
     );
   },
   (a, b) =>
     a.item === b.item &&
+    a.replies === b.replies &&
     a.onStartAll === b.onStartAll &&
     a.onArrange === b.onArrange &&
     a.onCollapse === b.onCollapse &&
@@ -1002,16 +1026,22 @@ export function Sheet({
   /** Changes when the canvas does, so the decisions are read again. */
   version: unknown;
 }) {
-  const [loaded, setLoaded] = useState<{ id: string; h: ProjectHistory } | null>(null);
+  const [loaded, setLoaded] = useState<{ id: string; h: ProjectHistory; opening: number } | null>(null);
   const id = project?.id;
+  // each time the sheet opens: the history loaded before stands until this opening's comes
+  const [opening, setOpening] = useState({ n: 0, on });
+  if (opening.on !== on) setOpening({ n: on ? opening.n + 1 : opening.n, on });
   useEffect(() => {
     if (!id || !on) return;
     let current = true;
-    api.history(id).then((h) => current && setLoaded({ id, h }), console.error);
+    const n = opening.n;
+    api.history(id).then((h) => current && setLoaded({ id, h, opening: n }), console.error);
     return () => void (current = false);
   }, [id, on, version]);
   // never another project's
   const history = loaded && loaded.id === id ? loaded.h : null;
+  // its conversation counts as in view once this opening's is there: answers that waited for it are marked then
+  const talkLoaded = !!history && loaded!.opening === opening.n;
   const ref = (key: string) => (el: HTMLElement | null) => void (el ? els.set(key, el) : els.delete(key));
   const [doc, setDoc] = useState<{ id: string; markdown: string } | null>(null);
   const [failed, setFailed] = useState(false);
@@ -1122,7 +1152,7 @@ export function Sheet({
               </li>
             ))}
           </ol>
-          <ProjectTalk on={on && !reading} project={project} talk={history?.talk ?? []} items={all} onOpen={onOpen} />
+          <ProjectTalk on={on && !reading && talkLoaded} project={project} talk={history?.talk ?? []} items={all} onOpen={onOpen} />
           <h4 className="p-h">{t.decisions}</h4>
           {history && history.decisions.length === 0 && <p className="hint">{t.noDecisions}</p>}
           {history && history.decisions.length > 0 && (

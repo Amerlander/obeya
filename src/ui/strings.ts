@@ -192,6 +192,8 @@ const de = {
     askHint: 'Frag hier den Projekt-Agenten: Er kennt das Plandokument, die Entscheidungen und den Stand jedes Workstreams. Was du Obeya zu diesem Projekt fragst, steht auch hier.',
     askPlaceholder: 'Frage zum Projekt …',
     askSend: 'An den Projekt-Agenten senden',
+    /** On the project's card: answers of its project agent the owner has not read yet. */
+    replied: (n: number) => (n === 1 ? 'Der Projekt-Agent hat geantwortet: im Projektblatt lesen' : `Der Projekt-Agent hat ${n}-mal geantwortet: im Projektblatt lesen`),
   },
   /** The note on a plan directory beside the projects. */
   planDir: {
@@ -2034,6 +2036,7 @@ const en: Strings = {
     askHint: 'Ask the project agent here: it knows the plan doc, the decisions and where each workstream stands. What you ask Obeya about this project stands here too.',
     askPlaceholder: 'A question about the project …',
     askSend: 'Send to the project agent',
+    replied: (n: number) => (n === 1 ? 'The project agent has replied: read it in the project’s sheet' : `The project agent has replied ${n} times: read it in the project’s sheet`),
   },
   planDir: {
     notProjects: (dir: string, n: number) => `${dir} · ${n === 1 ? '1 doc is not a project' : `${n} docs are not projects`}`,

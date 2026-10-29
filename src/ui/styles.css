@@ -207,6 +207,17 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 .badge.pulse { animation: pulse 1.8s ease-out infinite; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 2px var(--bg), 1px 2px 0 2px rgba(0,0,0,.18), 0 0 0 2px rgba(var(--waiting-rgb),.6); }
   70%, 100% { box-shadow: 0 0 0 2px var(--bg), 1px 2px 0 2px rgba(0,0,0,.18), 0 0 0 15px rgba(var(--waiting-rgb),0); } }
+/* a project's badges side by side at its corner: its agent's unread answers (a speech bubble in the
+   project agent's colour), then the count of workstreams that need the owner */
+.project > .badges { position: absolute; top: -10px; right: -8px; display: flex; gap: 6px;
+  transform: scale(max(1, calc(.9 / var(--s)))); transform-origin: 90% 30%; }
+.project > .badges > .badge { position: static; transform: none; }
+.badge.replied { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 5px; border: 0; cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.45), transparent 45%), var(--proposal); }
+.badge.replied svg { display: block; flex: none; width: 14px; height: 14px; }
+.badge.replied.pulse { animation: pulse-replied 1.8s ease-out infinite; }
+@keyframes pulse-replied { 0% { box-shadow: 0 0 0 2px var(--bg), 1px 2px 0 2px rgba(0,0,0,.18), 0 0 0 2px color-mix(in srgb, var(--proposal) 60%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 2px var(--bg), 1px 2px 0 2px rgba(0,0,0,.18), 0 0 0 15px color-mix(in srgb, var(--proposal) 0%, transparent); } }
 .card.lifted { opacity: 0; }
 /* taken off the wall: tilted in the hand */
 .card.dragging { box-shadow: var(--lift); z-index: 5 !important; transition: none; transform: rotate(-1.5deg) translate(-1px, -3px); }

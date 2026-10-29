@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CLONES, type FilledClones, type Item, openPerGroup, type ResolvedCanvas, stoppedArchivable, withClones, withSupplemented } from './types';
+import { CLONES, type FilledClones, type Item, openPerGroup, type ResolvedCanvas, stoppedArchivable, type Talk, unreadPerProject, withClones, withSupplemented } from './types';
 
 const card = (over: Partial<Item>): Item => ({ id: 'x', kind: 'task', state: 'planned', title: '', body: '', x: 0, y: 0, source: 'manual', repo: 'r', ...over });
 
@@ -24,6 +24,18 @@ describe('openPerGroup', () => {
     // a group whose cards are all done has none open
     expect(open.get('c')).toBeUndefined();
   });
+});
+
+test("a project's card counts its agent's answers that wait unread, asked in its sheet", () => {
+  const talk = (over: Partial<Talk>): Talk => ({ id: 1, at: '2026-10-29T09:00:00Z', said: '', ...over });
+  const unread = unreadPerProject([
+    talk({ askedIn: 'p', answer: 'W2 first.', unread: true }),
+    talk({ askedIn: 'p', answer: 'Yes.', unread: true }),
+    talk({ askedIn: 'q', answer: 'Read already.' }),
+    // asked of Obeya: its button counts it, not the project's card
+    talk({ question: 'What is left?', answer: 'W3.', unread: true }),
+  ]);
+  expect([...unread]).toEqual([['p', 2]]);
 });
 
 describe('withClones', () => {

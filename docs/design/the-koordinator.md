@@ -296,8 +296,12 @@ session; a reply to a message follows up on that thread, other words start a new
 answers, also those asked of Obeya about the project, each with „Als Karte“. Obeya's sheet shows
 them too, marked „im Projektblatt „…““, so an answer that comes after the owner left the project
 waits there unread; with the project's sheet in view (not its plan doc) its answers count as read
-and get no line above the microphone. The conversation grows in the sheet, without a scrollbar of
-its own.
+and get no line above the microphone. While an answer to words written in the sheet waits unread,
+the project's card shows it at its corner, collapsed or not: a pulsing speech bubble in the project
+agent's colour (with the number from two answers on), beside the count of workstreams that need the
+owner and unlike it; a click opens the sheet. The sheet then opens at the first of them, marked as
+answers that waited are in Obeya's sheet. The conversation grows in the sheet, without a scrollbar
+of its own.
 
 ### Koordinator memory
 
@@ -420,6 +424,10 @@ passed the words on through `to_obeya` hears that the owner finds the link under
   („still downloading …“) as the answer, which closed the session and stopped the work.
 - **The project agent can be asked from the project's sheet** (2026-10-21, a colleague's feedback),
   since asking only through Obeya was not found from the project.
+- **The project's card shows its agent's unread answers** (2026-10-29, issue #21): a reply to what
+  the owner asked in the sheet is looked for where it was asked, not only on Obeya's button. A
+  speech bubble rather than a second number, so it is not taken for workstreams that need the owner.
+  Answers asked of Obeya about the project stay on Obeya's button alone: they were asked there.
 - **The Koordinator's memory lives in the store, not the session**: a session is never resumed, and
   a new one starts from the stored conversation and the cards' history. That keeps the context short
   over weeks and makes restart and renewal one path; the history is in it because the owner asks

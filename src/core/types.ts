@@ -219,6 +219,13 @@ export const snoozable = (i: Item) => !i.archivedAt && (!!i.snoozed || needsYou(
 /** Answers in the Koordinator's sheet the owner has not seen yet. */
 export const unreadAnswers = (talk: Talk[]) => talk.filter((x) => x.unread).length;
 
+/** Per project, its agent's answers to what the owner asked in its sheet that wait unread: its card shows them. */
+export function unreadPerProject(talk: Talk[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const x of talk) if (x.unread && x.askedIn) m.set(x.askedIn, (m.get(x.askedIn) ?? 0) + 1);
+  return m;
+}
+
 /** What on a canvas waits for the owner: the cards that need them, and the Koordinator while an answer waits unread. */
 export const waitingOn = (s: Pick<CanvasSnapshot, 'items' | 'talk'>) => s.items.filter(needsYou).length + (unreadAnswers(s.talk) ? 1 : 0);
 

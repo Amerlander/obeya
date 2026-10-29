@@ -161,6 +161,11 @@ export function ProjectTalk({ on, project, talk, items, onOpen }: { on: boolean;
   const draft = cardDraft(project.id);
   const [error, setError] = useState('');
   const end = useFollowInSheet(talk);
+  // answers that waited unread (the project's card said so) are where the sheet opens, below the workstreams
+  const waited = fresh[0];
+  useEffect(() => {
+    if (waited !== undefined) end.current?.querySelector('.msg.fresh')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [waited]);
   return (
     <section className="p-talk" ref={end}>
       <h4 className="p-h">{t.plan.askHead}</h4>
