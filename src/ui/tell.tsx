@@ -8,7 +8,8 @@ import type { Place } from '../core/layout';
 import { agentListens, type Item, type TalkRef } from '../core/types';
 import { Aside } from './aside';
 import { api, ApiError, type Field, type Heard, type Where } from './api';
-import { plain } from './markdown';
+import { clip } from '../core/text';
+import { excerpt, plain } from './markdown';
 import { sent, take, videoOf } from './spot';
 import { failText, t } from './strings';
 import type { useTold } from './voice';
@@ -69,6 +70,12 @@ export function useAck(aside = false) {
   );
   return { showAck, showWait, fail, line };
 }
+
+/**
+ * A notice as the line above the microphone shows it: an answer looked up comes in Markdown, the
+ * line shows it plain, on one line and cut short; the sheet or the card has it in full.
+ */
+export const noticeLine = (text: string) => clip(excerpt(text), 300);
 
 /**
  * Hands words on: `byId` finds the cards they may be about, `told` keeps each command's line above

@@ -229,7 +229,8 @@ as a note or feedback instead: its work is on its branch, not in the Lesestand, 
 the agent at work while it answers. A look-up about a card gets its state, log and the worker's
 start task, from which it derives the worker's steps.
 
-The answer comes 10–30 s later: its start above the microphone, in full in the open card's log, else
+The answer comes 10–30 s later: its start above the microphone (as plain text on one line, its
+Markdown stripped), in full in the open card's log, else
 in the Koordinator's sheet; meanwhile the open card shows what the agent reads. An answer in the
 sheet stays unread until the owner has the sheet in view (open, the page not hidden): until then
 Obeya's button counts it in orange, it counts once in „brauchen dich“ and in the switcher, and Tab

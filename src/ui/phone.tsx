@@ -23,7 +23,7 @@ import { clock, failText, forTouch, shortDay, t } from './strings';
 import { UsagePill } from './usage';
 import { agentWorks, cardTalk, koordinatorReads, obeyaWorks, opensWithTalk, runs, unseen } from './talk';
 import { seenOf } from './seen';
-import { tellers, useAck } from './tell';
+import { noticeLine, tellers, useAck } from './tell';
 import { HoldToTalk, PushToTalk, ToldList, usePushToTalk, useTold } from './voice';
 
 /**
@@ -398,7 +398,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
     () =>
       onNotice((n) => {
         const i = n.cardId ? byId(n.cardId) : undefined;
-        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}) });
+        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: noticeLine(n.text), ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}) });
       }),
     [],
   );

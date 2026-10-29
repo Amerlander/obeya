@@ -330,7 +330,7 @@ export class Answers {
       const left = (now.pending ?? []).filter((p) => !heard(p));
       this.o.board.setThread(cardId, { answers: now.answers + 1, files: now.files + (a.files?.length ?? 0), thinking: left.length > 0, pending: left });
     }
-    this.o.board.notify({ cardId, text: clip(text, 300) });
+    this.o.board.notify({ cardId, text });
     for (const p of taken) if (p.talk) this.answer(p.talk, root.question, text, by, a.files);
   }
 
@@ -433,7 +433,7 @@ export class Answers {
       this.o.board.setThread(moved, { answers: s.answers + 1, files: s.files + (a.files?.length ?? 0) });
     }
     // above the microphone too, wherever the owner is by now; in full on the card or in the sheet
-    this.o.board.notify({ ...(card || moved ? { cardId: card ?? moved } : { talk: talkId, ...(by === 'project' && project ? { project: project.id } : {}) }), text: clip(text, 300) });
+    this.o.board.notify({ ...(card || moved ? { cardId: card ?? moved } : { talk: talkId, ...(by === 'project' && project ? { project: project.id } : {}) }), text });
     this.o.onAnswer?.(talkId, question, text);
   }
 

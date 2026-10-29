@@ -38,7 +38,7 @@ import { CanvasPill, CardView, shownState, DepLinks, Edges, Links, Minimap, OldB
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
 import { failText, t } from './strings';
 import { split, talkAlone } from './talk';
-import { tellers, useAck, voiceTarget } from './tell';
+import { noticeLine, tellers, useAck, voiceTarget } from './tell';
 
 export function App() {
   const [phone] = useState(phoneView);
@@ -881,7 +881,7 @@ function Canvas({
             void open(i);
           } else openSoon.current = { id: n.cardId, until: Date.now() + 10_000 };
         }
-        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: n.text, ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}), ...(n.project ? { project: n.project } : {}) });
+        told.show(i ? { id: i.id, title: plain(i.title) } : undefined, { confirm: noticeLine(n.text), ...(n.token ? { token: n.token } : {}), ...(n.undoMs ? { undoMs: n.undoMs } : {}), ...(n.talk ? { talk: n.talk } : {}), ...(n.project ? { project: n.project } : {}) });
       }),
     [],
   );
