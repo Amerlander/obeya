@@ -221,7 +221,7 @@ describe('handing over with a demo', () => {
     writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00:00.350 --> 00:00:05.000\nA.\n\n00:00:06.350 --> 00:00:09.000\nB.\n');
     return d;
   };
-  const demo = (d: string, chapters = ['Vorher', 'Nachher']) => ({ dir: d, chapters, question: 'Semikolon oder Komma?' });
+  const demo = (d: string, chapters = ['Vorher', 'Nachher']) => ({ dir: d, chapters, question: { text: 'Semikolon oder Komma?' } });
 
   test('the worker gets the demo skill from the plugin that comes with Obeya, its brief names it, and it knows where Obeya is', async () => {
     rmSync(dir, { recursive: true, force: true });
@@ -313,6 +313,33 @@ describe('handing over with a demo', () => {
     expect(needsYou(board.item(c.id)!)).toBe(true);
     expect(board.decisions(null).at(-1)).toMatchObject({ question: 'Semikolon oder Komma?', answer: 'Semikolon.', by: 'owner' });
     expect(() => workers.answer(c.id, 'Komma.')).toThrow(BadRequest);
+  });
+
+  test('the question in the demo report offers options and the worker’s pick, answered with a click like a worker’s question', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    const question = { text: 'Semikolon oder Komma?', options: ['Semikolon', 'Komma', ' Semikolon '], pick: ['Komma', 'Tab'], pick_why: 'Excel liest es überall.' };
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...demo(demoDir()), question } });
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)!.question).toEqual({ text: 'Semikolon oder Komma?', options: ['Semikolon', 'Komma'], pick: { options: ['Komma'], why: 'Excel liest es überall.' } });
+    workers.answer(c.id, 'Und mit Kopfzeile.', [], false, undefined, ['Semikolon', 'Tab']);
+    expect(state(c.id)).toBe('waiting:demo');
+    expect(board.item(c.id)!.question).toBeUndefined();
+    expect(board.item(c.id)!.demo).toMatchObject({ options: ['Semikolon', 'Komma'], answer: 'Semikolon\n\nUnd mit Kopfzeile.' });
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'answer', picks: ['Semikolon'] });
+    expect(runtime.last.inbox.at(-1)).toContain('They picked „Semikolon“.\n\nThey added in their own words:\n\nUnd mit Kopfzeile.');
+    expect(board.decisions(null).at(-1)).toMatchObject({ question: 'Semikolon oder Komma?', answer: 'Semikolon\n\nUnd mit Kopfzeile.' });
+  });
+
+  test('several options of the demo report’s question go together when it allows several', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    const question = { text: 'Welche Spalten?', options: ['Datum', 'Betrag', 'Notiz'], multiple: true, pick: ['Datum', 'Betrag'], pick_why: 'Die braucht jeder.' };
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...demo(demoDir()), question } });
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)!.question).toMatchObject({ multiple: true, pick: { options: ['Datum', 'Betrag'] } });
+    workers.answer(c.id, '', [], false, undefined, ['Notiz', 'Datum']);
+    expect(runtime.last.inbox.at(-1)).toContain('They picked „Datum“, „Notiz“.');
   });
 
   test('a handover that keeps the demo leaves its answered question with the handover it came with', async () => {
@@ -694,7 +721,7 @@ describe('comments on places in the demo video', () => {
     writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00:00.350 --> 00:00:05.000\nDie Liste.\n\n00:00:06.350 --> 00:00:16.350\nJetzt der Export. Die Datei hat eine Kopfzeile.\n');
     const c = manual();
     await workers.start(c.id);
-    await runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: d, chapters: ['Liste', 'Export'], ...(question ? { question } : {}) } });
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { dir: d, chapters: ['Liste', 'Export'], ...(question ? { question: { text: question } } : {}) } });
     runtime.last.emit({ type: 'idle' });
     return c;
   };

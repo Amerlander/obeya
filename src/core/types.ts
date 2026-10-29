@@ -767,6 +767,10 @@ export interface Demo {
   chapters: [number, string][];
   /** A question only the owner can answer, beyond "approve or give feedback". */
   question?: string;
+  /** Its answer options, several of them together when `multiple`, and the worker's own pick, as on a worker's question. */
+  options?: string[];
+  multiple?: true;
+  pick?: Question['pick'];
   /** The owner's answer to it; the demo keeps waiting for approval. */
   answer?: string;
   /** The handover event it came with: a later handover may keep the demo, and its question stays with the first. */

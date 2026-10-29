@@ -7,11 +7,12 @@ A chapter of the [design doc](../design.md), whose header says how it is written
 Every kind of card shows its exchanges as one conversation („Gespräch“), built once
 (`src/ui/talk.ts`). Messages are the owner's words (spoken or typed, with screenshots, once, as the
 agent got them); the agent's questions with their options and the owner's pick marked on them; its
-replies; its handovers (the one a demo came with carries the report's question, muted once answered;
-a handover in the same turn as a reply stands under it after a dashed line as „Übergabe“); and what
-the Koordinator looked up. Small lines between them mark state changes (started, pull request,
-approved, landed, the demo's link put on the pull request, stopped, errors, usage limit); an
-address in them is a link (the comment on the pull request, say). Everything else (tool calls, thoughts, status
+replies; its handovers (the one a demo came with carries the report's question, with its options
+and the owner's pick marked, muted once answered; a handover in the same turn as a reply stands
+under it after a dashed line as „Übergabe“); and what the Koordinator looked up. Small lines between
+them mark state changes (started, pull request, approved, landed, the demo's link put on the pull
+request, stopped, errors, usage limit); an address in them is a link (the comment on the pull
+request, say). Everything else (tool calls, thoughts, status
 lines, Obeya's notes) folds away as „Verlauf“ under the agent's next message. A note the worker
 answered without `reply` counts as answered by its next words, unless a reply follows before the
 owner says more. Once no agent works on the card and no question is open, steps after the last

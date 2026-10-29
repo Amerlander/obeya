@@ -22,7 +22,9 @@ visible on a card.
   `withdraw_proposal(title, why, replaced_by?)` (see Proposals): something it noticed outside its
   task, instead of doing it, or a follow-up due later (`start_at`). `repo` exists only on a canvas
   with several repositories, whose ids and paths its description lists.
-- `ready_for_review(summary, demo)`, whose summary is the report the owner reads.
+- `ready_for_review(summary, demo)`, whose summary is the report the owner reads. The demo's
+  `question` (text, options, multiple, pick, pick_why) is asked and answered as with `ask`, while the
+  card goes on waiting for approval (see Waiting for approval in Card lifecycle).
 - `app_running(url)`: where the app in its workspace opens, for the owner to try by hand (see Trying
   the app by hand); for a workspace on another machine Obeya forwards the port.
 - `snooze(until, why, card, state)` (see Snoozing a card).
@@ -216,6 +218,9 @@ as a learned preference does. Older answers agents gave in the owner's name stay
 - **An agent's question is a first-class thing with answer options**, not prose: the owner answers
   with a click, own words always possible. The answer travels as text, so the conversation reads the
   same later and a spoken answer takes the same path.
+- **A handover's question has options like `ask`'s** (2026-10-29): one kind of question, answered with
+  the same click and pick everywhere. Rejected: free text only, which made the owner type an answer
+  the worker could have offered.
 - **Picks travel apart from the owner's words** (2026-10-15), so the worker can tell them apart.
   Rejected: the pick as the first line of the owner's words.
 - **A worker's question goes straight to the owner, with the worker's own pick** (2026-10-07).

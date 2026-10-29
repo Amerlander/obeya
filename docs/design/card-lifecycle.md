@@ -109,7 +109,8 @@ turn without such words. The app is what the worker started in the turn in which
 runs (`app_running`) and still runs then: nothing else tells the two apart, so a worker names the app
 again each time it starts it anew.
 
-A question in the demo report is an open question like a worker's (see Questions go to the owner).
+A question in the demo report is an open question like a worker's (see Questions go to the owner),
+with its options and the worker's pick.
 The card's one field (see The conversation) takes the answer and feedback together; the worker hears
 them as the answer, and the card is at work while it takes them in, as after feedback. A restart
 resumes that turn like a working card's.

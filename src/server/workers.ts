@@ -12,7 +12,7 @@ import { basename, isAbsolute } from 'node:path';
 import { type CardFile, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
 import { DEFAULT_DEMO_DIRECTORY } from '../../plugin/skills/demo/lib/settings.ts';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Share, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started } from '../core/types';
+import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type Demo, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Share, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -381,6 +381,12 @@ export function answerNote(picks: string[], text: string): string {
   if (!picks.length) return text;
   const words = ownWords({ text, picks });
   return `They picked ${picks.map((o) => `„${o}“`).join(', ')}.${words ? `\n\nThey added in their own words:\n\n${words}` : ''}`;
+}
+
+/** The question of a demo report as the demo keeps it: its text, options and the worker's pick, as `ask` takes them. */
+function demoQuestion(q: { text: string } & Omit<Asked, 'question'>): Pick<Demo, 'question' | 'options' | 'multiple' | 'pick'> {
+  const { text, options, multiple, pick } = withPick({ ...q, question: q.text });
+  return { question: text, ...(options.length ? { options } : {}), ...(multiple ? { multiple } : {}), ...(pick ? { pick } : {}) };
 }
 
 /** How many files a worker may name as its result at a handover. */
@@ -3494,7 +3500,18 @@ export class Workers {
                 .describe("'video' (the default): a recording made with the demo skill; 'html': a page to look at, for results that are seen rather than watched happening"),
               dir: z.string().describe('absolute path of the demo: a video holds demo.mp4 and captions.vtt, an HTML artifact holds index.html and the files it loads'),
               chapters: z.array(z.string()).optional().describe('video only: scene titles, in order'),
-              question: z.string().optional().describe('only when something needs the owner beyond approve or feedback; the owner can answer it on the card before approving'),
+              question: z
+                .object({
+                  text: z.string(),
+                  options: z.array(z.string()).max(4).optional(),
+                  multiple: z.boolean().optional(),
+                  pick: z.array(z.string()).optional(),
+                  pick_why: z.string().optional(),
+                })
+                .optional()
+                .describe(
+                  `only when something needs the owner beyond approve or feedback; the owner can answer it on the card before approving. As with ask: up to four short answer options when they exist, which the owner picks with a click (several when multiple is true) or answers in their own words; pick and pick_why: the options you would choose and why, in one short sentence in ${language}`,
+                ),
               ...(this.shares
                 ? {
                     page: z
@@ -3546,7 +3563,7 @@ export class Workers {
             ),
         },
         run: ({ summary, demo, files, review: results }) => {
-          type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: string; page?: DemoPage; follows?: 'replaces' | 'supplements' };
+          type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: { text: string } & Omit<Asked, 'question'>; page?: DemoPage; follows?: 'replaces' | 'supplements' };
           const given = demo as Demo | undefined;
           // whether the branch holds work and decides where it lands, which git tells without blocking the server
           // a review card hands over the PR's head it reviewed, which is all Obeya ever merges
@@ -3580,7 +3597,7 @@ export class Workers {
             if (d) {
               const kind = d.kind ?? 'video';
               // what the worker says of it beside the demo before, for the owner's buttons when the page shows that one
-              const report = { ...(d.question ? { question: d.question } : {}), ...(row.demo && (d.follows === 'replaces' || d.follows === 'supplements') ? { follows: d.follows } : {}) };
+              const report = { ...(d.question?.text.trim() ? demoQuestion(d.question) : {}), ...(row.demo && (d.follows === 'replaces' || d.follows === 'supplements') ? { follows: d.follows } : {}) };
               const tags = vocabulary.length && d.page?.tags && typeof d.page.tags === 'object' ? (d.page.tags as PageTags) : undefined;
               const page =
                 d.page && d.page.title.trim() && d.page.text.trim() ? { title: clip(d.page.title.trim(), 200), text: clip(d.page.text.trim(), 2000), ...(tags ? { tags: tagsOf(tags, Object.fromEntries(vocabulary)) } : {}) } : undefined;

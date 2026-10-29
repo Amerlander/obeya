@@ -2402,7 +2402,7 @@ function work(r: CardRow): Partial<Item> {
     ...(r.status_line ? { statusLine: r.status_line } : {}),
     ...(detail.question && r.need === 'question' ? { question: detail.question } : {}),
     // a demo's question is as open as a worker's: the owner answers it on the card or by voice
-    ...(demo?.question && !demo.answer && r.need === 'demo' ? { question: { text: demo.question, options: [] } } : {}),
+    ...(demo?.question && !demo.answer && r.need === 'demo' ? { question: { text: demo.question, options: demo.options ?? [], ...(demo.multiple ? { multiple: true } : {}), ...(demo.pick ? { pick: demo.pick } : {}) } } : {}),
     ...(detail.summary && handed ? { summary: detail.summary } : {}),
     ...(answering ? { answering: true } : {}),
     ...(detail.answered && !answering && handed ? { answered: true } : {}),

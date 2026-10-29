@@ -1562,6 +1562,15 @@ function Message({
       {demoQuestion?.question && (
         <div className={`demo-q${demoQuestion.answer === undefined ? '' : ' answered'}`}>
           <b>{t.talk.demoQuestion}</b> {demoQuestion.question}
+          {!!demoQuestion.options?.length && (
+            <ul className="q-opts">
+              {demoQuestion.options.map((o) => (
+                <li key={o} className={demoQuestion.answer?.includes(o) ? 'on' : ''}>
+                  <Inline md={o} />
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       <Mocks mocks={e.mocks} />
