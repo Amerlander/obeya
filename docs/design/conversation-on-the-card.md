@@ -17,7 +17,11 @@ lines, Obeya's notes) folds away as „Verlauf“ under the agent's next message
 the agent passed on (`to_obeya`) answers a step in that „Verlauf“, so it stands under that message,
 with what Obeya says after it until then (the answer it looked up); while that message has not come
 yet, below the agent at work. The owner's words or a state line before the message keep it where it
-came, below the agent's steps up to there. A note the worker
+came, below the agent's steps up to there. What Obeya reads to look a question up on a card (asked
+there by voice, or passed on by its agent) is not the agent's work: it stays out of the agent's
+„Verlauf“ and its bubble at work, and folds under the answer Obeya looked up; while Obeya still
+looks, under its reply that it does, where that reply stands. On a Question card Obeya's agent is
+the card's own, so its reading is the card's agent at work. A note the worker
 answered without `reply` counts as answered by its next words, unless a reply follows before the
 owner says more. Once no agent works on the card and no question is open, steps after the last
 message stand where they happened, the agent's last words among them as its message. A card that was
@@ -323,6 +327,10 @@ image.
   sehe nach“ came above the agent's message that triggered it. The passing-on step folds under that
   message, so the reply follows it. Rejected: holding the reply back in the server until the
   agent's message (it would be lost in a restart, and each kind of agent would need it).
+- **Obeya's look-up apart from the agent's work** (2026-10-29): Obeya logs what it reads for a
+  look-up on the card it was asked on, and it showed in the worker's bubble at work as if the worker
+  read it. It now goes with Obeya's answer. Rejected: not logging it on the card (the owner would
+  not see what the answer rests on).
 - **Words read after an open question stand below it** (2026-10-22), also while it waits at the
   end. Rejected: holding them back until the owner answers, which keeps from the worker what it
   could take in at once.

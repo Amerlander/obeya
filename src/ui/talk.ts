@@ -62,6 +62,9 @@ const MILESTONE =
 /** The agent that works on the card or thinks the idea through. */
 const agentAuthor = (e: CardEvent) => e.author === 'worker' || e.author === 'explorer';
 
+/** The agent Obeya looks the owner's questions up with (`answers.ts`): on a card whose own agent it is not, its steps are not that agent's. */
+const lookUpAuthor = (e: CardEvent) => e.author === 'koordinator' || e.author === 'project';
+
 /** What the owner says to the card's agent. */
 const toAgent = (e: CardEvent) => (e.kind === 'hint' || e.kind === 'answer' || e.kind === 'talk') && (e.author === 'owner' || e.kind === 'answer');
 
@@ -110,8 +113,11 @@ export function demoHandover(demo: Demo, shown: Turn[]): Turn | undefined {
  * Obeya's reply to what the agent passed on (`CardEvent.forwarded`) answers one of its steps: it
  * stands under the agent's message those steps lead to, with what Obeya said after it until then
  * (an answer it looked up), unless the owner's words or a line come first (`passedOn`).
+ * What Obeya read to look a question up (its steps) is not the agent's work: it folds under the
+ * answer it looked up, and while it still looks, under its reply that it does; `answers`: a Question
+ * card, whose own agent Obeya's is, so its steps are the card's agent's.
  */
-export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: boolean; paused?: boolean; working?: boolean } = {}): Talk {
+export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: boolean; paused?: boolean; working?: boolean; answers?: boolean } = {}): Talk {
   const shown: Turn[] = [];
   let steps: CardEvent[] = [];
   // the owner said something to the agent, and the worker has not answered yet
@@ -125,6 +131,17 @@ export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: bo
   let handedOver = false;
   // Obeya's replies to what the agent passed on, held for the agent's next message
   let held: Turn[] = [];
+  // the steps of Obeya's look-up, for the answer it looks up
+  let looking: CardEvent[] = [];
+  // Obeya's reply that it looks the question up, where it stands
+  let lookingUnder: Turn | undefined;
+  const lookUp = (e: CardEvent) => !opts.answers && e.kind === 'activity' && lookUpAuthor(e);
+  const looked = (e: CardEvent) => {
+    if (!lookUpAuthor(e)) return [];
+    const run = looking;
+    looking = [];
+    return run;
+  };
   const moved = new Set<Turn>();
   const release = () => {
     for (const x of held) moved.add(x);
@@ -149,7 +166,11 @@ export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: bo
       steps = [];
       open = false;
       release();
-    } else if (where === 'step') steps.push(e);
+    } else if (where === 'step' && lookUp(e)) {
+      if (!looking.length) lookingUnder = [...shown, ...held].at(-1);
+      looking.push(e);
+    }
+    else if (where === 'step') steps.push(e);
     else if (where === 'after') {
       // closing words after a reply or handover fold under it, the last of its steps; so do the
       // steps the agent took after it in the same turn (a card it proposed, say)
@@ -160,13 +181,13 @@ export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: bo
       } else if (last) (last.then ?? last).steps.push(e);
       else steps.push(e);
     }
-    else if (where === 'aside' && (e.forwarded || held.length)) held.push({ e, steps: [] });
+    else if (where === 'aside' && (e.forwarded || held.length)) held.push({ e, steps: looked(e) });
     else if (where === 'line' || where === 'aside') {
       release();
       // what the agent did until the owner or the usage limit paused it stays above that line once it
       // went on; while it is paused there, its bubble shows it
       if ((pauseLine(e) && !(opts.paused && e === lastPause)) || snoozeLine(e) || (limitLine(e) && !(limitHolds && e === lastLimit))) close();
-      shown.push({ e, steps: [], ...(where === 'line' ? { line: true as const } : {}) });
+      shown.push({ e, steps: where === 'aside' ? looked(e) : [], ...(where === 'line' ? { line: true as const } : {}) });
     }
     else if (where === 'agent') {
       const prev = lastAgent();
@@ -174,7 +195,12 @@ export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: bo
       // stands under the reply
       if (e.kind === 'review' && handedOver && prev?.e.kind === 'talk' && prev.e.author === 'worker' && !prev.then) prev.then = { e, steps };
       // a turn that ended without a reply took its last words as the reply
-      else shown.push({ e, steps: steps.filter((s) => !(s.kind === 'say' && s.text === e.text.trim())) });
+      else {
+        const own = steps.filter((s) => !(s.kind === 'say' && s.text === e.text.trim()));
+        // Obeya's own message (its answer on a proposal) has its look-up's steps among its steps
+        const lookedUp = looked(e);
+        shown.push({ e, steps: lookedUp.length ? [...own, ...lookedUp].sort((x, y) => events.indexOf(x) - events.indexOf(y)) : own });
+      }
       steps = [];
       open = false;
       if (e.kind === 'review') handedOver = true;
@@ -188,6 +214,8 @@ export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: bo
       if (toAgent(e)) open = true;
     }
   });
+  // a look-up not answered yet: its steps so far under Obeya's reply that it looks it up
+  if (looking.length && lookingUnder && !lookingUnder.line && lookUpAuthor(lookingUnder.e)) lookingUnder.steps.push(...looking);
   // while the agent works, they wait below its work for its message; else its steps since stand as one
   let passedOn: Turn[] = [];
   if (opts.working) passedOn = held;
@@ -218,7 +246,7 @@ export function talkTurns(all: CardEvent[], opts: { open?: Question[]; over?: bo
  */
 export function cardTalk(item: Item, events: CardEvent[], past = false): Talk {
   const { working, paused, open } = talkState(item, past);
-  return talkTurns(events, { open, over: !working && !paused, paused, working });
+  return talkTurns(events, { open, over: !working && !paused, paused, working, answers: item.kind === 'question' });
 }
 
 /**

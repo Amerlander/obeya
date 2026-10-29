@@ -225,6 +225,48 @@ test("Obeya's reply to what the worker passed on stands under the worker's messa
   expect(talkTurns([asked, read, looking, more, reply]).shown.map((x) => x.e)).toEqual([asked, read, looking, more, reply]);
 });
 
+test("what Obeya reads to look up a question on a card the worker works on folds under its answer, not into the worker's work", () => {
+  const asked = ev('hint', 'owner', 'Verlinkt der Commit die Demo?');
+  const passing = ev('activity', 'worker', 'to_obeya');
+  const looking = { ...ev('say', 'koordinator', 'Moment, ich sehe nach.'), forwarded: true as const };
+  const cat = ev('activity', 'koordinator', '$ cat docs/plan/export.md');
+  const edit = ev('activity', 'worker', 'Bearbeitet src/export.ts');
+  const log = ev('activity', 'koordinator', '$ git log -1');
+  const found = { ...ev('say', 'koordinator', 'Ja, der Commit verlinkt die Demo.'), answer: { thread: 1 } };
+  const reply = ev('talk', 'worker', 'Obeya sieht nach; ich baue weiter.');
+  // while Obeya still looks, its steps stand under its reply that it does, the worker's at work apart
+  expect(talkTurns([asked, passing, looking, cat, edit], { working: true })).toMatchObject({ pending: [passing, edit], passedOn: [{ e: looking, steps: [cat] }] });
+  // its answer takes them
+  expect(talkTurns([asked, passing, looking, cat, edit, log, found], { working: true })).toMatchObject({
+    pending: [passing, edit],
+    passedOn: [
+      { e: looking, steps: [] },
+      { e: found, steps: [cat, log] },
+    ],
+  });
+  expect(talkTurns([asked, passing, looking, cat, edit, log, found, reply], { over: true }).shown).toEqual([
+    { e: asked, steps: [] },
+    { e: reply, steps: [passing, edit] },
+    { e: looking, steps: [] },
+    { e: found, steps: [cat, log] },
+  ]);
+  // asked through the microphone, Obeya's reply that it looks folds away with the worker's steps; its look-up's steps wait for its answer
+  const said = ev('say', 'owner', 'Wie weit ist das?');
+  const checking = ev('say', 'koordinator', 'Ich schaue nach.');
+  const answer = { ...ev('say', 'koordinator', 'Der Export steht.'), answer: { thread: 2 } };
+  expect(talkTurns([said, checking, cat, edit], { working: true })).toMatchObject({ shown: [{ e: said }], pending: [checking, edit] });
+  expect(talkTurns([said, checking, cat, edit, answer], { working: true })).toMatchObject({ shown: [{ e: said }, { e: answer, steps: [cat] }], pending: [checking, edit] });
+  // on a Question card Obeya's agent is the card's own: its steps lead to its answer, and while it reads it is at work
+  const question = ev('talk', 'owner', 'Wie weit ist der Export?');
+  const reading = ev('activity', 'koordinator', '$ cat src/export.ts');
+  expect(talkTurns([question, reading], { working: true, answers: true }).pending).toEqual([reading]);
+  const answered = ev('talk', 'koordinator', 'Er steht.');
+  expect(talkTurns([question, reading, answered], { answers: true }).shown).toEqual([
+    { e: question, steps: [] },
+    { e: answered, steps: [reading] },
+  ]);
+});
+
 test("Obeya's reply that answers the owner's question on a card without an agent stands, where a confirmation folds away", () => {
   const asked = ev('say', 'owner', 'Inwiefern überlappt sich diese Karte mit „Export“?');
   const answered = { ...ev('say', 'koordinator', 'Beide ändern den Export; diese nur für alte Karten.'), reply: true as const };
