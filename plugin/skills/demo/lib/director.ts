@@ -464,8 +464,8 @@ export function synthesize(says: string[], dir: string, settings: DemoSettings =
 
 /**
  * Headless Chrome with its window the size of the viewport: in a window of another size the
- * screencast captured only the top 813 of 900 pixels. On a laptop with two graphics chips it
- * paints on the stronger one, which hands the screencast more frames on a busy machine.
+ * screencast captured only the top 813 of 900 pixels. It asks for the stronger of two graphics
+ * chips (Windows and macOS; Linux ignores it), which hands the screencast more frames on a busy machine.
  */
 async function launch(viewport: { width: number; height: number }) {
   return launchChromium({ args: [`--window-size=${viewport.width},${viewport.height}`, '--force_high_performance_gpu'] });
