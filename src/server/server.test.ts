@@ -908,6 +908,31 @@ describe('a newer version of the app', () => {
     await until(() => gone.length === 1);
     expect(gone).toEqual(['update']);
   });
+
+  test('a new build of the shell starts again without the server, not while the owner speaks, and the page hands over what a reload keeps', async () => {
+    const gone: string[] = [];
+    const restarter = new Restarter({ busy: () => [{ canvas: 'main', card: 'k1' }], go: (reason) => gone.push(reason) });
+    server.stop(true);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter, undefined, undefined, undefined, new AppUpdates());
+    const ask = async (kept = '') => (await post('/api/app-rebuilt', JSON.stringify({ kept }))).json();
+    // a worker in the middle of a turn does not hold it off: the server and its workers run on
+    expect(await ask()).toEqual({ now: true, kept: false });
+    restarter.hold('page1', ['voice']);
+    expect(await ask()).toEqual({ now: false, kept: false });
+    restarter.hold('page1');
+
+    const entries = [['obeya-kept-main', '{"card":"k1"}'], ['obeya-drafts-main', '{"k1":{"text":"half a sentence"}}']];
+    expect(await codeOf(post('/api/app-rebuilt/handover', JSON.stringify({ token: '7', entries: [['a', 1]] })))).toBe('invalid');
+    await post('/api/app-rebuilt/handover', JSON.stringify({ token: '7', entries }));
+    expect(await ask('6')).toEqual({ now: true, kept: false });
+    expect(await ask('7')).toEqual({ now: true, kept: true });
+    // the page of the new shell takes it, once
+    expect(await (await fetch(new URL('/api/app-rebuilt/handover', server.url))).json()).toEqual(entries);
+    expect(await (await fetch(new URL('/api/app-rebuilt/handover', server.url))).json()).toBeNull();
+    // and the server never ended for it
+    expect(gone).toEqual([]);
+    expect(restarter.due()).toBeNull();
+  });
 });
 
 describe('new commits on the upstream of the checkout Obeya runs from', () => {

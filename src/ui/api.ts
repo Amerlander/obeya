@@ -476,6 +476,25 @@ export function reload() {
 }
 
 /**
+ * In the app's window, whose shell is about to start again while the server runs on (a new build of
+ * it, app/src/update.rs): what a reload keeps goes to the server rather than this tab's session
+ * storage, which the new shell's webview starts without. `token` tells the shell it is there.
+ */
+export async function handOver(token: string) {
+  for (const fn of reloadListeners) fn();
+  const entries = Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.key(i)!).map((k) => [k, sessionStorage.getItem(k) ?? '']);
+  await send('POST', '/api/app-rebuilt/handover', { token, entries });
+}
+
+/** In the window of a shell that started again: what the page before it handed over, back into session storage, once. */
+export async function takeHandOver() {
+  try {
+    const entries = (await call<[string, string][] | null>('GET', '/api/app-rebuilt/handover')) ?? [];
+    for (const [k, v] of entries) sessionStorage.setItem(k, v);
+  } catch {}
+}
+
+/**
  * The live canvas `id` (the shown one by default): the server pushes a snapshot on connect and after
  * every change, the restart that waits, the newer version of the app there is, how many cards on
  * each canvas need the owner, and the Bun it runs on when that is too old. A lost connection is

@@ -22,9 +22,13 @@ import { WishLink } from './wish';
 
 declare global {
   interface Window {
-    /** Set by the app (app/src/main.rs) in its window; absent in a browser. */
-    /** In the app's window (app/src/main.rs); `built`: installed from a checkout, the commit it was built from. */
-    obeyaApp?: { version: string; platform: string; built?: string | null };
+    /**
+     * In the app's window (app/src/main.rs); `built`: installed from a checkout, the commit it was built
+     * from; `handedOver`: its shell started again, and the page before handed over what a reload keeps.
+     */
+    obeyaApp?: { version: string; platform: string; built?: string | null; handedOver?: boolean };
+    /** Called by the app before its shell starts again while the server runs on (`handOver`). */
+    obeyaHandOver?: (token: string) => Promise<void>;
   }
 }
 

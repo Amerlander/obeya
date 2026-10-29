@@ -79,13 +79,26 @@ Obeya in a browser shows `bun run app install` in its settings.
 Landed code reaches it as it reaches `bun start` (see Self-update); the shell itself offers no
 release updates. Once `app/` on the checkout's HEAD is another than it was built from (looked at
 every minute), the shell runs `bun run app install` itself in the background, which puts the new
-build in its place, and reports it to the server, which installs it without asking, as it restarts
-for landed code: once the workers paused, the server ends for the update, and the shell starts again,
-now the new build, whose server resumes the workers. A build that fails is logged to `app-build.log`
-in the home and tried again with the next change of `app/`. On a Mac the bundle of the shell that
-still runs is moved aside (`Obeya (checkout).app.old-…` beside it), not removed: macOS decides on
-the microphone by the file the running program was started from and denies it once that file is
-gone. A later install removes the asides nothing has open any more.
+build in its place. A server the shell started itself is told, and installs the new build without
+asking, as it restarts for landed code: once the workers paused, the server ends for the update, and
+the shell starts again, now the new build, whose server resumes the workers. A server the shell did
+not start (`bun start` in a terminal) runs on, workers and all, and only the shell starts again. It
+asks the server every few seconds (`POST /api/app-rebuilt`) and goes once the owner neither
+dictates nor watches a demo video (what a restart waits for) and its window is either out of sight
+(closed on a Mac, where the app stays in the Dock) or in front with the owner in it; minimized or
+behind another app's window it waits, as the new window would come up over what the owner works
+in. The new window opens where the old one stood, as large, on the page it showed, without coming
+to the front if the old one was out of sight. What a reload keeps (the open card, drafts, scroll
+positions, see Keeping the page) lives in the tab's session storage, which a new shell's webview starts
+without: the shell first has the page hand it to the server, waits a few seconds at most for it to
+arrive, and the page in the new window takes it back, once. On a Mac the new shell is started
+through the system (`open`) once the old one has ended, as the Dock starts it: started by the old
+process, it would count as that process's for the system's permissions, the microphone among them.
+The bundle of the shell that still runs is moved aside on a Mac (`Obeya (checkout).app.old-…`
+beside it), not removed: macOS decides on the microphone by the file the running program was
+started from and denies it once that file is gone. A later install removes the asides nothing has
+open any more. A build that fails is logged to `app-build.log` in the home and tried again with the next change
+of `app/`.
 
 linuxdeploy rewrites the library path of every program in an AppDir, which breaks Bun's binary (its
 code sits after the ELF's end), so the server goes into the AppImage after linuxdeploy and the image
@@ -276,6 +289,12 @@ which Chrome leaves stale after a seek. Without JavaScript or the chapters file 
   passes, removed it denies. Rejected: installing the new build only once the shell ends, which
   leaves a hand-run `bun run app install` with the same fault and the Dock's copy old after a
   crash.
+- **A rebuilt checkout shell starts again by itself also beside a server started from a terminal,
+  keeping the server** (2026-10-29): otherwise the old shell ran on until the owner quit it, with a
+  bundle the new build had replaced under it. It goes at the moments a restart for landed code
+  would, or quieter, and the window comes back as it was, so it costs the owner no more than that
+  restart's reload. Rejected: restarting the server along with it, which would pause every worker
+  for a change to the window alone; asking the owner, for a change they cannot judge.
 - **Quitting the app stops the Obeya it shows, also one started from a terminal** (owner,
   2026-10-29): to the owner, quitting the app means quitting Obeya, as Ctrl-C does in the terminal.
   Rejected: leaving a server started from a terminal running, which made Cmd+Q close only the window

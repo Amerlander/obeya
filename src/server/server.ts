@@ -22,7 +22,7 @@ import { looping, silence, type Transcriber } from './voice';
 import { CloudError } from './voice-cloud';
 import type { MachineSetup } from './machine';
 import type { VoiceSetup } from './voice-setup';
-import { AppUpdates } from './app-update';
+import { AppUpdates, HandOver } from './app-update';
 import type { SourceUpdates } from './source-update';
 import { oldLinuxBun } from './repo';
 import { Store } from './db';
@@ -147,6 +147,7 @@ export function serve(
       })
     : undefined;
   const byId = new Map<string, CanvasRuntime>();
+  const handOver = new HandOver();
   const started = crypto.randomUUID();
   const sockets = new Map<string, Set<ServerWebSocket<Socket>>>();
   // a device removed loses its open pages at once
@@ -750,6 +751,21 @@ export function serve(
             if (body?.rebuilt === true) return (restarter?.request('update'), { updating: !!restarter });
             return updates.report(body);
           }),
+      },
+      // a shell installed from a checkout has built itself anew while this Obeya runs on without it (started
+      // from a terminal), every few seconds until it starts again: it waits while the owner dictates or
+      // watches a video, as a restart does; `kept`: whether the page handed over when the shell asked
+      '/api/app-rebuilt': {
+        POST: (req) =>
+          handle(async () => {
+            const { kept } = ((await req.json().catch(() => null)) ?? {}) as { kept?: unknown };
+            return { now: !restarter?.owner().length, kept: handOver.has(kept) };
+          }),
+      },
+      // what a reload keeps, from the page before the shell started again to the page after
+      '/api/app-rebuilt/handover': {
+        GET: () => Response.json(handOver.take()),
+        POST: (req) => handle(async () => (handOver.give(await req.json()), { ok: true })),
       },
       // the owner installs it: once the workers paused, Obeya ends for the shell to install it and start again
       '/api/app-update/install': {
