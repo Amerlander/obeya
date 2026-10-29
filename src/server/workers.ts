@@ -12,7 +12,7 @@ import { basename, isAbsolute } from 'node:path';
 import { type CardFile, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
 import { DEFAULT_DEMO_DIRECTORY } from '../../plugin/skills/demo/lib/settings.ts';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started } from '../core/types';
+import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Share, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -234,6 +234,18 @@ interface Unheard {
   said: number[];
   text: string;
   images: string[];
+}
+
+/**
+ * Where the card's demo page stood when its worker last heard of it (`CardRow.page_heard`): going
+ * online, online at its address (showing an earlier demo than the latest), or on no page.
+ */
+type PageHeard = { page: 'none' } | { page: 'going' } | { page: 'online'; url: string; stale?: true };
+
+function pageHeardOf(share: Share | undefined): PageHeard {
+  if (share?.state === 'publishing') return { page: 'going' };
+  if (share?.state === 'shared' && share.url) return { page: 'online', url: share.url, ...(share.stale ? { stale: true as const } : {}) };
+  return { page: 'none' };
 }
 
 /** What is stored while the owner has paused the card's worker (`CardRow.paused`). */
@@ -1308,6 +1320,7 @@ export class Workers {
     this.o.onApproval?.(cardId);
     // a demo shared later gets its line from Obeya once the pull request is open
     const shared = card.share?.url;
+    if (shared) this.pageHeard(cardId);
     this.deliver(
       cardId,
       [
@@ -1673,6 +1686,7 @@ export class Workers {
   private pageNote(cardId: string): { text: string; waits?: boolean } {
     const card = this.card(cardId);
     if (!card.demo || card.prototypeOf) return { text: '' };
+    this.pageHeard(cardId);
     const ask = 'Before you point anyone to your demo (an issue you close, say), ask the owner for a link.';
     if (!this.shares) return { text: `This repository has no demo site, so your demo is on no page the team can open. ${ask}` };
     const s = card.share;
@@ -1697,6 +1711,7 @@ export class Workers {
     if (!l?.page) return;
     const { page: _, ...rest } = l;
     this.o.board.work(cardId, { landed: JSON.stringify(rest satisfies LandedState) });
+    if (r) this.pageHeard(cardId);
     this.deliver(
       cardId,
       !r
@@ -1705,6 +1720,50 @@ export class Workers {
           ? `Your demo is online on a page of its own for the team: ${r.url}. Link it wherever you point people at this work (an issue you close, say).`
           : `Your demo's page did not go out (${r.why}); the owner sees why on the card. Before you point anyone to your demo (an issue you close, say), ask the owner for a link.`,
     );
+  }
+
+  /**
+   * What became of the card's demo page since its worker last heard of it: the owner shared it or
+   * stopped sharing it, a share went online or failed. The worker hears it with its next message or
+   * tool step (no turn of its own: nothing waits on it), so it knows where its demo is when the
+   * owner asks, and where Obeya links it once the work lands.
+   */
+  private pageNews(cardId: string): string | undefined {
+    const card = this.o.board.item(cardId);
+    if (!card || card.prototypeOf || !card.demo) return;
+    const now = pageHeardOf(card.share);
+    const row = this.o.board.row(cardId);
+    const before: PageHeard = row.page_heard ? (JSON.parse(row.page_heard) as PageHeard) : { page: 'none' };
+    if (JSON.stringify(now) === JSON.stringify(before)) return;
+    this.o.board.work(cardId, { page_heard: JSON.stringify(now) });
+    if (now.page === 'going') return 'The owner is sharing your demo with the team on a page of its own; it is going online right now. You hear its address once it is there.';
+    if (now.page === 'online') {
+      const trailer = card.demo.kind === 'html' ? 'Demo-Page' : 'Demo-Video';
+      return [
+        `The owner shared your demo with the team on a page of its own: ${now.url}.`,
+        now.stale ? 'It shows an earlier demo of yours, not the latest.' : '',
+        contributionOf(row)
+          ? 'Once the owner approves, Obeya comments its link on the pull request.'
+          : `Obeya links it in what your work lands with: a \`${trailer}: <url>\` trailer on the commit that lands on main, or a line in the pull request's description.`,
+        'Link it wherever you point people at this work (an issue you close, say).',
+      ]
+        .filter(Boolean)
+        .join(' ');
+    }
+    if (before.page === 'going' && !card.share?.url) return 'Sharing your demo did not work (the owner sees why on the card): it is on no page the team can open.';
+    return 'The owner stopped sharing your demo: it is on no page the team can open any more.';
+  }
+
+  /** The worker has just heard where its demo's page stands (the landing's message, say): no news of it follows. */
+  private pageHeard(cardId: string) {
+    const card = this.o.board.item(cardId);
+    if (card) this.o.board.work(cardId, { page_heard: JSON.stringify(pageHeardOf(card.share)) });
+  }
+
+  /** A message that starts a turn, with what became of the demo's page before it. */
+  private withPageNews(cardId: string, text: string): string {
+    const news = this.pageNews(cardId);
+    return news ? [news, text].filter(Boolean).join('\n\n') : text;
   }
 
   /**
@@ -2426,7 +2485,7 @@ export class Workers {
     this.live.set(cardId, live);
     this.o.board.changed();
     ({ text: message, images } = this.withUnheard(cardId, message, images));
-    message = this.withRestart(cardId, live, message);
+    message = this.withRestart(cardId, live, this.withPageNews(cardId, message));
     live.pending = { text: message, images };
     const env = this.env();
     // a plan folder outside the repository is the worker's to tick its workstream in, on this machine
@@ -2446,7 +2505,7 @@ export class Workers {
         plugins: [OBEYA_PLUGIN],
         ...(env ? { env } : {}),
         contextUpdate: () =>
-          [this.restartStillDue(cardId, live), this.unheardNow(cardId, live), this.preferencesUpdate(live), this.decisionsUpdate(cardId, live)].filter(Boolean).join('\n\n') || undefined,
+          [this.restartStillDue(cardId, live), this.pageNewsNow(cardId, live), this.unheardNow(cardId, live), this.preferencesUpdate(live), this.decisionsUpdate(cardId, live)].filter(Boolean).join('\n\n') || undefined,
         askOwner: (request, signal) => this.askOwner(cardId, live, request, signal),
         ...(this.folder ? { watch: this.folder.watch(cardId) } : {}),
         ...(resume ? { resume } : {}),
@@ -2523,7 +2582,7 @@ export class Workers {
       live.lifts = undefined;
       this.setBusy(live, true);
       ({ text, images } = this.withUnheard(cardId, text, images));
-      const message = this.withRestart(cardId, live, text);
+      const message = this.withRestart(cardId, live, this.withPageNews(cardId, text));
       live.pending = { text: message, images };
       live.session.send(message, images);
       return;
@@ -2586,11 +2645,18 @@ export class Workers {
    */
   private unheardStarts(cardId: string, live: Live): boolean {
     if (this.restart || live.limited || !this.unheard(cardId).length) return false;
-    const { text, images } = this.withUnheard(cardId, '', []);
+    const { text: words, images } = this.withUnheard(cardId, '', []);
+    const text = this.withPageNews(cardId, words);
     this.setBusy(live, true);
     live.pending = { text, images };
     live.session.send(text, images);
     return true;
+  }
+
+  /** What became of the demo's page since the worker last heard of it, passed with its next tool result. */
+  private pageNewsNow(cardId: string, live: Live): string | undefined {
+    if (this.live.get(cardId) !== live) return;
+    return this.pageNews(cardId);
   }
 
   /** Preferences the owner gave or changed since the worker last heard them, passed with its next tool result. */

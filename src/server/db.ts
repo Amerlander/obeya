@@ -118,6 +118,8 @@ export interface CardRow {
    * `{ path, canvas, made: true }`, so its worker hears that the repository is new.
    */
   new_repo: string | null;
+  /** What the card's worker last heard of its demo's page (`PageHeard` in workers.ts), so it hears of a change with its next step. */
+  page_heard: string | null;
 }
 
 /** Words the usage limit keeps the Koordinator from reading (`talk.held`): until when, and how it reads them then (`Commander`'s). */
@@ -435,6 +437,8 @@ export const MIGRATIONS = [
   // a repository to create for a card before work begins, and that Obeya made it (JSON `StoredNewRepo` in board.ts);
   // an exchange of no one's in the sheet that says a card moved to another canvas (JSON `TalkMoved`)
   'ALTER TABLE cards ADD COLUMN new_repo TEXT; ALTER TABLE talk ADD COLUMN moved TEXT;',
+  // what a card's worker last heard of its demo's page (JSON `PageHeard` in workers.ts)
+  'ALTER TABLE cards ADD COLUMN page_heard TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply';

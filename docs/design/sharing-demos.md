@@ -143,6 +143,16 @@ nothing is lost by leaving them.
 A page published again with the same video keeps its date („Geteilt am“), so the overview keeps its
 order; a new video dates it anew.
 
+#### What the worker hears of its page
+
+The card's worker hears what became of its demo's page since it last heard of it: the owner shared
+it (going online, then online with its address, or showing an earlier demo than its latest),
+sharing failed, or the owner stopped sharing it. The news comes with its next message or tool step,
+before the owner's words that follow it, and starts no turn of its own. Online, it also says where
+Obeya links the page once the work lands (the commit's trailer or the PR's description, see below;
+the PR's comment on a review card), so a worker asked whether the link reaches git answers from
+fact. What a message tells of the page anyway (approval into a PR, the landing) counts as heard.
+
 #### The page and the pull request
 
 A demo shared before approval goes into the worker's approval message with "link it in the
@@ -420,6 +430,10 @@ another machine withdrew loses its link here, with a line naming the machine.
   disk; markup lacks images until a script inserts them).
 - **HTML artifacts are shared too** (2026-10-05): an analysis with charts is background for a pull
   request as much as a video.
+- **A worker hears of its page with its next step, not in a turn of its own** (2026-10-29): it
+  had answered the owner that its demo lay only on this machine minutes after they shared it.
+  Nothing waits on the news, so a turn for it would cost the owner time and tokens; heard late, it
+  is still there when the worker next speaks.
 - **Sharing takes effect at once** (2026-10-02). Rejected: an 8 s hold with "Doch nicht";
   withdrawing is as easy.
 - **Sharing on approval on the personal site is the owner's choice per repository** (owner,

@@ -482,6 +482,79 @@ describe('the landing message names the demo’s page', () => {
   });
 });
 
+describe('the worker hears what became of its demo’s page', () => {
+  const URL_ = 'https://demos.example.dev/zahlerstande-exportieren-1/';
+  beforeEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    setup({ ...generic, land: 'main', workspaces: 'clones' });
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' }, shares: () => true, onApproval: () => null }));
+  });
+  async function handedOver() {
+    const c = manual();
+    await workers.start(c.id);
+    await runtime.last.call('ready_for_review', { summary: 'S', demo: { ...artifact(), page: { title: 'CSV export', text: 'Meter readings download as CSV.' } } });
+    runtime.last.emit({ type: 'idle' });
+    return c;
+  }
+  const demoDir = (id: string) => (JSON.parse(board.row(id).demo!) as { dir: string }).dir;
+  const going = (id: string) => board.work(id, { share: JSON.stringify({ slug: 's', state: 'publishing', next: [{ dir: demoDir(id) }] }) });
+  const online = (id: string) => board.work(id, { share: JSON.stringify({ slug: 's', url: URL_, demos: [{ dir: demoDir(id), shown: { title: 'T', text: 'T', chapters: [], kind: 'html' } }] }) });
+
+  test('shared by the owner after the handover: their next words come with the page’s address and where Obeya links it', async () => {
+    const c = await handedOver();
+    const session = runtime.last;
+    online(c.id);
+    workers.message(c.id, 'Is the demo linked in the commit?');
+    const told = session.inbox.at(-1)!;
+    expect(told).toStartWith(`The owner shared your demo with the team on a page of its own: ${URL_}.`);
+    expect(told).toContain('a `Demo-Page: <url>` trailer on the commit that lands on main');
+    expect(told).toEndWith('Is the demo linked in the commit?');
+    // heard once
+    expect(session.toolStep()).toBeUndefined();
+    session.call('reply', { text: 'Yes.' });
+    session.emit({ type: 'idle' });
+    workers.message(c.id, 'Thanks.');
+    expect(session.inbox.at(-1)).not.toContain('The owner shared your demo');
+  });
+
+  test('during a turn, the next tool step carries it; a page still going out first, its address once it is online', async () => {
+    const c = await handedOver();
+    const session = runtime.last;
+    workers.message(c.id, 'One more column.');
+    going(c.id);
+    expect(session.toolStep()).toContain('it is going online right now');
+    expect(session.toolStep()).toBeUndefined();
+    online(c.id);
+    expect(session.toolStep()).toContain(URL_);
+  });
+
+  test('a share that fails, and a page withdrawn, are news too', async () => {
+    const c = await handedOver();
+    const session = runtime.last;
+    workers.message(c.id, 'Go on.');
+    going(c.id);
+    session.toolStep();
+    board.work(c.id, { share: JSON.stringify({ slug: 's' }) });
+    expect(session.toolStep()).toContain('Sharing your demo did not work');
+    online(c.id);
+    session.toolStep();
+    board.work(c.id, { share: JSON.stringify({ slug: 's', url: URL_, state: 'withdrawing', demos: [] }) });
+    expect(session.toolStep()).toContain('The owner stopped sharing your demo');
+    board.work(c.id, { share: JSON.stringify({ slug: 's' }) });
+    expect(session.toolStep()).toBeUndefined();
+  });
+
+  test('the landing message that names the page is all the worker hears of it', async () => {
+    const c = await handedOver();
+    const session = runtime.last;
+    online(c.id);
+    await workers.approve(c.id);
+    const told = session.inbox.at(-1)!;
+    expect(told).toContain(`Your demo is shared with the team on a page of its own: ${URL_}.`);
+    expect(told).not.toContain('The owner shared your demo');
+  });
+});
+
 describe('a prototype built on in a clone', () => {
   test('the idea takes over the clone and the branch, renamed; the clone is busy until it is done', async () => {
     setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: { ...generic, land: 'main', workspaces: 'clones' } }));
