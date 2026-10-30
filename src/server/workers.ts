@@ -1657,6 +1657,8 @@ export class Workers {
     const t = this.o.board.t.worker;
     if (direct) this.o.board.log(cardId, 'state', by, by === 'owner' ? t.approvedDirect : t.landedDirect);
     else this.o.board.log(cardId, 'state', by, by === 'owner' ? t.approvedMain : t.landedMain);
+    const sw = result.switched;
+    if (sw) this.o.board.log(cardId, 'state', 'obeya', t.switchedToMain(sw.branch, sw.commit));
     if (direct) this.o.onMerged?.(cardId);
     this.afterLanding(
       cardId,
@@ -1664,6 +1666,12 @@ export class Workers {
         direct
           ? `${by === 'owner' ? 'The owner approved your work to go directly onto main, and Obeya' : 'Obeya'} pushed it there without a pull request (${result.to.slice(0, 7)}); the card is live.`
           : `${by === 'owner' ? 'The owner approved your work, and it' : 'Your work'} is on main now (${result.to.slice(0, 7)}); the card is live.`,
+        sw
+          ? `The Obeya checkout was on ${sw.branch ? `the branch ${sw.branch}` : `a detached HEAD at ${sw.commit}`}, not on main: Obeya switched it to main to land your work.` +
+            (sw.commits
+              ? ` ${sw.branch ?? sw.commit} has ${sw.commits === 1 ? 'a commit' : `${sw.commits} commits`} main does not: if ${sw.commits === 1 ? 'it is' : 'they are'} work of yours, made there instead of in your workspace, ${sw.commits === 1 ? 'it' : 'they'} did not land with it; tell the owner.`
+              : '')
+          : '',
         restartFor === 'obeya'
           ? `Obeya runs from that checkout and starts again with your change as soon as no worker is in the middle of a turn, which stops whatever you run then. ${AFTER_RESTART}`
           : restartFor === 'repo'

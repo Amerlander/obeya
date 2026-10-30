@@ -356,21 +356,68 @@ describe('a worktree per card', () => {
     git(wc, 'reset', '--quiet', '--hard', 'main');
     commitIn(wc, 'c.ts', 'C on main');
 
-    // the Obeya checkout moved off main in the meantime: the card waits and needs a new approval
-    git(main, 'checkout', '--quiet', '-b', 'elsewhere');
+    // the owner edited the same file in the Obeya checkout meanwhile: the card waits and needs a new approval
+    writeFileSync(join(main, 'c.ts'), 'local edit');
     await sc.call('ready_for_review', { summary: 'S', demo: artifact() });
     expect(state(c.id)).toBe('working');
     sc.emit({ type: 'idle' });
     await until(() => state(c.id) === 'waiting:demo');
-    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'error', code: 'landCheckout' });
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'error', code: 'landMerge' });
     expect(board.row(c.id).approved_at).toBeNull();
 
     // feedback while it waits: what comes back is reviewed, not landed
-    git(main, 'checkout', '--quiet', 'main');
+    git(main, 'checkout', '--quiet', '--', 'c.ts');
     workers.message(c.id, 'Bitte noch anders.');
     await sc.call('ready_for_review', { summary: 'S', demo: artifact() });
     sc.emit({ type: 'idle' });
     expect(state(c.id)).toBe('waiting:demo');
+  });
+
+  test('a checkout found on another branch with everything committed goes back on main by itself, and the work lands', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    commitIn(board.row(c.id).workspace!, 'c.ts', 'C');
+    // an agent worked in the Obeya checkout on a branch of its own
+    git(main, 'checkout', '--quiet', '-b', 'foundation');
+    commitIn(main, 'stray.ts', 'Stray');
+    const sc = runtime.last;
+    await sc.call('ready_for_review', { summary: 'S', demo: artifact() });
+    sc.emit({ type: 'idle' });
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('live');
+    expect(git(main, 'branch', '--show-current')).toBe('main');
+    expect(git(main, 'log', '--format=%s', '-1')).toBe('C');
+    expect(git(main, 'log', '--format=%s', '-1', 'foundation')).toBe('Stray');
+    expect(board.events(c.id).map((e) => e.text)).toContain('Der Obeya-Checkout stand auf dem Branch foundation. Obeya hat ihn zum Landen auf main gewechselt; foundation bleibt, wie er war.');
+    expect(sc.inbox.at(-1)).toContain('The Obeya checkout was on the branch foundation, not on main: Obeya switched it to main to land your work. foundation has a commit main does not');
+  });
+
+  test('a checkout found on another branch with uncommitted changes goes to the worker, the approval held', async () => {
+    const c = manual();
+    await workers.start(c.id);
+    const wc = board.row(c.id).workspace!;
+    commitIn(wc, 'c.ts', 'C');
+    git(main, 'checkout', '--quiet', '-b', 'foundation');
+    writeFileSync(join(main, 'stray.ts'), 'not committed');
+    const sc = runtime.last;
+    await sc.call('ready_for_review', { summary: 'S', demo: artifact() });
+    sc.emit({ type: 'idle' });
+    await workers.approve(c.id);
+    expect(state(c.id)).toBe('working');
+    expect(board.row(c.id).approved_at).toBeTruthy();
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'error', code: 'landCheckout' });
+    expect(sc.inbox.at(-1)).toContain(`the Obeya checkout (${main}) is on branch foundation, not on main, and has uncommitted changes (stray.ts)`);
+    expect(git(main, 'branch', '--show-current')).toBe('foundation');
+
+    // the worker carries the stray file into its branch and leaves the checkout clean: its next handover lands
+    rmSync(join(main, 'stray.ts'));
+    commitIn(wc, 'stray.ts', 'Stray');
+    await sc.call('ready_for_review', { summary: 'Aufgeräumt', demo: artifact() });
+    sc.emit({ type: 'idle' });
+    await until(() => state(c.id) === 'live');
+    expect(git(main, 'branch', '--show-current')).toBe('main');
+    expect(git(main, 'log', '--format=%s', '-2').split('\n')).toEqual(['Stray', 'C']);
+    expect(sc.inbox.at(-1)).not.toContain('has a commit main does not');
   });
 
   test('commits that conflict one by one but not as a whole land as one commit', async () => {

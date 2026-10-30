@@ -275,6 +275,15 @@ test("Obeya's reply that answers the owner's question on a card without an agent
   expect(talkTurns([asked, answered, start, confirm], { over: true }).shown.map((x) => x.e)).toEqual([asked, answered, start]);
 });
 
+test("Obeya's line that it put the project folder back on main stands under the approval, as the owner should know their folder changed", () => {
+  const approved = ev('state', 'owner', 'Approved and on main.');
+  const switched = ev('state', 'obeya', 'The Obeya checkout was on the branch s1-foundation. Obeya switched it to main to land the work; s1-foundation stays as it was.');
+  expect(talkTurns([approved, switched]).shown).toEqual([
+    { e: approved, steps: [], line: true },
+    { e: switched, steps: [], line: true },
+  ]);
+});
+
 test('a conversation nobody works on ends with its last message or line, the steps without a message where they happened', () => {
   const review = ev('review', 'worker', 'Gesprächsverlauf steht.');
   const approved = ev('state', 'owner', 'Freigegeben und auf main.');

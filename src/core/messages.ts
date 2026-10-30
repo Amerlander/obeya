@@ -98,6 +98,8 @@ const de = {
     landedDirect: 'Nach der Freigabe direkt auf main gepusht.',
     approvedMain: 'Freigegeben und auf main.',
     landedMain: 'Nach der Freigabe auf main gelandet.',
+    switchedToMain: (branch: string | null, commit: string) =>
+      branch ? `Der Obeya-Checkout stand auf dem Branch ${branch}. Obeya hat ihn zum Landen auf main gewechselt; ${branch} bleibt, wie er war.` : `Der Obeya-Checkout stand auf keinem Branch (${commit}). Obeya hat ihn zum Landen auf main gewechselt.`,
     approvedUnchanged: 'Freigegeben. Ohne Änderung am Code gibt es nichts zu landen: erledigt.',
     doneUnchanged: 'Ohne Änderung am Code abgeschlossen: erledigt.',
     startedInFolder: 'Agent gestartet im Ordner.',
@@ -564,6 +566,8 @@ const en: Messages = {
     landedDirect: 'Pushed straight to main after the approval.',
     approvedMain: 'Approved and on main.',
     landedMain: 'Landed on main after the approval.',
+    switchedToMain: (branch: string | null, commit: string) =>
+      branch ? `The Obeya checkout was on the branch ${branch}. Obeya switched it to main to land the work; ${branch} stays as it was.` : `The Obeya checkout was on no branch (${commit}). Obeya switched it to main to land the work.`,
     approvedUnchanged: 'Approved. Without a change to the code there is nothing to land: done.',
     doneUnchanged: 'Finished without a change to the code: done.',
     startedInFolder: 'Agent started in the folder.',

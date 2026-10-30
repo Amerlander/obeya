@@ -23,10 +23,17 @@ landed there and nobody pushed yet is under it, so the fast-forward cannot fail 
 once more. Commits that conflict one by one but not as a whole land squashed. The last commit landed for a card
 with a shared demo carries the trailer `Demo-Video: <url>` (see Publishing on approval). Uncommitted
 work or a real conflict sends the card back to its worker with the approval kept: its next handover
-lands by itself, without a new demo. What blocks the landing outside the work (the local checkout
-not on `main`, local changes there the fast-forward would overwrite, a push the remote turns away)
-goes to the owner, the card back in review; its worker hears so with its next message, unless the
-work has landed by then, so it does not answer the owner as if the approval had not happened.
+lands by itself, without a new demo. A local checkout found on another branch (or none), most often
+because an agent worked in the project folder instead of its workspace, Obeya switches back to
+`main` itself where nothing there is uncommitted or untracked, no merge or rebase is under way and a
+detached `HEAD` stands on a commit some ref holds; the card's log says from where, and the worker
+hears it with the landing, along with commits on that branch that `main` lacks, which may be its own
+stray work. Otherwise that goes to the worker as uncommitted work does, with what is in the way:
+the owner gets no git instruction for a checkout an agent may have left so (2026-10-30). What blocks
+the landing outside the work (local changes in the checkout the
+fast-forward would overwrite, a push the remote turns away) goes to the owner, the card back in
+review; its worker hears so with its next message, unless the work has landed by then, so it does
+not answer the owner as if the approval had not happened.
 
 Where a `pr` repository's settings allow `direct`, the owner may approve „Direkt auf main“: in the
 card's clone or worktree Obeya fetches, rebases onto `origin/<default>` and runs `git push origin

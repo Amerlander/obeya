@@ -32,16 +32,22 @@ export class WorkspaceError extends Error {
 
 export interface LandProblem {
   code: 'landDirty' | 'landConflict' | 'landEmpty' | 'landCheckout' | 'landMerge' | 'landPush' | 'land';
-  /** Whether the worker can fix it in its workspace; otherwise it is the owner's (the Obeya checkout, a push turned away). */
+  /** Whether the worker can fix it; otherwise it is the owner's (local changes in the Obeya checkout in the way, a push turned away). */
   worker: boolean;
   detail: string;
   files?: string[];
 }
 
-/** Work that landed: the default branch (of the Obeya checkout, or of `origin` when pushed) moved from `from` to `to`. */
+/**
+ * Work that landed: the default branch (of the Obeya checkout, or of `origin` when pushed) moved
+ * from `from` to `to`. `switched` says where the Obeya checkout stood before Obeya put it back on
+ * the default branch for the landing (on `branch`, or a detached `HEAD` at `commit`), and how many
+ * commits there the default branch still lacks after it.
+ */
 export interface Landed {
   from: string;
   to: string;
+  switched?: { branch: string | null; commit: string; commits: number };
 }
 
 /**
@@ -218,6 +224,43 @@ async function rebased(ws: string, base: string, upstream: () => Promise<string>
   if (conflict) return conflict;
   if ((await gitAsync(ws, 'rev-list', '--count', `${onto}..HEAD`)) === '0') return { code: 'landEmpty', worker: true, detail: 'the branch has no commits' };
   return null;
+}
+
+/** The merge, rebase or cherry-pick under way in the checkout at `repo`, if one is. */
+async function underway(repo: string): Promise<string | null> {
+  const busy = await Promise.all(['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD'].map((r) => gitAsync(repo, 'rev-parse', '-q', '--verify', r).then(() => r, () => null)));
+  const ref = busy.find(Boolean);
+  return ref ? ref.split('_')[0]!.toLowerCase().replace('cherry', 'cherry-pick') : null;
+}
+
+/**
+ * Puts the Obeya checkout at `repo`, found on `on` (a branch, or empty for a detached `HEAD`),
+ * back on `base` for a landing, where nothing there would be lost or carried along: no
+ * uncommitted or untracked files, no merge or rebase under way, and a detached `HEAD` on a
+ * commit some ref holds. Otherwise the worker hears what is there, since it is most often work an
+ * agent did in the checkout instead of its workspace. Returns where the checkout was.
+ */
+async function backOnBase(repo: string, base: string, on: string): Promise<LandProblem | { branch: string | null; commit: string }> {
+  const at = on ? `branch ${on}` : 'a detached HEAD';
+  const blocked = (why: string, files?: string[]): LandProblem => ({
+    code: 'landCheckout',
+    worker: true,
+    ...(files ? { files } : {}),
+    detail:
+      `the Obeya checkout (${repo}) is on ${at}, not on ${base}, and ${why}. Obeya puts it back on ${base} by itself only where everything there is committed. ` +
+      `If that is your work, done there instead of in your workspace, carry it into your branch and leave the checkout clean (on ${on || base}, as you found it, or on ${base}); if it is not yours, it is the owner's: ask them.`,
+  });
+  const busy = await underway(repo);
+  if (busy) return blocked(`a ${busy} is under way there`);
+  // untrimmed: a line's first column may be a space
+  const status = await gitRun(repo, ['-c', 'core.quotePath=false', 'status', '--porcelain']);
+  if (status.code !== 0) throw new WorkspaceError(`git status in ${repo}: ${status.stderr.trim()}`);
+  const files = status.stdout.split('\n').filter(Boolean).map((l) => l.slice(3));
+  if (files.length) return blocked(`has uncommitted changes (${[...files.slice(0, 10), ...(files.length > 10 ? [`${files.length - 10} more`] : [])].join(', ')})`, files);
+  const head = await gitAsync(repo, 'rev-parse', '--short', 'HEAD');
+  if (!on && !(await gitAsync(repo, 'for-each-ref', '--count=1', '--contains', 'HEAD', '--format=%(refname)'))) return blocked(`its commit ${head} is on no branch, so switching would leave it behind`);
+  await gitAsync(repo, 'switch', '--quiet', base);
+  return { branch: on || null, commit: head };
 }
 
 /**
@@ -1042,7 +1085,8 @@ export class Workspaces implements CardWorkspaces {
    * when only the replay conflicts, squashing) and fast-forwarding. The workspace stays with the
    * card, so its worker can finish what remains; `removeLanded` frees it. Returns what went wrong
    * (`worker` problems are the worker's to fix, the others stop at the Obeya checkout), or how
-   * the default branch moved. `trailer` goes into the message of the commit that lands last.
+   * the default branch moved. A checkout found off the default branch is put back on it where
+   * nothing would be lost (`backOnBase`), else the worker hears what is in the way. `trailer` goes into the message of the commit that lands last.
    */
   landOnMain(cardId: string, branch: string, trailer?: string): Promise<LandProblem | Landed> {
     return oneAtATime(landings, this.o.repoPath, () => this.land(cardId, branch, trailer));
@@ -1052,6 +1096,7 @@ export class Workspaces implements CardWorkspaces {
     const ws = this.leasedBy(cardId);
     if (!ws) return { code: 'land', worker: false, detail: 'the card has no workspace' };
     const repo = this.o.repoPath;
+    let switched: { branch: string | null; commit: string } | undefined;
     for (let attempt = 0; ; attempt++) {
       try {
         const base = await this.mainAsync(ws);
@@ -1060,7 +1105,12 @@ export class Workspaces implements CardWorkspaces {
         const problem = await rebased(ws, base, onto);
         if (problem) return problem;
         await withTrailer(ws, trailer);
-        if ((await gitAsync(repo, 'branch', '--show-current')) !== base) return { code: 'landCheckout', worker: false, detail: `the Obeya checkout is not on ${base}` };
+        const on = await gitAsync(repo, 'branch', '--show-current');
+        if (on !== base) {
+          const back = await backOnBase(repo, base, on);
+          if ('code' in back) return back;
+          switched ??= back;
+        }
       } catch (e) {
         return { code: 'land', worker: false, detail: messageOf(e) };
       }
@@ -1072,7 +1122,10 @@ export class Workspaces implements CardWorkspaces {
         }
         const from = await gitAsync(repo, 'rev-parse', 'HEAD');
         await gitAsync(repo, 'merge', '--ff-only', '--quiet', tip);
-        return { from, to: await gitAsync(repo, 'rev-parse', 'HEAD') };
+        const to = await gitAsync(repo, 'rev-parse', 'HEAD');
+        if (!switched) return { from, to };
+        const commits = Number(await gitAsync(repo, 'rev-list', '--count', `HEAD..${switched.branch ?? switched.commit}`).catch(() => '0'));
+        return { from, to, switched: { ...switched, commits } };
       } catch (e) {
         // main moved while the branch was rebased (a commit made in the checkout by hand): once more onto it
         const moved = (await gitRun(repo, ['merge-base', '--is-ancestor', 'HEAD', tip])).code === 1;
@@ -1097,8 +1150,8 @@ export class Workspaces implements CardWorkspaces {
         if ((await gitAsync(repo, 'branch', '--show-current')) !== base) return { problem: `the checkout is not on ${base}` };
         const from = await gitAsync(repo, 'rev-parse', 'HEAD');
         // a merge or rebase of the owner's under way is theirs: nothing is pulled into it, nor undone
-        const busy = await Promise.all(['MERGE_HEAD', 'REBASE_HEAD', 'CHERRY_PICK_HEAD'].map((r) => gitAsync(repo, 'rev-parse', '-q', '--verify', r).then(() => r, () => null)));
-        if (busy.some(Boolean)) return { problem: `the checkout is in the middle of a ${busy.find(Boolean)!.split('_')[0]!.toLowerCase().replace('cherry', 'cherry-pick')}` };
+        const busy = await underway(repo);
+        if (busy) return { problem: `the checkout is in the middle of a ${busy}` };
         try {
           await gitAsync(repo, '-c', 'core.editor=true', 'pull', '--quiet', '--no-edit', ...(await pullMode(repo, base)), 'origin', base);
         } catch (e) {
