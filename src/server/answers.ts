@@ -94,7 +94,9 @@ export class Answers {
     const follow = t.id !== thread;
     // the session of the answer it continues, else the thread's latest; a thread moved onto a card that is gone has the card's
     const resume = follow ? (this.o.board.threadTalk(thread).findLast((x) => x.session && x.id <= (t.follows ?? t.id))?.session ?? this.cardSession(root)) : undefined;
-    const fresh = this.message(root.said, root.question!, about, project, root.askedIn);
+    // looked up for an action: Obeya takes it with the answer, which brings what it needs
+    const step = t.then ? `\n\nObeya takes this step itself once your answer is in: ${t.then}\nYour answer gives what the step needs.` : '';
+    const fresh = `${this.message(root.said, root.question!, about, project, root.askedIn)}${follow ? '' : step}`;
     // written in the project's sheet: Obeya did not read the words, so the agent passes on what asks Obeya
     const asked = t.askedIn ? { images: this.o.imageFiles?.(t.images) ?? [], from: t.askedIn } : undefined;
     this.queue(thread, () =>
@@ -114,8 +116,8 @@ export class Answers {
         ...(follow
           ? {
               resume,
-              message: followUp(t.said, t.askedIn ? undefined : t.question, false),
-              fallback: () => ({ message: `${fresh}\n\n${this.history(thread)}\n\n${followUp(t.said, t.askedIn ? undefined : t.question, false)}` }),
+              message: `${followUp(t.said, t.askedIn ? undefined : t.question, false)}${step}`,
+              fallback: () => ({ message: `${fresh}\n\n${this.history(thread)}\n\n${followUp(t.said, t.askedIn ? undefined : t.question, false)}${step}` }),
             }
           : { message: fresh }),
       })

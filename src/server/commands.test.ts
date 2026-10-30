@@ -1443,6 +1443,97 @@ describe('a step the Koordinator takes once a card gets somewhere', () => {
   });
 });
 
+describe('a step the Koordinator takes once it has looked something up', () => {
+  /** Runs commands as the canvas does; a question it looks up is answered when the test says. */
+  const looking = (asked: number[] = []) =>
+    new Commander({
+      board,
+      runtime,
+      cwd: '/r',
+      delayMs: 20,
+      lookUp: (talk) => void asked.push(talk),
+      execute: (c) => {
+        executed.push(c);
+        if (c.do === 'newCard') return board.create({ title: c.title, x: 0, y: 0 }).id;
+      },
+    });
+
+  test('a task for each open issue: it looks them up, then creates the tasks itself, with „Rückgängig“', async () => {
+    const notices: Notice[] = [];
+    board.onNotice((n) => void notices.push(n));
+    const asked: number[] = [];
+    const k = looking(asked);
+    const { session } = await say(k, 'Es gibt drei offene Issues bei GitHub, erstelle für jedes eine eigene Karte.', 'look_up', {
+      question: 'Welche Issues sind auf GitHub offen, jeweils mit Nummer, Titel, Link und worum es geht?',
+      then: 'Create a task for each open issue, its title from the issue, its body naming the issue with its link.',
+      confirm: 'Ich lese die offenen Issues auf GitHub und lege dann für jedes eine Aufgabe an.',
+    });
+    expect(session.spec.system).toContain('look_up with then');
+    const [asking] = board.snapshot().talk;
+    expect(asked).toEqual([asking!.id]);
+    expect(asking).toMatchObject({ question: 'Welche Issues sind auf GitHub offen, jeweils mit Nummer, Titel, Link und worum es geht?', then: 'Create a task for each open issue, its title from the issue, its body naming the issue with its link.' });
+    // no answer yet: nothing to take up
+    expect(k.answerIn(asking!.id)).toBe(false);
+
+    board.answerTalk(asking!.id, '- #27 Skills per „/“ (https://github.com/o/r/issues/27)\n- #25 Freigabe scheitert (https://github.com/o/r/issues/25)', 'koordinator');
+    expect(k.answerIn(asking!.id)).toBe(true);
+    // a second call while it is taken up takes it up once
+    expect(k.answerIn(asking!.id)).toBe(false);
+    await until(() => runtime.last.inbox.length === 2);
+    const brief = runtime.last.inbox.at(-1)!;
+    expect(brief).toContain("No words of the owner's this time");
+    expect(brief).toContain('to then: Create a task for each open issue');
+    expect(brief).toContain(`The answer A${asking!.id} is in (the owner sees it too): - #27 Skills per „/“`);
+    const after = board.snapshot().talk[1]!;
+    // the exchange stands without words of the owner's, after the one whose answer came in
+    expect(after).toMatchObject({ said: '', answered: asking!.id });
+    runtime.last.call('act', {
+      actions: [
+        { do: 'new_card', title: 'Skills per „/“', body: 'GitHub-Issue #27: https://github.com/o/r/issues/27' },
+        { do: 'new_card', title: 'Freigabe scheitert', body: 'GitHub-Issue #25: https://github.com/o/r/issues/25' },
+      ],
+      confirm: 'Zwei neue Aufgaben: „Skills per „/““ und „Freigabe scheitert“.',
+    });
+    runtime.last.emit({ type: 'idle' });
+    await until(() => notices.length);
+    expect(notices[0]).toMatchObject({ text: 'Zwei neue Aufgaben: „Skills per „/““ und „Freigabe scheitert“.', talk: after.id, undoMs: 20 });
+    // decided: the step is no longer to take
+    expect(board.snapshot().talk[0]!.then).toBeUndefined();
+    expect(board.answeredSteps()).toEqual([]);
+    await until(() => executed.length === 2);
+    expect(executed.map((c) => c.do === 'newCard' && c.title)).toEqual(['Skills per „/“', 'Freigabe scheitert']);
+    // the owner said it once: nothing more to learn from
+    expect(store.utterances('c', '2000-01-01', 10).map((u) => u.text)).toEqual(['Es gibt drei offene Issues bei GitHub, erstelle für jedes eine eigene Karte.']);
+
+    // a fresh session reads the exchange as one it took up by itself
+    const fresh = looking();
+    const later = await say(fresh, 'und?', 'reply', { confirm: 'Nichts weiter.' });
+    expect(later.brief).toContain(`the answer A${asking!.id} came in, and you took up the step you had looked it up for → you: "Zwei neue Aufgaben`);
+  });
+
+  test('a question looked up without a step is only answered', async () => {
+    const k = looking();
+    await say(k, 'welche Issues sind offen?', 'look_up', { question: 'Welche Issues sind offen?', confirm: 'Ich schaue nach.' });
+    const [asking] = board.snapshot().talk;
+    expect(asking!.then).toBeUndefined();
+    board.answerTalk(asking!.id, 'Zwei.', 'koordinator');
+    expect(k.answerIn(asking!.id)).toBe(false);
+  });
+
+  test('an answer that came in before a restart, its step not decided, is taken up by the next start', async () => {
+    const k = looking();
+    await say(k, 'leg für jedes offene Issue eine Aufgabe an', 'look_up', { question: 'Welche Issues sind offen?', then: 'Create a task for each.', confirm: 'Ich lese nach und lege sie dann an.' });
+    const [asking] = board.snapshot().talk;
+    board.answerTalk(asking!.id, '#3 Login', 'koordinator');
+    expect(board.answeredSteps().map((x) => x.id)).toEqual([asking!.id]);
+    // the server stops before it takes the step up; the next one does
+    looking().resume();
+    await until(() => runtime.last.inbox.length === 1);
+    expect(runtime.last.inbox[0]).toContain('to then: Create a task for each.');
+    expect(runtime.last.inbox[0]).toContain('is in (the owner sees it too): #3 Login');
+  });
+});
+
 describe('other canvases and new repositories', () => {
   test('a new card or idea goes onto another canvas the owner names; one the Obeya does not have is refused with those it has', async () => {
     const k = new Commander({ board, runtime, cwd: '/r', execute: (c) => void executed.push(c), delayMs: 20, canvases: () => [{ id: 'super59', name: 'Super 59' }] });

@@ -56,6 +56,35 @@ async function say(text: string, focus: Focus, tool: string, args: Record<string
 }
 
 describe('a question the Koordinator looks up', () => {
+  test('looked up for an action: the answer brings what the step needs, and the Koordinator takes the step with it', async () => {
+    await say('Es gibt drei offene Issues bei GitHub, erstelle für jedes eine eigene Karte.', {}, 'look_up', {
+      question: 'Welche Issues sind auf GitHub offen, mit Nummer, Titel und Link?',
+      then: 'Create a task for each open issue.',
+      confirm: 'Ich lese die offenen Issues und lege dann für jedes eine Aufgabe an.',
+    });
+    const a = answerer();
+    expect(a.inbox[0]).toContain('Obeya takes this step itself once your answer is in: Create a task for each open issue.');
+    a.call('answer_owner', { text: '- #27 Skills (https://github.com/o/r/issues/27)' });
+    a.emit({ type: 'idle' });
+    // the Koordinator hears the answer with the step it takes now, not as news for the next command
+    const k = runtime.sessions.filter(isKoordinator).at(-1)!;
+    await until(() => k.inbox.length === 2);
+    expect(k.inbox[1]).toContain("No words of the owner's this time");
+    expect(k.inbox[1]).toContain('is in (the owner sees it too): - #27 Skills');
+    k.call('act', { actions: [{ do: 'new_card', title: 'Skills', body: 'GitHub-Issue #27: https://github.com/o/r/issues/27', start: false }], confirm: 'Neue Aufgabe „Skills“.' });
+    k.emit({ type: 'idle' });
+    await until(() => board().snapshot().items.some((i) => i.title === 'Skills'));
+    const talk = board().snapshot().talk;
+    expect(talk.map((x) => [x.said, x.reply, x.answer])).toEqual([
+      ['Es gibt drei offene Issues bei GitHub, erstelle für jedes eine eigene Karte.', 'Ich lese die offenen Issues und lege dann für jedes eine Aufgabe an.', '- #27 Skills (https://github.com/o/r/issues/27)'],
+      ['', 'Neue Aufgabe „Skills“.', undefined],
+    ]);
+    expect(notices.some((n) => n.text === 'Neue Aufgabe „Skills“.' && n.token)).toBe(true);
+    // the next command does not hear the answer again as news
+    const next = await say('danke', {}, 'reply', { confirm: 'Gern.' });
+    expect(next.brief).not.toContain('came in and was shown to them');
+  });
+
   test("about a workstream: its project agent answers from the start task, in the open card's log and aloud", async () => {
     const w4 = workstream();
     const { heard } = await say('Was würde der Agent hier machen, wenn ich starte?', { card: w4.id }, 'look_up', {

@@ -2,6 +2,7 @@
 // the owner's words, in each state an agent is on; sentences said or typed with a card open that no
 // agent works on; new tasks that start, wait, or start at a time the owner names; questions with no card open (an opinion becomes
 // an idea, a fact stays in the conversation, work on the machine such as a new repository is a task);
+// actions that depend on reading first, looked up with the step to take then;
 // requests Obeya cannot do, or words for its makers; and a step promised for once a card is done,
 // which it waits for and then takes by itself.
 // Runs only with OBEYA_LIVE=1 (it uses the machine's
@@ -183,6 +184,42 @@ test.skipIf(!process.env.OBEYA_LIVE)(
     const wrong = results.filter((r) => JSON.stringify(r.got.did) !== JSON.stringify(r.want));
     for (const r of results)
       console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.got.did.join(', ') || 'reply or look-up'} · ${JSON.stringify(r.got.executed.map((c) => ('title' in c ? `${c.title}: ${'body' in c ? c.body : ''}` : '')))} · ${r.got.confirm}`);
+    expect(wrong.map((r) => r.text)).toEqual([]);
+  },
+  300_000,
+);
+
+/**
+ * What the owner asks to have done with no card open, whether the actions depend on reading first
+ * (a task per open issue: looked up with the step to take then, no card that would only make cards),
+ * and the actions expected at once.
+ */
+const READ_FIRST: [string, boolean, Command['do'][]][] = [
+  ['Es gibt im Moment drei offene Issues bei GitHub, erstelle für jedes eine eigene Karte.', true, []],
+  ['Leg für jedes offene Issue auf GitHub eine Aufgabe an', true, []],
+  ['Behebe Issue 27 auf GitHub', false, ['newCard']],
+];
+
+test.skipIf(!process.env.OBEYA_LIVE)(
+  'actions that depend on reading are looked up with the step to take then; work on one named issue is a task',
+  async () => {
+    const results = await Promise.all(
+      READ_FIRST.map(async ([text, then, want]) => {
+        const board = new Board(new Store(':memory:'), { id: 'c', name: 'C', repos: [{ id: 'home', name: 'Home', path: '/r', branch: 'main' }] }, () => ({ docs: [], dirs: [] }));
+        board.work(board.create({ title: 'Login', x: 0, y: 0 }).id, { state: 'working' });
+        const executed: Command[] = [];
+        const asked: number[] = [];
+        const runtime = withAgentSetting(sdkRuntime, () => AGENT_DEFAULTS.koordinator);
+        const k = new Commander({ board, runtime, cwd: cwd(), execute: (c) => void executed.push(c), lookUp: (t) => void asked.push(t), delayMs: 1 });
+        const heard = await k.hear(text, {}, [], { typed: true });
+        if (heard.token) k.arm(heard.token);
+        await new Promise((r) => setTimeout(r, 20));
+        const step = asked.length ? board.exchange(asked[0]!)?.then : undefined;
+        return { text, then, want, did: executed.map((c) => c.do), step, confirm: heard.confirm };
+      }),
+    );
+    const wrong = results.filter((r) => JSON.stringify(r.did) !== JSON.stringify(r.want) || !!r.step !== r.then);
+    for (const r of results) console.log(`${wrong.includes(r) ? '✗' : '✓'} „${r.text}“ → ${r.did.join(', ') || 'reply or look-up'}${r.step ? ` · then: ${r.step}` : ''} · ${r.confirm}`);
     expect(wrong.map((r) => r.text)).toEqual([]);
   },
   300_000,

@@ -25,8 +25,8 @@ Persistent (SQLite):
 - card events (the conversation log, with the owner's screenshots and agents' mocks), workspaces
   and their leases, what a card changed in a folder without git and its undo there;
 - the Koordinator's conversation with the owner and the threads of looked-up questions (the
-  question, its answer and files, the card it moved onto), and the cards that left the canvas for
-  another;
+  question, its answer and files, the card it moved onto, the step to take once the answer is in),
+  and the cards that left the canvas for another;
 - confirmed commands waiting out their undo window;
 - shared demo pages (slug, link, what the page shows, the change it was published after, whether it
   is publishing or withdrawing) and a running re-share of outdated pages;

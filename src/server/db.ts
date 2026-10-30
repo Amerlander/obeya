@@ -445,6 +445,9 @@ export const MIGRATIONS = [
   'ALTER TABLE events ADD COLUMN forwarded INTEGER;',
   // since when the owner asked the card's agent to pause at a safe point, until it has (ISO)
   'ALTER TABLE cards ADD COLUMN pausing TEXT;',
+  // a question looked up for an action that needs its answer: the step the Koordinator takes then, and
+  // the exchange of no one's it took that step up in (the id of the exchange whose answer came in)
+  'ALTER TABLE talk ADD COLUMN then_step TEXT; ALTER TABLE talk ADD COLUMN after_answer INTEGER;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply, forwarded';
@@ -929,11 +932,11 @@ export class Store {
     return (this.db.query("INSERT INTO talk (canvas_id, at, said, reply, moved) VALUES ($c, $at, '', $reply, $moved) RETURNING id").get({ c: canvasId, at: now(), reply, moved: JSON.stringify(moved) }) as { id: number }).id;
   }
 
-  addTalk(canvasId: string, said: string, reply: string, cardId: string | null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter, askedIn?: string): number {
+  addTalk(canvasId: string, said: string, reply: string, cardId: string | null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter, askedIn?: string, answered?: number): number {
     return (
       this.db
         .query(
-          'INSERT INTO talk (canvas_id, at, said, reply, card_id, question, about, images, reply_to, after_wait, asked_in) VALUES ($c, $at, $said, $reply, $cardId, $question, $about, $images, $replyTo, $after, $askedIn) RETURNING id',
+          'INSERT INTO talk (canvas_id, at, said, reply, card_id, question, about, images, reply_to, after_wait, asked_in, after_answer) VALUES ($c, $at, $said, $reply, $cardId, $question, $about, $images, $replyTo, $after, $askedIn, $answered) RETURNING id',
         )
         .get({
           c: canvasId,
@@ -947,6 +950,7 @@ export class Store {
           replyTo: replyTo ? JSON.stringify({ talk: replyTo.talk, part: replyTo.part }) : null,
           after: after ? JSON.stringify(after) : null,
           askedIn: askedIn ?? null,
+          answered: answered ?? null,
         }) as { id: number }
     ).id;
   }
@@ -990,6 +994,16 @@ export class Store {
   /** The exchanges whose reply said the Koordinator waits on a card, oldest first. */
   waitingTalk(canvasId: string): (Talk & { waiting: TalkWaitRow[] })[] {
     return (this.db.query('SELECT * FROM talk WHERE canvas_id = $c AND waits IS NOT NULL ORDER BY id').all({ c: canvasId }) as TalkRow[]).map((r) => ({ ...toTalk(r), waiting: JSON.parse(r.waits!) as TalkWaitRow[] }));
+  }
+
+  /** The step the Koordinator takes once the exchange's looked-up answer is in; `null` once it has decided it. */
+  thenTalk(id: number, then: string | null) {
+    this.db.query('UPDATE talk SET then_step = $then WHERE id = $id').run({ id, then });
+  }
+
+  /** Looked-up answers that are in, oldest first, whose step the Koordinator has not decided yet. */
+  answeredSteps(canvasId: string): Talk[] {
+    return (this.db.query('SELECT * FROM talk WHERE canvas_id = $c AND then_step IS NOT NULL AND answer IS NOT NULL ORDER BY id').all({ c: canvasId }) as TalkRow[]).map(toTalk);
   }
 
   undoTalk(id: number) {
@@ -1139,7 +1153,7 @@ export class Store {
              WHERE c.canvas_id = $c AND e.author = 'owner' AND e.kind IN ('hint', 'answer', 'talk') AND e.at > $since
              UNION ALL
              SELECT t.at, t.card_id, c.title, 'say', t.said, t.id FROM talk t LEFT JOIN cards c ON c.id = t.card_id
-             WHERE t.canvas_id = $c AND t.undone = 0 AND t.after_wait IS NULL AND t.moved IS NULL AND t.at > $since
+             WHERE t.canvas_id = $c AND t.undone = 0 AND t.after_wait IS NULL AND t.after_answer IS NULL AND t.moved IS NULL AND t.at > $since
            ) ORDER BY at DESC, seq DESC LIMIT $limit`,
         )
         .all({ c: canvasId, since, limit }) as { at: string; cardId: string | null; title: string | null; kind: Utterance['kind']; text: string }[]
@@ -1357,6 +1371,8 @@ interface TalkRow {
   after_wait: string | null;
   asked_in: string | null;
   moved: string | null;
+  then_step: string | null;
+  after_answer: number | null;
 }
 
 const toTalk = (r: TalkRow): Talk => ({
@@ -1383,6 +1399,8 @@ const toTalk = (r: TalkRow): Talk => ({
   ...(r.after_wait ? { after: JSON.parse(r.after_wait) as TalkAfter } : {}),
   ...(r.asked_in ? { askedIn: r.asked_in } : {}),
   ...(r.moved ? { moved: JSON.parse(r.moved) as TalkMoved } : {}),
+  ...(r.then_step ? { then: r.then_step } : {}),
+  ...(r.after_answer ? { answered: r.after_answer } : {}),
 });
 
 /**

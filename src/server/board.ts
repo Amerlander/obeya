@@ -1011,8 +1011,8 @@ export class Board {
    * Records an exchange with the Koordinator, without its reply (`''`) while it reads the words;
    * returns its id. `replyTo`: the message of the sheet the words reply to.
    */
-  addTalk(said: string, reply: string, cardId: string | null = null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter, askedIn?: string): number {
-    const id = this.store.addTalk(this.canvas.id, said, reply, cardId, lookUp, images, replyTo, after, askedIn);
+  addTalk(said: string, reply: string, cardId: string | null = null, lookUp?: { question: string; about: string | null }, images: string[] = [], replyTo?: TalkRef, after?: TalkAfter, askedIn?: string, answered?: number): number {
+    const id = this.store.addTalk(this.canvas.id, said, reply, cardId, lookUp, images, replyTo, after, askedIn, answered);
     this.changed();
     return id;
   }
@@ -1053,6 +1053,16 @@ export class Board {
   /** The exchanges whose reply said the Koordinator waits on a card. */
   waitingTalk() {
     return this.store.waitingTalk(this.canvas.id);
+  }
+
+  /** The step the Koordinator takes once the exchange's looked-up answer is in; `null` once it has decided it. */
+  thenTalk(id: number, then: string | null) {
+    this.store.thenTalk(id, then);
+  }
+
+  /** Looked-up answers that are in whose step the Koordinator has not decided yet: after a restart, it takes them up. */
+  answeredSteps() {
+    return this.store.answeredSteps(this.canvas.id);
   }
 
   undoTalk(id: number) {

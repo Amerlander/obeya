@@ -1162,6 +1162,10 @@ export interface Talk {
   waits?: TalkWait[];
   /** Words of no one: the Koordinator took them up by itself, since a card it waited on got there (or no longer can). */
   after?: TalkAfter;
+  /** A question looked up for an action that needs its answer: the step the Koordinator takes once the answer is in, until it has decided it. */
+  then?: string;
+  /** Words of no one: the Koordinator took up the step it said it would take once the answer of that exchange was in. */
+  answered?: number;
   /** Words of no one: a card left this canvas for another, built there in a new repository. */
   moved?: TalkMoved;
   /**

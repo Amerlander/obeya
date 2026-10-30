@@ -241,7 +241,9 @@ arrives. The quick turn's own reply waits the same way when it only answers, sin
 the canvas shows what it did, with „Rückgängig“ above the microphone.
 
 The Koordinator hears each answer in full with the next command (so „ja“ to a card it offered
-works), and it is part of its memory. A question still open at a restart is looked up again.
+works), and it is part of its memory. A question still open at a restart is looked up again. A
+look-up for an action the owner asked for brings its answer to the Koordinator at once instead,
+which takes the action then (see A step once something is looked up).
 
 ### Looked-up threads
 

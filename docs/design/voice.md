@@ -227,6 +227,21 @@ announcing reply carries „◷ Wartet, bis „Repository anlegen“ erledigt is
 with „Nicht mehr warten“; the exchange that takes it up opens with „„Repository anlegen“ ist
 erledigt“ (or what else happened) in place of the owner's words.
 
+#### A step once something is looked up
+
+What the owner asks to have done may depend on what only reading shows („Es gibt drei offene Issues
+bei GitHub, erstelle für jedes eine eigene Karte“, „starte die Aufgaben, deren Pull Request grün
+ist“). The Koordinator then looks it up (see Looked-up questions) with the step to take once the
+answer is in, and says both („Ich lese die offenen Issues auf GitHub und lege dann für jedes eine
+Aufgabe an.“); the look-up agent hears the step, so its answer brings what the step needs (each
+issue's number, title, link and what it asks for), but takes no action itself. Once the answer is
+in, the Koordinator takes the step up as it takes up a wait: an exchange without words of the
+owner's, after the answer, where the asking one was (the sheet, or the card then open), its actions
+with one confirmation as a notice with „Rückgängig“, its new cards starting like any new card. Where
+the answer does not allow the step (the look-up failed, or found nothing), it replies instead. The
+step stands until it is decided, so a restart takes it up again; the answer does not come to the
+Koordinator a second time as news with the next command.
+
 #### Confirmation and undo
 
 One confirmation covers all actions of a command; they run in order a few seconds after it reached
@@ -325,6 +340,13 @@ Koordinator's sheet and the line above the mic. Demo narration is separate (see 
 - **The Koordinator knows what a card's agent can do on the machine** (2026-10-18): otherwise it told
   the owner to `git init` themselves rather than make a card for it.
 - **A new card lands where the owner looks** (2026-10-14). Rejected: a column right of everything.
+- **Actions that depend on reading are looked up, then taken by the Koordinator** (owner,
+  2026-10-30). „Erstelle für jedes offene Issue eine Karte“ made a task whose agent read the issues
+  and proposed a card for each: the owner had a card more and accepted every proposal by hand,
+  where they expected the cards. Rejected: that agent passing the cards on with `to_obeya`
+  (still a card and a workspace for minutes of reading, and its agent chose proposals unasked); the
+  look-up agent acting itself (a second actor beside the Koordinator, and an agent may answer
+  without passing anything on).
 - **The Koordinator makes cards on other canvases** (2026-10-28), though it works per canvas:
   „leg auf Super 59 eine Karte an“ said elsewhere, or a step it waited for, failed twice on one
   idea, and a card it then made on the wrong canvas could not start there. Its other actions stay

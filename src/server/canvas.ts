@@ -354,6 +354,8 @@ export class CanvasRuntime {
       imageFiles: this.imageFiles,
       toObeya: this.toObeya,
       onAnswer: (talk, question, answer) => {
+        // looked up for an action: the Koordinator takes it now, hearing the answer with it
+        if (this.commander.answerIn(talk)) return;
         // asked in a project's sheet, the question went to its project agent without Obeya reading it
         const sheet = board.exchange(talk)?.askedIn;
         const project = sheet ? board.item(sheet)?.title : undefined;

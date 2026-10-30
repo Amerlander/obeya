@@ -306,12 +306,12 @@ function Conversation({ talk, fresh, items, onOpen, draft, sheetOf }: { talk: Ta
           );
         return (
           <Fragment key={x.id}>
-            {/* Obeya took a step up by itself, once a card it waited on got there: no words of the owner's */}
+            {/* Obeya took a step up by itself, once a card it waited on got there or the answer it looked up for it came in: no words of the owner's */}
             {x.after ? (
               <div className="note ev-state">
                 {clock(x.at)} · {t.koordinator.after(x.after.title, x.after.met, x.after.state)}
               </div>
-            ) : (
+            ) : x.answered ? null : (
               <Msg by="owner" who={t.author.owner} at={x.at} ev={talkEv({ talk: x.id, part: 'said' })} onReply={reply('said', 'owner', x.said)}>
                 {x.replyTo && <Quote q={talkQuote(x.replyTo)} />}
                 <Body md={x.said} />

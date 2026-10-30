@@ -155,6 +155,20 @@ export interface Input {
   heldSince?: string;
   /** No words: a card the Koordinator waited on got there (or no longer can), and it takes up the step it said it would take then. */
   after?: AfterWait;
+  /** No words: the answer the Koordinator looked up for an action is in, and it takes up the step it said it would take with it. */
+  answered?: AfterAnswer;
+}
+
+/** The step the Koordinator takes up once the answer it looked up is in: the exchange that asked, its answer, and the step. */
+export interface AfterAnswer {
+  from: number;
+  question: string;
+  answer: string;
+  then: string;
+  /** The owner's words and the Koordinator's reply that said it would look it up, and when. */
+  said: string;
+  promised: string;
+  at: string;
 }
 
 /** The step the Koordinator takes up once the card it waited on got there: what it was, and the exchange it said so in. */
@@ -222,8 +236,11 @@ interface Session {
   };
 }
 
-/** A question to look up: what the owner asked, the card it is about, and the answer it follows up on (an exchange). */
-type LookUp = { question: string; about?: string; follows?: number };
+/**
+ * A question to look up: what the owner asked, the card it is about, the answer it follows up on (an
+ * exchange), and the step to take once the answer is in, when the owner asked for an action that needs it.
+ */
+type LookUp = { question: string; about?: string; follows?: number; then?: string };
 /** `wish`: what the owner wants Obeya's makers told; `cannot`: the reply says Obeya cannot do what they asked. */
 type More = { wish?: string; cannot?: boolean };
 type Decision = { commands: Command[]; confirm: string; lookUp?: LookUp } & More;
@@ -376,7 +393,7 @@ export class Commander {
     const wish: Wish | undefined = decision.wish ? { said: decision.wish } : decision.cannot && !lookUp ? { said: transcript, answer: confirm } : undefined;
     const drafted = { ...(decision.wish ? { wish: wish! } : {}), ...(wish && !decision.wish ? { cannot: true as const } : {}) };
     // a proposal is reworked by what the owner said of it in their own words, however the Koordinator put them
-    const verbatim = !input.forwarded && !input.after && decision.commands.length === 1 && decision.commands[0]!.do === 'revise';
+    const verbatim = !input.forwarded && !input.after && !input.answered && decision.commands.length === 1 && decision.commands[0]!.do === 'revise';
     const commands = decision.commands.map((c): Command => {
       // a rule said with a card open has that card as its occasion
       if (c.do === 'remember') return card ? { ...c, card } : c;
@@ -394,6 +411,7 @@ export class Commander {
       const about = lookUp.about ?? card ?? (focus.project && this.o.board.item(focus.project) ? focus.project : undefined);
       reply(confirm, { question: lookUp.question, about: about ?? null });
       if (lookUp.follows) this.o.board.followTalk(talk, lookUp.follows);
+      if (lookUp.then) this.o.board.thenTalk(talk, lookUp.then);
       this.o.lookUp?.(talk);
       if (said) this.o.onOwnerInput?.(card, 'talk', said, confirm);
       return { confirm };
@@ -501,6 +519,8 @@ export class Commander {
       this.heldUntil = Math.max(this.heldUntil, Date.parse(x.held.until));
     }
     if (this.held.size) this.waitForLimit();
+    // and the steps whose answer came in before the stop, but were not decided yet
+    for (const x of this.o.board.answeredSteps()) this.answerIn(x.id);
   }
 
   private schedule(token: string, w: Waiting & { due?: number; timer?: ReturnType<typeof setTimeout>; running?: boolean }, due: number) {
@@ -667,6 +687,45 @@ export class Commander {
     this.o.board.notify({ text: heard.confirm, ...(card ? { cardId: card } : { talk }), ...(heard.token ? { token: heard.token, undoMs: this.delayMs } : {}), ...(heard.wish ? { wish: heard.wish } : {}) });
   }
 
+  /** Looked-up answers whose step is being taken up, by exchange. */
+  private takingUp = new Set<number>();
+
+  /**
+   * The answer of exchange `id` is in. When the Koordinator looked it up for an action (`LookUp.then`),
+   * a new exchange, with no words of the owner's, takes that step up where the asking one was (the
+   * sheet, or the card open then). The step stands until it is decided (or held by the usage limit,
+   * which keeps it), so a restart meanwhile takes it up again. Its reply reaches the owner as a
+   * notice, with „Rückgängig“ where it has actions. Returns whether a step was taken up.
+   */
+  answerIn(id: number): boolean {
+    const x = this.o.board.exchange(id);
+    if (!x?.then || x.answer === undefined || x.question === undefined || this.takingUp.has(id)) return false;
+    this.takingUp.add(id);
+    void this.takeUp({ ...x, then: x.then, answer: x.answer, question: x.question })
+      .catch((e) => console.error('taking up a looked-up step:', e))
+      .finally(() => this.takingUp.delete(id));
+    return true;
+  }
+
+  private async takeUp(x: Talk & { then: string; answer: string; question: string }) {
+    const card = x.cardId && this.o.board.item(x.cardId) ? x.cardId : undefined;
+    const talk = this.o.board.addTalk('', '', card ?? null, undefined, x.images ?? [], undefined, undefined, undefined, x.id);
+    const h: Held = {
+      transcript: '',
+      // the screenshots of the owner's words go with the cards the step creates
+      images: x.images ?? [],
+      focus: card ? { card } : {},
+      input: { answered: { from: x.id, question: x.question, answer: x.answer, then: x.then, said: x.said, promised: x.reply ?? '', at: x.at } },
+      at: new Date().toISOString(),
+    };
+    await this.drain();
+    const heard = this.held.size ? undefined : await this.answer(talk, h);
+    this.o.board.thenTalk(x.id, null);
+    if (!heard) return void this.hold(talk, h);
+    if (heard.token) this.arm(heard.token);
+    this.o.board.notify({ text: heard.confirm, ...(card ? { cardId: card } : { talk }), ...(heard.token ? { token: heard.token, undoMs: this.delayMs } : {}), ...(heard.wish ? { wish: heard.wish } : {}) });
+  }
+
   /** Words Whisper should expect: Obeya's own, and the titles on the canvas. */
   vocabulary(): string {
     const titles = this.o.board
@@ -819,9 +878,10 @@ export class Commander {
             "An agent with a worker's tools (the shell, gh, the web) that reads the plan docs, the repository and the card's start task answers it in a few seconds; a question about a workstream goes to its project agent.",
             `question: the question in full, standing on its own, in the owner's language (it becomes the title of a Question card when the owner moves the thread onto one). card: the tag of the card it is about, if any (the open one unless the owner means another). confirm: a short acknowledgement in the owner's language, e.g. ${say.lookUp}`,
             "follows: when the owner's words follow up on an answer you looked up (asking on, wanting more of it, a file made of it: „und im Oktober?“, „mach mir ein Excel daraus“), that answer's tag (A12): the agent that found it goes on with all it read and computed. In doubt, the newest answer. Left out, a fresh agent starts from nothing.",
+            `then: when the owner asks you to do something whose actions depend on what needs reading first („leg für jedes offene Issue eine Aufgabe an“, „starte die Aufgaben, deren Pull Request grün ist“), the step to take with the answer, standing on its own (cards named by title); question then asks for what the step needs (for a task per issue: each one's number, title, link and what it asks for). Once the answer is in, you take that step yourself with act, and the owner can take it back. confirm says both, e.g. ${say.lookUpThen}`,
           ].join('\n'),
-          schema: { question: z.string(), card: z.string().optional(), follows: z.string().optional(), confirm: z.string() },
-          run: ({ question, card, follows, confirm }) => {
+          schema: { question: z.string(), card: z.string().optional(), follows: z.string().optional(), then: z.string().optional(), confirm: z.string() },
+          run: ({ question, card, follows, then, confirm }) => {
             const q = String(question).trim();
             if (!q) return 'The question is missing.';
             const followed = follows ? fromAnswerTag(String(follows)) : undefined;
@@ -832,7 +892,8 @@ export class Commander {
             const agent = about ? this.o.board.item(about)! : undefined;
             if (agent && hasAgent(agent) && agent.id !== s.reading?.from)
               return `An agent is on ${String(card)} (${agent.need ?? agent.state}): it answers what is asked about its work, which is on its branch and not in the checkout look_up reads. Pass the owner's words to it with act (${handedOver(agent) ? 'feedback' : 'note'}).`;
-            return finish([], String(confirm), { question: q, ...(about ? { about } : {}), ...(followed ? { follows: followed } : {}) });
+            const step = typeof then === 'string' ? then.trim() : '';
+            return finish([], String(confirm), { question: q, ...(about ? { about } : {}), ...(followed ? { follows: followed } : {}), ...(step ? { then: step } : {}) });
           },
         },
       ],
@@ -1253,12 +1314,16 @@ export class Commander {
                 const open = t.cardId ? items.find((i) => i.id === t.cardId) : undefined;
                 const later =
                   t.answer !== undefined
-                    ? ` → the answer ${answerTag(t.id)} you looked up${t.follows ? ` (following up on ${answerTag(t.follows)})` : ''}: "${full.has(t) ? t.answer : clip(oneLine(t.answer), 400)}"`
+                    ? ` → the answer ${answerTag(t.id)} you looked up${t.follows ? ` (following up on ${answerTag(t.follows)})` : ''}: "${full.has(t) ? t.answer : clip(oneLine(t.answer), 400)}"${t.then ? ` (you are about to take the step you looked it up for: ${t.then})` : ''}`
                     : t.question
                       ? ' (you were looking it up; no answer came)'
                       : '';
                 if (t.moved) return `- ${when(t.at)} the card "${t.moved.title}" moved to the canvas "${t.moved.canvasName}", in a new repository, and is built there`;
-                const words = t.after ? `${became(t.after)}, and you took up the step you had waited on it for` : `the owner: "${t.said}"`;
+                const words = t.after
+                  ? `${became(t.after)}, and you took up the step you had waited on it for`
+                  : t.answered
+                    ? `the answer ${answerTag(t.answered)} came in, and you took up the step you had looked it up for`
+                    : `the owner: "${t.said}"`;
                 return `- ${when(t.at)}${open ? ` (with "${open.title}" open)` : ''} ${words} → you: "${t.reply}"${t.undone ? ' (the owner took it back)' : ''}${t.waits?.length ? ` (you wait on ${t.waits.map((w) => `"${w.title}"`).join(', ')} for it)` : ''}${later}`;
               })
               .join('\n')}`
@@ -1287,7 +1352,13 @@ export class Commander {
       `Now: ${when(now)}.`,
       ...history,
       ...news,
-      ...(input.after
+      ...(input.answered
+        ? [
+            `No words of the owner's this time: you take up a step you said you would take once you had looked something up. ${when(input.answered.at)} the owner ${input.answered.said ? `said: "${input.answered.said}"` : 'asked'}, and you answered: "${input.answered.promised}", looking up: "${input.answered.question}", to then: ${input.answered.then}`,
+            `The answer ${answerTag(input.answered.from)} is in (the owner sees it too): ${input.answered.answer}`,
+            "Take that step now with act, as you said you would, from what the answer says. Where the answer does not allow it (the look-up failed, or found nothing to act on), tell the owner with reply instead. The owner reads your confirm as a notice and can take the actions back.",
+          ]
+        : input.after
         ? [
             `No words of the owner's this time: you take up a step you said you would take. ${when(input.after.at)} the owner ${input.after.said ? `said: "${input.after.said}"` : 'had a step of yours waiting'}, and you answered: "${input.after.promised}", waiting until the card "${input.after.title}" ${until(input.after.state)}, to then: ${input.after.then}`,
             `Now ${became(input.after)}.${this.awaitedCard(input.after.card, items, describe)}`,
@@ -1319,7 +1390,7 @@ export class Commander {
             `The owner attached ${shots === 1 ? 'a screenshot' : `${shots} screenshots`} (shown below). Obeya gives ${shots === 1 ? 'it' : 'them'} to every new_card, new_idea, start, note, answer, feedback, discuss and revise action you take for this message; a title for a new card may say what ${shots === 1 ? 'it shows' : 'they show'}.`,
           ]
         : []),
-      focused && input.after ? `They said it with this card open: ${describe(focused)}` : focused ? `The owner has this card open, so "it", "this" and a bare answer refer to it: ${describe(focused)}${this.report(focused)}` : project ? `The owner is looking at the project ${tag(project.id)} "${project.title}".` : 'No card is open: the owner speaks to you.',
+      focused && (input.after || input.answered) ? `They said it with this card open: ${describe(focused)}` : focused ? `The owner has this card open, so "it", "this" and a bare answer refer to it: ${describe(focused)}${this.report(focused)}` : project ? `The owner is looking at the project ${tag(project.id)} "${project.title}".` : 'No card is open: the owner speaks to you.',
       `Cards on the canvas now:\n${relevant.map(describe).join('\n') || '(none)'}`,
       ...(projects.length ? [`Projects with workstreams to start:\n${projects.join('\n')}`] : []),
       ...(this.waits().length
@@ -1396,7 +1467,7 @@ function when(iso: string): string {
 }
 
 /** Examples of the confirmations the Koordinator speaks, and the owner's words for its cards, per language. */
-const CONFIRM: Record<Language, { act: string; words: string; remember: string; retro: string; reviewPr: string; group: string; configure: string; lookUp: string; idea: string; wish: string }> = {
+const CONFIRM: Record<Language, { act: string; words: string; remember: string; retro: string; reviewPr: string; group: string; configure: string; lookUp: string; lookUpThen: string; idea: string; wish: string }> = {
   de: {
     act: '"Neue Aufgabe „Zählerstände als CSV“, der Agent fängt an." / "„Rabatt“ freigegeben, und die Folgeaufgabe „Archiv“ ist angelegt." / "An den Agenten von „Export“ weitergegeben."',
     words: 'In German, a card is an „Aufgabe“ (a follow-up: „Folgeaufgabe“), an idea „Idee“, a project „Projekt“; never say „Karte“. The owner may still say „Karte“ and means the same.',
@@ -1406,6 +1477,7 @@ const CONFIRM: Record<Language, { act: string; words: string; remember: string; 
     group: '„„Export“ und „Rabatt“ gehören jetzt zur Gruppe Abrechnung.“',
     configure: '„Das Repository shop-web kommt auf die Leinwand Shop.“ / „shop-web bekommt einen dritten Klon; seine Agenten starten neu, sobald sie pausieren.“',
     lookUp: '„Ich schaue im Plan nach.“ / „Moment, ich lese nach, was der Agent bei „…“ tun würde.“',
+    lookUpThen: '„Ich lese die offenen Issues auf GitHub und lege dann für jedes eine Aufgabe an.“',
     idea: '„Neue Idee „Erlaubte Datenbankabfragen“, zum Durchdenken mit dir.“',
     wish: '„Der Entwurf für die Macher von Obeya ist offen: prüf ihn und schick ihn auf GitHub ab.“',
   },
@@ -1418,6 +1490,7 @@ const CONFIRM: Record<Language, { act: string; words: string; remember: string; 
     group: '““Export” and “Discount” now belong to the group Billing.”',
     configure: '“The repository shop-web joins the canvas Shop.” / “shop-web gets a third clone; its agents restart once they paused.”',
     lookUp: '“Let me look at the plan.” / “One moment, I am reading what the agent would do on “…”.”',
+    lookUpThen: '“I am reading the open issues on GitHub and will then create a task for each.”',
     idea: '“New idea “Allowed database queries”, to think through with you.”',
     wish: '“The draft for Obeya’s makers is open: check it and submit it on GitHub.”',
   },
@@ -1431,7 +1504,7 @@ This is one ongoing conversation. The owner refers back to it ("the card from be
 For each message, call act, reply or look_up once, then end your turn:
 - act, with every action the owner asked for, in their order, on the cards they meant (the open card unless they name another). One sentence may hold several ("gib das frei und mach eine Folgeaufgabe …" is approve and new_card, with the open card as the one it follows up on): leave none out. A step that can only follow once a card gets somewhere (a canvas for the repository a new task creates, a start once another card has landed) is wait_for in the same act: Obeya wakes you when the card gets there, and you take the step then.
 - reply, when the owner asks you a question of fact you can answer from what you know (the cards, their states and history, this conversation), also about the open card, or when nothing fits or it is unclear which card or what is meant.
-- look_up, when the answer needs reading or checking: what an agent would do on a card ("Was würde der Agent hier machen, wenn ich starte?"), what the plan says, how or why something works, what is on the machine or on GitHub (which file is newest, whether a script ran, what a release holds). Never reply that you cannot know or predict it; look it up. The answer follows in a few seconds.
+- look_up, when the answer needs reading or checking: what an agent would do on a card ("Was würde der Agent hier machen, wenn ich starte?"), what the plan says, how or why something works, what is on the machine or on GitHub (which file is newest, whether a script ran, what a release holds). Never reply that you cannot know or predict it; look it up. The answer follows in a few seconds. Also when the actions the owner asks for depend on such reading (a task for each open GitHub issue): look_up with then, and you take the actions yourself once the answer is in.
 All three take confirm: one short sentence in the owner's language (two at most for an answer or several actions) the owner hears back, saying what will happen, naming the cards (${CONFIRM[language].act}). No preamble, no questions back unless you use reply. ${ownersLanguage(language)} A new card's or idea's title is in the owner's language too.
 ${LANGUAGES.map((l) => CONFIRM[l].words).join('\n')}
 A card's agent is Claude Code with the shell, git, gh and the web, on the machine its repository's workers run on: with the owner's permission it does any work there, in its repository or outside it (create a new repository, install a tool, convert files, run a script). Work the owner asks to have done is new_card, also when it is no change to code.
