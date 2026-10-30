@@ -1191,6 +1191,7 @@ const de = {
           ? 'Ein Klon auf diesem Rechner.'
           : `Zusammen ${existing + made} Klone auf diesem Rechner${existing && made ? ` (${existing} ${existing === 1 ? 'vorhandener' : 'vorhandene'}, ${made} ${made === 1 ? 'neuer' : 'neue'})` : ''}.`,
     workspaces: 'Vorhandene Klone, einer pro Zeile',
+    cloneIsRepo: 'Der Ordner des Repositories selbst ist kein Klon für Agenten: Dort landet die fertige Arbeit auf main.',
     slots: 'Slots hier',
     slotsAll: 'alle',
     slotsHint: 'Wie viele Agenten auf dem Rechner zugleich arbeiten dürfen. Eine neue Aufgabe geht auf den ersten Rechner mit freiem Slot; leer: so viele wie Klone.',
@@ -3034,6 +3035,7 @@ const en: Strings = {
           ? 'One clone on this machine.'
           : `${existing + made} clones on this machine in all${existing && made ? ` (${existing} existing, ${made} new)` : ''}.`,
     workspaces: 'Existing clones, one per line',
+    cloneIsRepo: "The repository's own folder is no clone for agents: finished work lands on its main there.",
     slots: 'Slots here',
     slotsAll: 'all',
     slotsHint: 'How many agents may work on the machine at once. A new task goes to the first machine with a free slot; empty: as many as there are clones.',

@@ -671,9 +671,9 @@ export class CanvasRuntime {
       const named: string[] = [];
       if (adapter.workspaces === 'clones') {
         // a clone registered for this repository must be one of it
-        for (const w of rc.workspaces ?? []) {
-          git.register(resolve(w), [info.remote, info.path].filter((x): x is string => !!x));
-          named.push(resolve(w));
+        for (const w of listedClones(rc, info, { land: adapter.land })) {
+          git.register(w, [info.remote, info.path].filter((x): x is string => !!x));
+          named.push(w);
         }
         // landing on main needs clones that see the local main; otherwise they track the remote
         if (rc.clones) named.push(...git.ensureClones(adapter.land === 'main' || !info.remote ? info.path : info.remote, rc.clones));
@@ -1184,7 +1184,8 @@ export class CanvasRuntime {
       // the settings may be there now, or gone
       this.proposeSetup(r);
     }
-    const workIn = r.info.folder ? 'folder' : namesClones(r.config) ? 'clones' : (layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)())?.workspaces ?? defaultsFor(r.info).workspaces);
+    const layered = layerSettings<RepoSettings>(this.sharedOf(path)(), this.settingsOf(r.config)());
+    const workIn = r.info.folder ? 'folder' : namesClones(r.config, r.info, layered) ? 'clones' : (layered?.workspaces ?? defaultsFor(r.info).workspaces);
     if (workIn !== r.workspaces.mode) {
       this.due([path], shared ? 'repository' : 'config');
       return 'due';
@@ -2702,7 +2703,7 @@ export function resolveCanvas(
     config: { ...config, repos: repos.map((x) => x.config) },
     id,
     name,
-    repos: repos.map((x, i) => ({ ...x, ref: refs[i]!, values: () => repoValues(x.read.info, namesClones(x.config), sharedOf(x.read.info.path)() ?? {}, x.read.detected) })),
+    repos: repos.map((x, i) => ({ ...x, ref: refs[i]!, values: () => repoValues(x.read.info, namesClones(x.config, x.read.info, { land: x.adapter.land }), sharedOf(x.read.info.path)() ?? {}, x.read.detected) })),
     stored,
   };
 }
@@ -2716,11 +2717,21 @@ type Resolved = ReturnType<typeof resolveCanvas>;
  * the configuration names some.
  */
 export function repoAdapter(r: RepoConfig, info: RepoInfo, settings: () => RepoSettings | undefined, shared: () => SharedSettings | undefined): RepoAdapter {
-  return withSettings(defaultsFor(info), () => layerSettings<RepoSettings>(shared(), settings()), namesClones(r));
+  const layered = () => layerSettings<RepoSettings>(shared(), settings());
+  return withSettings(defaultsFor(info), layered, namesClones(r, info, layered()));
+}
+
+/**
+ * The existing clones a repository's configuration lists for its workers: all of them, but for the
+ * checkout itself where work lands on its main, which is always on main (see `landOnMain`).
+ */
+export function listedClones(r: RepoConfig, info: RepoInfo, layered: RepoSettings | undefined): string[] {
+  const landsHere = (layered?.land ?? defaultsFor(info).land) === 'main';
+  return (r.workspaces ?? []).map((w) => resolve(w)).filter((w) => !landsHere || w !== resolve(info.path));
 }
 
 /** Whether a repository's configuration names clones for its workers (to create, existing ones, on other machines). */
-export const namesClones = (r: RepoConfig) => !!r.clones || !!r.workspaces?.length || !!r.hosts?.length;
+export const namesClones = (r: RepoConfig, info: RepoInfo, layered: RepoSettings | undefined) => !!r.clones || !!listedClones(r, info, layered).length || !!r.hosts?.length;
 
 /** Repository ids unique on the canvas: the repository's name, with a number when two share one. */
 function uniqueRefs(infos: RepoInfo[], adapters: RepoAdapter[]): RepoRef[] {

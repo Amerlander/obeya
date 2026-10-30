@@ -783,6 +783,23 @@ describe('the configuration changed while the canvas runs', () => {
     expect(existsSync(join(own, '.git'))).toBe(true);
   });
 
+  test('the checkout among the workspaces stays out of them where work lands on its main, and is one where work goes out as pull requests', () => {
+    const own = join(dir, 'x-own');
+    git(dir, 'clone', '--quiet', web, own);
+    open([{ path: web, settings: { land: 'main' }, workspaces: [web, own] }]);
+    expect(canvas.repos[0]!.workspaces.list().map((x) => x.path)).toEqual([own]);
+    open([{ path: web, settings: { land: 'pr' }, workspaces: [web, own] }]);
+    expect(canvas.repos[0]!.workspaces.list().map((x) => x.path).sort()).toEqual([web, own].sort());
+  });
+
+  test('a checkout listed as the only workspace where work lands on its main leaves the cards in worktrees, as without the list', async () => {
+    open([{ path: web, settings: { land: 'main' }, workspaces: [web] }]);
+    expect(canvas.repos[0]!.workspaces.mode).toBe('worktrees');
+    const w = await atWork('web', 'W');
+    expect(canvas.repos[0]!.workspaces.leasedBy(w.card.id)).not.toBe(web);
+    expect(git(web, 'branch', '--show-current')).toBe('main');
+  });
+
   test('a card deleted after the restart gives its clone back to the pool as the configuration has it now, not to the one before', async () => {
     open([{ path: web, settings: { land: 'pr' }, clones: 2 }]);
     const v = await atWork('web', 'V');
@@ -1081,8 +1098,8 @@ test('a clone registered for a repository must be one of it', () => {
   git(dir, 'clone', '--quiet', api, join(dir, 'api-clone'));
   const deps = { store: new Store(':memory:'), home: dir, runtime: new FakeRuntime(), forge: noForge };
   expect(() => new CanvasRuntime({ repos: [{ path: web, workspaces: [join(dir, 'api-clone')] }] }, deps)).toThrow('is not a clone of');
-  // the repository itself counts too, though it has no origin
-  canvas = new CanvasRuntime({ repos: [{ path: api, workspaces: [api, join(dir, 'api-clone')] }] }, deps);
+  // the repository itself counts too, though it has no origin (where work lands on its main, it stays out of the pool)
+  canvas = new CanvasRuntime({ repos: [{ path: api, settings: { land: 'pr' }, workspaces: [api, join(dir, 'api-clone')] }] }, deps);
   expect(canvas.repos[0]!.workspaces.list()).toHaveLength(2);
 });
 

@@ -1684,8 +1684,11 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
   const noGit = useFolderWithoutGit(problems.some((p) => p.code === 'notRepo') ? repo.path.trim() : '');
   // a folder without git has neither clones nor slots: every card works in the folder itself
   const folder = repo.git === false;
+  // where work lands on the repository's main, its own folder listed as a clone is none: work lands there (as the server has it)
+  const landsHere = (repo.settings?.land ?? resolved?.values.land.value) === 'main';
+  const itself = (w: string) => landsHere && w.trim().replace(/\/+$/, '') === repo.path.trim().replace(/\/+$/, '');
   // clones the configuration names (to make, existing ones, on hosts) put the repository in clones whatever its settings say
-  const named = !!repo.clones || !!repo.workspaces?.length || !!repo.hosts?.length;
+  const named = !!repo.clones || (repo.workspaces ?? []).some((w) => w.trim() && !itself(w)) || !!repo.hosts?.length;
   const base = resolved?.values.workspaces;
   // what the repository's settings say without this machine's, where the check could tell it apart from the clones named
   const known = base && base.source !== 'clones' ? base.value : undefined;
@@ -1716,7 +1719,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
     onChange(next);
   };
   const source = named ? t.config.settings.source.clones : own !== undefined ? t.config.settings.source.machine : base ? t.config.settings.source[base.source] : undefined;
-  const listed = (repo.workspaces ?? []).filter((w) => w.trim()).length;
+  const listed = (repo.workspaces ?? []).filter((w) => w.trim() && !itself(w)).length;
   // what saving does to the clones registered now: those it no longer names leave the pool, a card's once it is done
   const leaving = resolved?.leaving?.length ? <p className="hint cfg-clone-leaving">{t.config.cloneLeaving(resolved.leaving.map((c) => (c.card ? { ...c, card: plain(c.card) } : c)))}</p> : null;
   const slots = (hint: string, placeholder: string) => (
@@ -1781,6 +1784,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
                     onChange(without('workspaces', list.some((w) => w.trim()) ? list : undefined));
                   }}
                 />
+                {(repo.workspaces ?? []).some(itself) && <p className="hint">{t.config.cloneIsRepo}</p>}
               </Field>
               <Field className="cfg-clone-count" label={<>{t.config.clones} <Info text={t.config.clonesHint} /></>}>
                 <input type="number" min={0} max={20} aria-label={t.config.clones} placeholder="0" value={repo.clones ?? ''} onChange={(e) => onChange(without('clones', Number(e.target.value) || undefined))} />

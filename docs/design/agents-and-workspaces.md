@@ -45,7 +45,11 @@ configuration names some (`clones`, `workspaces` or `hosts`). Worktrees: any num
 unless the repository has `slots`. Clones (for tools that break in a worktree, or an app stack per
 clone): a pool, each clone leased by one card. `clones` is how many Obeya makes in its own directory
 (`workspaces/<canvas>/<repo>/1..n`), on top of the existing ones `workspaces` lists (on the command
-line `--clones <n>`, `--workspace <path>`); the Konfiguration dialog shows the sum. A card keeps its
+line `--clones <n>`, `--workspace <path>`); the Konfiguration dialog shows the sum. Where work lands
+on the local main, the checkout itself is never one of them, even where `workspaces` lists it: work
+lands there, the Lesestand is read there, and a card's branch checked out in it stopped every
+landing (2026-10-30, a tester's report). The dialog does not count it and says why; listed alone,
+the cards work in worktrees, as without the list. A card keeps its
 workspace across stop and restart until its work has landed and its worker finished what remains.
 
 Starting a card does not block the server: the workspace is taken at once (so slots and the queue
