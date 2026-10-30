@@ -86,9 +86,10 @@ Confirmation and undo.
 A note reaches the worker at any time without stopping it. To stop it mid-work, the conversation's
 bubble that shows the agent at work („Agent arbeitet …“) has a pause mark, faint. At the desk it
 shows only while the pointer is on the bubble, so a long run does not keep a button in view; on a
-touch screen it is always there. By voice „halt mal an“. On the canvas, the card's moving line in
-its state line (see The canvas) turns into the same pause while the pointer is on the card, and a
-paused card shows ▶ there on the same hover, which resumes it as „Weitermachen“ does.
+touch screen it is always there. By voice „halt mal an“. On the canvas, the card shows the same
+faint pause while the pointer is on it, in the corner where other cards show their play and archive
+buttons (see The canvas), and a paused card shows a faint ▶ there on the same hover, which resumes
+it as „Weitermachen“ does.
 The bubble and the pause exist exactly while an agent runs a turn (background work included): a
 Question card's agent reading, an idea's agent replying, a worker in any card state (at work, taking
 in the owner's words on its handover, in its PR, finishing after the landing). An idle agent (a PR

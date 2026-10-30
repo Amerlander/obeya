@@ -80,15 +80,15 @@ export const PlayMark = () => (
 
 /**
  * On a card on the canvas, the pause of its agent at work, or the resume of its paused one, as the
- * bubble in its conversation has them: in its state line in place of the moving line, while the
- * pointer is on the card.
+ * bubble in its conversation has them: where a card's play and archive buttons stand, faint, while
+ * the pointer is on the card.
  */
 function CardTurn({ item }: { item: Item }) {
   const paused = resumable(item);
   if (!paused && !pausable(item)) return null;
   return (
     <button
-      className={paused ? 'card-turn resume' : 'card-turn'}
+      className={paused ? 'play turn resume' : 'play turn'}
       title={paused ? t.pause.resumeHint : t.pause.hint}
       aria-label={paused ? t.pause.resume : t.pause.button}
       // the canvas would take the press as the start of a drag or a click that opens the card
@@ -153,7 +153,7 @@ export const cardClass = (item: Item, underway?: string) =>
  * state's colour (`since` after it) and the pin while it needs the owner. A `chip`, a delivered
  * workstream, shows only its title, after its label, so it still reads as its workstream.
  */
-export function CardFace({ item, where, underway, since, chip, turn }: { item: Item; where?: string; underway?: string; since?: string; chip?: boolean; turn?: ReactNode }) {
+export function CardFace({ item, where, underway, since, chip }: { item: Item; where?: string; underway?: string; since?: string; chip?: boolean }) {
   const kind =
     item.label ??
     (item.contribution ? t.review.kind(item.contribution.number, item.contribution.author) : item.parent ? t.kind.workstream : item.kind === 'question' ? t.kind.question : item.idea || item.proposal?.idea ? t.kind.idea : item.becomesProject ? becomesLabel(item) : item.prototypeOf ? t.kind.prototype : item.kind === 'project' ? t.kind.project : '');
@@ -211,7 +211,6 @@ export function CardFace({ item, where, underway, since, chip, turn }: { item: I
           {item.idea?.next && needsYou(item) && ` · ${t.idea.suggests[item.idea.next.step]}`}
           {since && <span className="since"> · {since}</span>}
         </span>
-        {turn}
       </div>
       {needsYou(item) && !underway && <div className="badge pulse">{item.state === 'proposal' ? '✦' : '!'}</div>}
     </>
@@ -243,7 +242,8 @@ export const CardView = memo(
         onPointerLeave={() => onHover(null)}
       >
         {(dep === 'before' || dep === 'after') && <div className="dep-tag">{t.deps[dep]}</div>}
-        <CardFace item={item} where={showRepo ? item.repo : undefined} underway={underway} chip={shape === 'chip'} turn={!underway && <CardTurn item={item} />} />
+        <CardFace item={item} where={showRepo ? item.repo : undefined} underway={underway} chip={shape === 'chip'} />
+        {!underway && <CardTurn item={item} />}
         {startable && (
           <button
             className="play"

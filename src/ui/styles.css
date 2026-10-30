@@ -178,20 +178,6 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 /* its agent paused by the owner: the line stands still, in pencil grey */
 .card.paused .state, .p-state.paused { --c: var(--muted); }
 .card.paused .state::after { display: none; }
-/* the pause of its agent at work, or the resume of its paused one: in the state line in place of the
-   moving line, while the pointer is on the card (where nothing hovers, throughout) */
-.card .state .card-turn { flex: none; display: inline-grid; place-items: center; width: 24px; height: 18px; margin: -3px 0; padding: 0;
-  border: 1px solid var(--line); border-radius: 3px; background: var(--card); color: var(--c); cursor: pointer; }
-.card .state .card-turn .btn-mark { margin: 0; }
-.card .state .card-turn:hover, .card .state .card-turn:focus-visible { color: var(--ink); border-color: var(--muted); }
-@media (hover: hover) {
-  .card:not(:hover) .state .card-turn:not(:focus-visible) { display: none; }
-  .card:is(:hover, :focus-within) .state:has(.card-turn)::after { display: none; }
-}
-@media (hover: none) {
-  .card .state:has(.card-turn)::after { display: none; }
-}
-.card:is(.dragging, .lifted) .state .card-turn { display: none; }
 .card .landed-part { color: var(--approved); border: 1px solid color-mix(in srgb, var(--approved) 45%, transparent); border-radius: 2px; padding: 0 5px; font-weight: 500; }
 .card.s-live .ttl, .card.s-done .ttl { font-weight: 500; }
 /* a proposal is a card only pencilled in: no stock yet, a dashed outline */
@@ -1706,6 +1692,17 @@ button.link:hover { text-decoration: underline; }
 /* a stopped task offers both: archiving goes left of starting again */
 .card .play.archive.beside { right: 42px; }
 .card.dragging .play, .card.lifted .play { opacity: 0; pointer-events: none; }
+/* the pause of its agent at work, or the resume of its paused one: in the same place, faint like the
+   pause on the bubble in its conversation (where nothing hovers, throughout) */
+.card .play.turn { padding: 0; background: transparent; color: var(--muted); border: 1px solid var(--line); box-shadow: none; }
+.card .play.turn .btn-mark { margin: 0; }
+.card:hover .play.turn { opacity: .55; }
+.card .play.turn:is(:hover, :focus-visible) { opacity: 1; pointer-events: auto; filter: none; color: var(--ink); border-color: var(--muted); }
+@media (hover: none) {
+  .card .play.turn { opacity: .55; pointer-events: auto; }
+  .card:has(> .play.turn) .state { right: 44px; }
+}
+.card:is(.dragging, .lifted) .play.turn { opacity: 0; pointer-events: none; }
 
 /* while the pointer is on a card with waits: the cards it waits for and those waiting for it, over every step */
 #deps { position: absolute; left: 0; top: 0; z-index: 1; overflow: visible; pointer-events: none; }
