@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { confidence, type Forge, ghCli, githubRepo, landedUrl, lastAsked, makeGhForge, parsePrUrl, readable, readyToMerge, reviewOf, reviewStale, routedForge, type PrStatus } from './forge';
+import { onGitHub } from './repo';
 import { fakeGh, noContributions } from './testing';
 
 test('landedUrl: the commit, or the comparison over several, on the forge of any remote but a path', () => {
@@ -32,9 +33,34 @@ test('parsePrUrl: GitHub and GitHub Enterprise, and Forgejo or Gitea on any serv
   // GitHub's form on a host that is not GitHub's: a Forgejo PR, at the address the server knows
   expect(parsePrUrl('https://codeberg.org/BuendnisOst/bo-website/pull/62', github)).toEqual({ forge: 'forgejo', base: 'https://codeberg.org', host: 'codeberg.org', owner: 'BuendnisOst', repo: 'bo-website', number: 62, url: 'https://codeberg.org/BuendnisOst/bo-website/pulls/62' });
   expect(parsePrUrl('https://git.example.org/forge/team/app/pull/3', github)?.url).toBe('https://git.example.org/forge/team/app/pulls/3');
+  // GitHub Enterprise Cloud, with no login of gh's for it (a token in the environment alone)
+  expect(parsePrUrl('https://acme.ghe.com/team/app/pulls/4', (u) => onGitHub(u, () => []))).toMatchObject({ forge: 'github', host: 'acme.ghe.com', url: 'https://acme.ghe.com/team/app/pull/4' });
   // by default, the hosts gh is logged into are GitHub's
   expect(parsePrUrl('https://github.com/a/b/pull/1')?.forge).toBe('github');
   expect(parsePrUrl('https://codeberg.org/a/b/pull/1')?.forge).toBe('forgejo');
+});
+
+test('parsePrUrl: the host a PR is told by is the host it goes to', () => {
+  const asked: string[] = [];
+  const github = (url: string) => (asked.push(url), onGitHub(url, () => []));
+  // a fragment, a login or a query in the server's address: the host seen in it is not the one gone to
+  expect(parsePrUrl('https://attacker.example#@github.com/a/b/pulls/1', github)).toBeNull();
+  expect(parsePrUrl('https://attacker.example?@github.com/a/b/pull/1', github)).toBeNull();
+  expect(parsePrUrl('https://attacker.example\\@github.com/a/b/pull/1', github)).toBeNull();
+  expect(parsePrUrl('https://me:secret@github.com/a/b/pull/1', github)).toBeNull();
+  expect(parsePrUrl('https://git.example.org/x?y/a/b/pulls/1', github)).toBeNull();
+  // the forge is asked of the server's host as the URL parser reads it, port and all
+  expect(parsePrUrl('https://GIT.example.org:3000/forge/a/b/pulls/1', github)).toMatchObject({ forge: 'forgejo', base: 'https://git.example.org:3000/forge', host: 'git.example.org:3000', url: 'https://git.example.org:3000/forge/a/b/pulls/1' });
+  expect(asked).toEqual(['https://git.example.org:3000']);
+});
+
+test('gh gets a GitHub PR recorded with Forgejo’s /pulls/ as /pull/, which it takes', async () => {
+  const args: string[] = [];
+  const forge = makeGhForge((_at, ...a) => (args.push(a.join(' ')), a[1] === 'view' ? JSON.stringify({ body: 'Text' }) : ''));
+  await forge.body('/repo', 'https://github.example.com/team/app/pulls/7');
+  await forge.setBody('/repo', 'https://github.example.com/team/app/pulls/7/', 'B');
+  expect(args[0]).toBe('pr view https://github.example.com/team/app/pull/7 --json body');
+  expect(args[1]).toStartWith('pr edit https://github.example.com/team/app/pull/7 --body-file ');
 });
 
 test('a pull request goes to the forge its URL is on; one is opened on the forge of origin', async () => {

@@ -31,7 +31,7 @@ import { PrWatcher } from './pr-watcher';
 import { branchCommit, defaultBranchCommit, ReadTree } from './read-tree';
 import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
-import { outsidePlanDir, readPlanDocs, watchPlanDocs } from './repo';
+import { ghHosts, onGitHub, outsidePlanDir, readPlanDocs, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, planDirNoteBox, unionBounds } from '../core/layout';
 import { type AgentRuntime, idleRuntime, withAgentSetting, withLimitWait, withRepoTrust } from './runtime';
 import { commandsOf, heldGroups, withoutHeld } from './trust';
@@ -2377,14 +2377,19 @@ export class CanvasRuntime {
     } catch (e) {
       return fail(messageOf(e));
     }
-    const ref = parsePrUrl(url);
+    // gh's logins read once for this URL and those of the cards it is compared with
+    const hosts = ghHosts();
+    const github = (u: string) => onGitHub(u, () => hosts);
+    const ref = parsePrUrl(url, github);
     if (!ref) return fail(url);
     url = ref.url;
     // a pull request of another repository would be merged there, from a workspace of this one
     const origin = originUrl(repo.info);
     if (origin && !sameRepo(origin, ref.owner, ref.repo)) return fail(t.review.otherRepo(repo.ref.id));
-    // a card of the PR's own (one of Obeya's workers opened it) is the card for it too
-    const had = this.board.snapshot().items.find((i) => (i.contribution?.url === url || i.pr?.url === url) && !i.archivedAt);
+    // a card of the PR's own (one of Obeya's workers opened it) is the card for it too, also where
+    // its URL was recorded in another form (a slash at the end, the host in capitals, `/pull/` on Forgejo)
+    const same = (other?: string) => !!other && (parsePrUrl(other, github)?.url ?? other) === url;
+    const had = this.board.snapshot().items.find((i) => (same(i.contribution?.url) || same(i.pr?.url)) && !i.archivedAt);
     if (had) {
       if (c.text) this.act(had.id, { action: 'message', text: c.text, spoken: !!c.spoken });
       this.board.notify({ text: t.review.opened(ref.number), cardId: had.id, open: true });

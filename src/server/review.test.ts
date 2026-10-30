@@ -339,6 +339,13 @@ describe('„Review PR #5“ on a canvas', () => {
     expect(canvas.board.snapshot().items.some((i) => i.contribution)).toBe(false);
   });
 
+  test('a PR recorded in another form (a slash at the end, the host in capitals) opens its card too', async () => {
+    const own = canvas.board.create({ title: 'Export', x: 0, y: 0 });
+    canvas.board.work(own.id, { state: 'inPr', pr: JSON.stringify({ url: 'https://GitHub.com/acme/app/pull/5/', number: 5, seen: [], reported: [] }) });
+    expect(await canvas.reviewPr({ do: 'reviewPr', pr: URL_, text: '' })).toBe(own.id);
+    expect(canvas.board.snapshot().items.some((i) => i.contribution)).toBe(false);
+  });
+
   test('a closed PR gets no card', async () => {
     fake.info.state = 'CLOSED';
     expect(await canvas.reviewPr({ do: 'reviewPr', pr: '5', text: '' })).toBeUndefined();

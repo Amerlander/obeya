@@ -58,10 +58,14 @@ export function ghHosts(env: NodeJS.ProcessEnv = process.env, platform: string =
   }
 }
 
-/** Whether a remote is on GitHub: github.com, or a host the GitHub CLI is logged into (GitHub Enterprise). */
+/**
+ * Whether a remote is on GitHub: github.com and its subdomains, Enterprise Cloud's `*.ghe.com`
+ * (which gh may reach through a token in the environment alone), or a host the GitHub CLI is
+ * logged into (a GitHub Enterprise server).
+ */
 export function onGitHub(url: string, hosts: () => string[] = ghHosts): boolean {
   const host = remoteHost(url);
-  return !!host && (host === 'github.com' || host.endsWith('.github.com') || hosts().includes(host));
+  return !!host && (host === 'github.com' || host.endsWith('.github.com') || host.endsWith('.ghe.com') || hosts().includes(host));
 }
 
 /**

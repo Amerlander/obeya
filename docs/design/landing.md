@@ -7,9 +7,9 @@ A chapter of the [design doc](../design.md), whose header says how it is written
 In a folder without git nothing lands (see Folders without git). Elsewhere the setting `land`
 decides (see Repository settings), read at each approval: `pr` sends the worker into the PR loop;
 `main` rebases the branch onto `main` and fast-forwards the local checkout, and the card is `live`.
-Unset, it is `pr` where `origin` is on GitHub (github.com, a subdomain, or a host gh is logged into:
-one in gh's `hosts.yml`, or `GH_HOST` with a token for it in the environment; not `gh auth
-status`, which checks each login over the network), else `main`: on another forge the
+Unset, it is `pr` where `origin` is on GitHub (github.com or a subdomain, Enterprise Cloud's
+`*.ghe.com`, or a host gh is logged into: one in gh's `hosts.yml`, or `GH_HOST` with a token for it
+in the environment; not `gh auth status`, which checks each login over the network), else `main`: on another forge the
 agents can open a PR only with the repository's own tooling. A card whose own branch changes `land`
 or `direct` (the settings card, say) lands as its branch says unless the machine's settings
 override it; the handover records how, so the approve button says so before the click. Where such
@@ -55,7 +55,11 @@ description for readers who have not seen Obeya) and reports it with `pr_opened(
 github.com or an Enterprise server (`https://<host>/<owner>/<repo>/pull/<n>`), or Forgejo and Gitea
 (`…/pulls/<n>`, also below a path). The host decides the forge, and Obeya records the URL with
 that forge's path: a Codeberg PR reported as `…/pull/<n>` (which Codeberg answers with 404) as
-`…/pulls/<n>`. From then on it may push its
+`…/pulls/<n>`. Whatever form a URL was recorded in, each call reads it afresh: gh gets GitHub's
+`/pull/<n>` (an Enterprise PR recorded as `…/pulls/<n>` before gh was logged in there), and a PR
+already on a card is recognised in any form (a slash at the end, the host in capitals). An address
+with a login, a query or a fragment before the repository is no PR URL: the host it would be told
+by could differ from the one it is sent to. From then on it may push its
 branch, never merges, and ends its turn after each round instead of handing over.
 
 #### Watching the PR
@@ -273,11 +277,14 @@ A card no agent worked on, a prototype or an archived card has no field.
   GitHub is slow), so with two open PRs the server answered nothing for up to 40 s every two minutes
   (canvas switches, conversations and demo videos hung).
 - **A PR's forge is told by its URL's host; GitHub Enterprise is GitHub on another host**
-  (2026-10-26, GitHub issue #16; host 2026-10-29). A host is GitHub's when it is github.com or gh
-  is logged into it, read from gh's own files, for a PR's URL as for `origin` where no URL exists
-  yet (the landing default, opening a PR); every other host is Forgejo or Gitea. The price: a PR
-  on an Enterprise server gh is not logged into fails with the Forgejo API's answer instead of gh's
-  hint to log in, as opening a PR there does. Rejected: the path alone (`/pull/<n>` GitHub's,
+  (2026-10-26, GitHub issue #16; host 2026-10-29; Enterprise Cloud 2026-10-30). A host is
+  GitHub's when it is github.com or a subdomain, Enterprise Cloud's `*.ghe.com` (gh may reach it
+  through `GH_TOKEN` alone, with no login in its files), or gh is logged into it, read from gh's
+  own files, for a PR's URL as for `origin` where no URL exists yet (the landing default, opening a
+  PR); every other host is Forgejo or Gitea. The price: a PR on an Enterprise server gh is not
+  logged into goes to the Forgejo API, as opening a PR there does; where that answers it has no
+  such path (404) or git has no login for the host, the card names `gh auth login --hostname
+  <host>` in case the host is GitHub Enterprise. Rejected: the path alone (`/pull/<n>` GitHub's,
   `/pulls/<n>` Forgejo's), since agents write a Codeberg PR as `…/pull/<n>` and gh then asks
   Codeberg, which answers HTTP 405; a list of Enterprise hosts in the settings (one more setting for what gh already knows); asking `gh auth
   status` (checks each login over the network) or probing the host's API (a round trip, and a

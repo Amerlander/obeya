@@ -109,14 +109,18 @@ export function parsePrUrl(
   github: (url: string) => boolean = onGitHub,
 ): { forge: 'github' | 'forgejo'; base: string; host: string; owner: string; repo: string; number: number; url: string } | null {
   const m = /^(https?:\/\/[^/\s]+(?:\/[^/\s]+)*?)\/([\w.-]+)\/([\w.-]+)\/pulls?\/(\d+)\/?$/.exec(url.trim());
-  if (!m || !URL.canParse(m[1]!)) return null;
-  const [, base, owner, repo, n] = m as unknown as [string, string, string, string, string];
-  const at = new URL(base);
-  const host = at.host.toLowerCase();
+  // a login, query or fragment in the server's address (`https://elsewhere#@github.com`) would let
+  // the host it is told by differ from the one it is sent to
+  if (!m || /[@?#\\]/.test(m[1]!) || !URL.canParse(m[1]!)) return null;
+  const [, , owner, repo, n] = m as unknown as [string, string, string, string, string];
+  const at = new URL(m[1]!);
+  const host = at.host;
   const number = Number(n);
-  if (github(base)) {
+  // told by the host it goes to, as the URL parser reads it
+  if (github(`${at.protocol}//${host}`)) {
     return at.pathname === '/' ? { forge: 'github', base: `https://${host}`, host, owner, repo, number, url: `https://${host}/${owner}/${repo}/pull/${number}` } : null;
   }
+  const base = `${at.protocol}//${host}${at.pathname.replace(/\/$/, '')}`;
   return { forge: 'forgejo', base, host, owner, repo, number, url: `${base}/${owner}/${repo}/pulls/${number}` };
 }
 
@@ -274,6 +278,12 @@ async function originRepo(cwd: string): Promise<{ host: string; owner: string } 
 /** A pull request URL read as GitHub's, whatever its host: `routedForge` sent it to gh. */
 const githubPr = (url: string) => parsePrUrl(url, () => true);
 
+/**
+ * The pull request's address as gh takes it: one recorded with Forgejo's `/pulls/` (an Enterprise
+ * PR reported before gh was logged in there) gh would reject.
+ */
+const ghUrl = (url: string) => githubPr(url)?.url ?? url;
+
 /** Where gh runs for the pull request at `url`. */
 const atPr = (cwd: string, url: string): GhAt => {
   const ref = githubPr(url);
@@ -321,7 +331,7 @@ export const makeGhForge = (
     const at = atPr(cwd, url);
     // side by side: each is a round trip to GitHub
     const [pr, inline, threads] = await Promise.all([
-      run(at, 'pr', 'view', url, '--json', 'state,mergeable,mergeStateStatus,headRefOid,mergeCommit,author,statusCheckRollup,comments,reviews'),
+      run(at, 'pr', 'view', ghUrl(url), '--json', 'state,mergeable,mergeStateStatus,headRefOid,mergeCommit,author,statusCheckRollup,comments,reviews'),
       run(at, 'api', `repos/${ref.owner}/${ref.repo}/pulls/${ref.number}/comments`, '--paginate'),
       run(
         at,
@@ -340,10 +350,10 @@ export const makeGhForge = (
     return ghStatus(pr, inline, threads);
   },
   async body(cwd, url) {
-    return (JSON.parse(await run(atPr(cwd, url), 'pr', 'view', url, '--json', 'body')) as { body: string }).body;
+    return (JSON.parse(await run(atPr(cwd, url), 'pr', 'view', ghUrl(url), '--json', 'body')) as { body: string }).body;
   },
   async setBody(cwd, url, body) {
-    await withBodyFile(body, (file) => run(atPr(cwd, url), 'pr', 'edit', url, '--body-file', file));
+    await withBodyFile(body, (file) => run(atPr(cwd, url), 'pr', 'edit', ghUrl(url), '--body-file', file));
   },
   async open(cwd, pr) {
     const at: GhAt = { cwd, ...(await repoOf(cwd)) };
@@ -363,7 +373,7 @@ export const makeGhForge = (
   async contribution(cwd, url) {
     const ref = prRef(url);
     const pr = JSON.parse(
-      await run(atPr(cwd, url), 'pr', 'view', url, '--json', 'title,author,state,headRefOid,headRefName,headRepository,headRepositoryOwner,maintainerCanModify'),
+      await run(atPr(cwd, url), 'pr', 'view', ghUrl(url), '--json', 'title,author,state,headRefOid,headRefName,headRepository,headRepositoryOwner,maintainerCanModify'),
     ) as { title: string; author: { login: string }; state: PrStatus['state']; headRefOid: string; headRefName?: string; headRepository?: { name: string } | null; headRepositoryOwner?: { login: string } | null; maintainerCanModify?: boolean };
     const owner = pr.headRepositoryOwner?.login;
     const repo = pr.headRepository?.name;
@@ -379,7 +389,7 @@ export const makeGhForge = (
   },
   async comment(cwd, url, body) {
     // gh prints the new comment's URL
-    const out = await withBodyFile(body, (file) => run(atPr(cwd, url), 'pr', 'comment', url, '--body-file', file));
+    const out = await withBodyFile(body, (file) => run(atPr(cwd, url), 'pr', 'comment', ghUrl(url), '--body-file', file));
     return out.trim().split('\n').at(-1)?.trim() || undefined;
   },
   async requestChanges(cwd, url, body) {
@@ -397,9 +407,9 @@ export const makeGhForge = (
     const allows = JSON.parse(await run(at, 'api', `repos/${ref.owner}/${ref.repo}`, '--jq', '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}')) as Record<string, boolean>;
     const method = (['squash', 'merge', 'rebase'] as const).find((m) => allows[m] !== false) ?? 'squash';
     // no --delete-branch: that also switches branches in the workspace; the repository deletes merged branches or not
-    await run(at, 'pr', 'merge', url, `--${method}`, '--match-head-commit', head);
+    await run(at, 'pr', 'merge', ghUrl(url), `--${method}`, '--match-head-commit', head);
     try {
-      return (await run(at, 'pr', 'view', url, '--json', 'mergeCommit', '--jq', '.mergeCommit.oid')).trim() || undefined;
+      return (await run(at, 'pr', 'view', ghUrl(url), '--json', 'mergeCommit', '--jq', '.mergeCommit.oid')).trim() || undefined;
     } catch {
       // merged all the same: the first fetch after it stands in for the commit (Workers.merged)
       return undefined;

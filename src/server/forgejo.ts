@@ -16,11 +16,19 @@ export class ForgeError extends Error {
   constructor(
     /** The server's reason as it gave it. */
     readonly reason: string,
-    where: string,
+    readonly where: string,
+    /** The HTTP status it answered with, where it answered. */
+    readonly code?: number,
   ) {
     super(`${reason} (${where})`);
   }
 }
+
+/**
+ * What to do where a host may be a GitHub Enterprise server rather than Forgejo: Obeya counts it
+ * GitHub's only once gh is logged into it (`onGitHub`).
+ */
+const gheHint = (host: string) => `if ${host} is a GitHub Enterprise server, log gh in there: gh auth login --hostname ${host}`;
 
 interface FjUser {
   login: string;
@@ -100,7 +108,12 @@ export function remoteRepo(remote: string): { base: string; repo: string } | nul
 }
 
 /** Forgejo or Gitea through an API runner (the real server, or canned answers in tests). */
-export const makeForgejoForge = (api: Api, origin: (cwd: string) => Promise<string | null>): Forge => {
+export const makeForgejoForge = (forgejo: Api, origin: (cwd: string) => Promise<string | null>): Forge => {
+  /** The API, where a server answers that it has no such API path (as GitHub Enterprise does) with what to do if it is GitHub's. */
+  const api: Api = (cwd, base, method, path, body) =>
+    forgejo(cwd, base, method, path, body).catch((e: unknown) => {
+      throw e instanceof ForgeError && e.code === 404 ? new ForgeError(`${e.reason}; ${gheHint(new URL(base).host)}`, e.where, e.code) : e;
+    });
   /** By PR: the head Forgejo could not merge at the last look. */
   const unmergeable = new Map<string, string>();
   /** Every page of a list (the server's page size may be smaller than asked). */
@@ -326,7 +339,7 @@ async function credential(cwd: string, base: string, url: string): Promise<strin
       .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]),
   );
   if (r.code !== 0 || !fields.get('password'))
-    throw new Error(`git has no login for ${host}: store an access token of yours there as git's password for ${host} (a push over https with it does)`);
+    throw new Error(`git has no login for ${host}: store an access token of yours there as git's password for ${host} (a push over https with it does); ${gheHint(host)}`);
   return `Basic ${Buffer.from(`${fields.get('username') ?? ''}:${fields.get('password')}`).toString('base64')}`;
 }
 
@@ -365,7 +378,7 @@ const curlApi: Api = async (cwd, base, method, path, body) => {
     try {
       reason = (JSON.parse(text) as { message?: string }).message ?? '';
     } catch {}
-    throw new ForgeError(reason || `HTTP ${code}`, `${method} ${path}`);
+    throw new ForgeError(reason || `HTTP ${code}`, `${method} ${path}`, code);
   }
   return text ? JSON.parse(text) : undefined;
 };

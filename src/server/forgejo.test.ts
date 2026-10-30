@@ -140,6 +140,16 @@ test('a merge on Forgejo uses the style the repository allows, only for the comm
   await expect(forge.merge('/repo', URL_, 'abc')).rejects.toThrow(/^Please try again later$/);
 });
 
+test('a server without the Forgejo API (GitHub Enterprise, before gh is logged in there) says how to log gh in', async () => {
+  const { forge } = server({ 'GET repos/team/app/pulls/7': new ForgeError('Not Found', 'GET repos/team/app/pulls/7', 404) });
+  await expect(forge.body('/repo', 'https://github.example.com/team/app/pulls/7')).rejects.toThrow(
+    'Not Found; if github.example.com is a GitHub Enterprise server, log gh in there: gh auth login --hostname github.example.com (GET repos/team/app/pulls/7)',
+  );
+  // another failure is the server's own
+  const { forge: down } = server({ 'GET repos/acme/app/pulls/12': new ForgeError('HTTP 502', 'GET repos/acme/app/pulls/12', 502) });
+  await expect(down.body('/repo', URL_)).rejects.toThrow(/^HTTP 502 \(GET/);
+});
+
 test('a pull request is opened on the Forgejo repository of origin', async () => {
   const { forge, calls } = server({ 'POST repos/acme/app/pulls': { html_url: 'https://codeberg.org/acme/app/pulls/13' } }, 'https://codeberg.org/acme/app.git');
   expect(await forge.open('/repo', { base: 'main', head: 'obeya-settings', title: 'T', body: 'B' })).toBe('https://codeberg.org/acme/app/pulls/13');

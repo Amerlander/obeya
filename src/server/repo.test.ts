@@ -240,6 +240,8 @@ describe('a remote on GitHub', () => {
     expect(hosts(['/srv/git/shop', '../shop', 'file:///srv/git/shop', 'C:\\repos\\shop', 'C:/repos/shop'])).toEqual([null, null, null, null, null]);
     expect(onGitHub('https://github.com/acme/shop.git', () => [])).toBe(true);
     expect(onGitHub('git@ssh.github.com:acme/shop.git', () => [])).toBe(true);
+    // Enterprise Cloud, which gh may reach through GH_TOKEN alone
+    expect(onGitHub('https://acme.ghe.com/acme/shop.git', () => [])).toBe(true);
     expect(onGitHub('https://gitlab.com/acme/shop.git', () => [])).toBe(false);
     expect(onGitHub('https://git.acme.com/acme/shop.git', () => ['git.acme.com'])).toBe(true);
     expect(onGitHub('/srv/git/shop', () => ['github.com'])).toBe(false);
