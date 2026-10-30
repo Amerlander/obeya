@@ -116,3 +116,6 @@ into the chapters under `docs/design/` (or the index) and the doc goes.
   comment linking the demo video and the commit on `main`.
 - Once the owner approves the demo of an external contributor's pull request: comment on the PR
   with the demo link, squash-merge it, then `git pull` on `main` so the local checkout is current.
+- Pull requests Obeya opens in other people's repositories carry no Obeya attribution: no
+  `Co-authored-by` Obeya, no mention of Obeya in the PR text. They may link the demo page, and the
+  page itself may say "created with Obeya" at the bottom.
