@@ -197,6 +197,7 @@ test.skipIf(!process.env.OBEYA_LIVE)(
 const READ_FIRST: [string, boolean, Command['do'][]][] = [
   ['Es gibt im Moment drei offene Issues bei GitHub, erstelle für jedes eine eigene Karte.', true, []],
   ['Leg für jedes offene Issue auf GitHub eine Aufgabe an', true, []],
+  ['There are three open issues on GitHub right now, create a card for each.', true, []],
   ['Behebe Issue 27 auf GitHub', false, ['newCard']],
 ];
 
