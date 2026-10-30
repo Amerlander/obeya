@@ -850,6 +850,8 @@ const de = {
         'Bilder, Stylesheets und Skripte des Artefakts stecken in seiner Seite: hinter einem Login (Cloudflare Access) fehlten sie in Firefox, das sie ohne das Login-Cookie anfragte.',
       '2026-10-28-tags': 'Die Tags der Seite stehen unter dem Titel und führen zur so gefilterten Übersicht.',
       '2026-10-30-commit': 'Ist die Arbeit ohne Pull Request auf main gelandet, verlinkt die Seite den Commit (bei mehreren den Vergleich über alle).',
+      '2026-10-30-steady':
+        'Der Rahmen des Artefakts nimmt gleich die Höhe der Seite an und bleibt dabei: Bei einer Seite mit Bildern in voller Breite sprang er beim Öffnen eine Sekunde lang zwischen zwei Höhen, und eine kurze Seite stand in einem zu hohen Rahmen.',
     } satisfies Record<PageChangeId, string>,
     pages: (n: number) => (n === 1 ? 'eine Seite' : `${n} Seiten`),
   },
@@ -2712,6 +2714,8 @@ const en: Strings = {
         'The artifact’s images, stylesheets and scripts are inside its page: behind a login (Cloudflare Access) Firefox showed none of them, as it asked for them without the login’s cookie.',
       '2026-10-28-tags': 'The page’s tags stand under its title and lead to the overview filtered by them.',
       '2026-10-30-commit': 'Where the work landed on main without a pull request, the page links its commit (for several, the comparison over them).',
+      '2026-10-30-steady':
+        'The artifact’s frame takes the page’s height at once and keeps it: for a page of images as wide as itself, it jumped between two heights for a second as it opened, and a short page stood in a frame too high for it.',
     },
     pages: (n: number) => (n === 1 ? 'one page' : `${n} pages`),
   },

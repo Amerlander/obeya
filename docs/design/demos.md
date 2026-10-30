@@ -306,8 +306,11 @@ and has Obeya re-read and share them.
 
 Frames go on the video by the time they were painted (see Decisions): the overlay paints the time
 into a strip of 24 black and white cells at the page's bottom left, the director reads it from every
-frame and paints the strip over. The overlay runs in the top frame only: Playwright runs init
-scripts in every frame, and each iframe would paint a strip of its own.
+frame and paints the strip over. A frame painted within a second before one already on the video is
+left out: the screencast now and then hands one over after later ones, and held in place it showed
+the page as it was a moment before (a highlight ring seemed to blink). A clock read as hours earlier
+(a strip under the white veil) is misread, and its frame stays. The overlay runs in the top frame
+only: Playwright runs init scripts in every frame, and each iframe would paint a strip of its own.
 
 #### Highlights
 
@@ -358,7 +361,11 @@ as a meta tag, ahead of its own HTML, so nothing in the mock can push it out of 
 The artifact's `index.html` reports its height as a shared artifact's page does (see A shared
 artifact), so the frame grows to the page (up to 30,000 px) without a scrollbar of its own and only the
 card's column scrolls up and down. A page wider than the frame (a wide table on a phone) scrolls
-sideways inside it. On the card it also reports what the owner marks in it, to be quoted
+sideways inside it. The page reports its own height, never its frame's: measured without a scrollbar
+of its own, and not before the frame has a size. A page hears of its frame's new height a step late,
+and a page of images as wide as itself, measured once beside its scrollbar and once without, or at
+its frame's height, had its frame jump between two heights for a second as the card opened. On the
+card it also reports what the owner marks in it, to be quoted
 into the field (see Quoting marked text).
 
 The addresses the card loads its demo from carry the handover (`?v=<handover>`), since a worker

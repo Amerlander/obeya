@@ -35,20 +35,31 @@ export function sealed(html: string, own?: string): string {
 
 /**
  * The page's height, sent to the page around it whenever it changes, by a pixel too: there the
- * frame grows to it. Rounded up (scrollHeight rounds, and a page a fraction of a pixel higher than
- * its frame scrolls), and a page wider than its frame adds the scrollbar across its foot. Once its
- * frame holds its height, the page does not scroll up and down: a page whose images grow with its
- * width fits beside a scrollbar but not without one, and kept a bar that scrolled by a few pixels.
- * It still scrolls sideways, where it is wider than its frame (a wide table on a phone).
+ * frame grows to it. Rounded up (a page a fraction of a pixel higher than its frame scrolls), and a
+ * page wider than its frame adds the scrollbar across its foot. Once its frame holds its height, the
+ * page does not scroll up and down: a page whose images grow with its width fits beside a scrollbar
+ * but not without one, and kept a bar that scrolled by a few pixels. It still scrolls sideways,
+ * where it is wider than its frame (a wide table on a phone).
+ * The height is the page's own, never the frame's: always without that bar, and from `scrollHeight`
+ * (what reaches below the page's box, a box placed absolutely) only where that is more than the
+ * frame, since below it `scrollHeight` is the frame's height; where the frame is higher, the height
+ * said before stands until the page's box changes. The page hears of its frame's new height a step
+ * late, and a page of images as wide as itself, measured beside the bar or at the frame's height,
+ * had its frame jump between two heights for a second. A frame not laid out yet says nothing and
+ * asks again shortly: one out of sight hears of no change of its own until it comes into sight.
  */
 const HEIGHT_REPORT = `<script>(() => {
-  let last = 0;
+  let last = 0, box = -1, again = 0;
   const say = () => {
     const html = document.documentElement;
-    const h = Math.max(html.scrollHeight, Math.ceil(html.getBoundingClientRect().height)) + innerHeight - html.clientHeight;
+    if (!innerHeight || !innerWidth) { again ||= setTimeout(() => { again = 0; say(); }, 200); return; }
+    html.style.setProperty('overflow-y', 'hidden');
+    const own = Math.ceil(html.getBoundingClientRect().height);
+    const bar = innerHeight - html.clientHeight;
+    const h = html.scrollHeight > html.clientHeight ? Math.max(own, html.scrollHeight) + bar : own === box ? last : own + bar;
+    box = own;
     if (h !== last) { last = h; parent.postMessage({ obeyaHeight: h }, '*'); }
-    if (innerHeight >= h) html.style.setProperty('overflow-y', 'hidden');
-    else html.style.removeProperty('overflow-y');
+    if (innerHeight < h) html.style.removeProperty('overflow-y');
   };
   addEventListener('load', say);
   addEventListener('resize', say);

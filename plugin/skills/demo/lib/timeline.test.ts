@@ -40,8 +40,21 @@ describe('the video timeline', () => {
   });
 
   test('frames take their paint time where it reads, the last delay where not, and never go back in time', () => {
-    const frames = onPaintTime([frame(102.3), frame(103.3), frame(104.3), frame(104.4)], [100, null, 102.5, 102.4]);
-    expect(frames.map((f) => +f.t.toFixed(3))).toEqual([100, 101, 102.5, 102.5]);
+    const frames = onPaintTime([frame(102.3), frame(103.3), frame(104.3), frame(104.6)], [100, null, 102.5, null]);
+    expect(frames.map((f) => +f.t.toFixed(3))).toEqual([100, 101, 102.5, 102.8]);
+  });
+
+  test('a frame handed over after one painted later is left out', () => {
+    // the third was painted before the second: it shows the page as it was before
+    const frames = onPaintTime([frame(100.1), frame(100.2), frame(100.3), frame(100.4)], [100.0, 100.15, 100.01, 100.2]);
+    expect(frames.map((f) => f.file)).toEqual(['f100.1', 'f100.2', 'f100.4']);
+    expect(frames.map((f) => f.t)).toEqual([100.0, 100.15, 100.2]);
+  });
+
+  test('a frame whose clock reads hours earlier is misread, not late: it stays', () => {
+    // a strip under the white veil reads as all white, hours before the take
+    const frames = onPaintTime([frame(100.1), frame(100.2), frame(100.3)], [100.0, 100 - 43000, 100.2]);
+    expect(frames.map((f) => f.t)).toEqual([100.0, 100.0, 100.2]);
   });
 
   test('the picture says how much later it is', () => {

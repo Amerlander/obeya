@@ -31,13 +31,14 @@ export const PAGE_CHANGES = [
   { id: '2026-10-20-inline', kinds: ['html'] },
   { id: '2026-10-28-tags', kinds: ['video', 'html'], tagged: true },
   { id: '2026-10-30-commit', kinds: ['video', 'html'] },
+  { id: '2026-10-30-steady', kinds: ['html'] },
 ] as const satisfies readonly PageChange[];
 
 export type KnownChange = (typeof PAGE_CHANGES)[number];
 export type PageChangeId = KnownChange['id'];
 
 /** The sample pages' hash (`pagesHash` in site.ts) the changes above account for. */
-export const PAGES_HASH = { video: '5812f704acfb', html: '586c685c35f7', stacked: 'c6e50038fdfa' };
+export const PAGES_HASH = { video: '5812f704acfb', html: '3aa9944faee4', stacked: 'c6e50038fdfa' };
 
 /** The version a page published now gets: the newest change; '' while there is none. */
 export const pagesVersion = (changes: readonly PageChange[] = PAGE_CHANGES): string => changes.at(-1)?.id ?? '';

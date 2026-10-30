@@ -57,20 +57,29 @@ export function readClock(row: Uint8Array, stamp: number): number | null {
   return (code + k * span) / 100;
 }
 
+/** How much earlier than the frame before a frame can have been painted and still be late, not misread. */
+const LATE = 1;
+
 /**
  * Frames on the time they were painted, where their clock strip says it (`times`; null where it
  * cannot be read: the frame's stamp less the delay last read), never earlier than the frame
  * before. On a busy machine the screencast handed frames over up to 5 s after they were painted
  * (8 Oct 2026), and their stamps are the hand-over: the picture trailed the narration by as much.
+ * It also hands a frame over after later ones now and then: one whose clock says it was painted
+ * within a second before a frame already kept is left out. Held at the later time instead, a frame
+ * from before a highlight came up showed the page without it for a moment, and the ring seemed to
+ * blink. A clock read as much earlier is misread, not late (under the white veil the strip reads as
+ * hours before): that frame stays, at the time before.
  */
 export function onPaintTime(frames: Frame[], times: (number | null)[]): Frame[] {
   let last = -Infinity;
   let delay = 0;
-  return frames.map((f, i) => {
+  return frames.flatMap((f, i) => {
     const painted = times[i];
+    if (painted != null && painted < last && last - painted < LATE) return [];
     if (painted != null) delay = f.t - painted;
     last = Math.max(last, painted ?? f.t - delay);
-    return { ...f, t: last };
+    return [{ ...f, t: last }];
   });
 }
 
