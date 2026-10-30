@@ -134,6 +134,10 @@ its cards is open. A narrow window lays the sheet over the canvas.
 
 Obeya's button, a speech bubble with its counts, stays where it is when its sheet opens and becomes
 the sidebar's top corner that closes it; the sheet is headed "Obeya". Other sheets have a ✕.
+Leaving a canvas (for another, or a reload) with Obeya's sheet open and something entered in its
+field brings the sheet back open on return; with the field empty, or the sheet closed on leaving
+(a draft in it or not), the canvas comes back with it closed (owner, 2026-10-30): an open sheet
+with words in it is work in progress, an empty one was only a glance.
 
 Esc closes a sheet, from a text field in it too, unless a field being edited takes it to cancel the
 edit; with a card open beside a sheet, the first Esc closes the card.

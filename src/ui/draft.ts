@@ -152,6 +152,8 @@ function writeDown() {
 }
 
 export const draftOf = (key: string): Draft => drafts.get(key) ?? EMPTY;
+/** Whether the draft holds anything the owner entered and has not sent: what a reload would keep of it. */
+export const drafted = (key: string) => !!keptOf(draftOf(key));
 
 export function updateDraft(key: string, change: Partial<Draft> | ((d: Draft) => Partial<Draft>)) {
   const d = draftOf(key);

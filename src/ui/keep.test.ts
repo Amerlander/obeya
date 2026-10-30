@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { keep, type Kept, takeKept } from './keep';
+import { keep, type Kept, leaveSheet, takeKept, takeSheetLeft } from './keep';
 
 const store = () => {
   const m = new Map<string, string>();
@@ -19,4 +19,15 @@ test('a page loaded long after starts afresh', () => {
   const s = store();
   keep(s, 'obeya', kept(1000));
   expect(takeKept(s, 'obeya', 1000 + 10 * 60_000)).toBeNull();
+});
+
+test("Obeya's sheet left open over a draft opens again on its canvas, closed or empty it stays closed", () => {
+  const s = store();
+  leaveSheet(s, 'obeya', true);
+  expect(takeSheetLeft(s, 'shop')).toBe(false);
+  expect(takeSheetLeft(s, 'obeya')).toBe(true);
+  expect(takeSheetLeft(s, 'obeya')).toBe(false);
+  leaveSheet(s, 'obeya', true);
+  leaveSheet(s, 'obeya', false);
+  expect(takeSheetLeft(s, 'obeya')).toBe(false);
 });

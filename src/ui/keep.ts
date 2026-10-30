@@ -127,3 +127,28 @@ export function restore(k: Pick<Kept, 'scroll' | 'drafts' | 'video'>) {
   };
   tick();
 }
+
+const sheetKey = (canvas: string) => `obeya-sheet-left-open-${canvas}`;
+
+/**
+ * Whether the owner left the canvas (for another canvas, or a reload) with Obeya's sheet open and
+ * something typed in its field: back on it, the sheet is open again. An empty field, or a sheet
+ * closed as they left, leaves it closed.
+ */
+export function leaveSheet(store: Store, canvas: string, openWithDraft: boolean) {
+  try {
+    if (openWithDraft) store.setItem(sheetKey(canvas), '1');
+    else store.removeItem(sheetKey(canvas));
+  } catch {}
+}
+
+/** Whether the owner left the canvas with Obeya's sheet open over a draft, once. */
+export function takeSheetLeft(store: Store, canvas: string): boolean {
+  try {
+    const open = store.getItem(sheetKey(canvas)) === '1';
+    store.removeItem(sheetKey(canvas));
+    return open;
+  } catch {
+    return false;
+  }
+}

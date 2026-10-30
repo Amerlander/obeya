@@ -22,7 +22,7 @@ import { Phone, phoneView } from './phone';
 import { KoordinatorSheet } from './koordinator';
 import { QueuePill } from './queue';
 import { depsOf } from './deps';
-import { collect, keep, type Kept, restore, type SideSheet, takeKept } from './keep';
+import { collect, keep, type Kept, leaveSheet, restore, type SideSheet, takeKept, takeSheetLeft } from './keep';
 import { Sign, Wordmark } from './logo';
 import { DOUBLE_CLICK_KNOWN, Help, HelpButton, HELP_KEY_KNOWN, NewCardHint } from './help';
 import { know, known } from './known';
@@ -31,7 +31,7 @@ import { closeWish, keepWish, openWish, useWish, WishDialog } from './wish';
 import { PlanDirNote, planDirBoxes, useHiddenEmptyNotes } from './planDirs';
 import { pastedShots } from './pasteHint';
 import { attachTo, imageFiles } from './shots';
-import { cardDraft, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
+import { cardDraft, drafted, fieldOn, focusedDraft, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
 import { HoldToTalk, PushToTalk, SPACE_SHOWS_MS, TAP_MS, ToldList, usePushToTalk, useTold } from './voice';
 import { videoOf } from './spot';
 import { CanvasPill, CardView, shownState, DepLinks, Edges, Links, Minimap, OldBunPill, ProjectView, RestartPill, Sheet, SourcePill, TalkIcon, UpdatePill, WorkspacesPill } from './parts';
@@ -645,10 +645,22 @@ function Canvas({
     });
   };
   useEffect(() => beforeReload(() => keepNow.current()), []);
+  // Obeya's sheet left open over a draft comes back with the canvas; left empty or closed, it stays closed
+  useEffect(() => {
+    const away = () => leaveSheet(sessionStorage, snapshot.canvas.id, kOnRef.current && drafted(OBEYA_DRAFT));
+    addEventListener('pagehide', away);
+    return () => removeEventListener('pagehide', away);
+  }, []);
   useEffect(() => {
     const k = takeKept(sessionStorage, snapshot.canvas.id);
-    if (k) reopen(k).catch(console.error);
-    else openFromAddress().catch(console.error);
+    const sheetLeft = takeSheetLeft(sessionStorage, snapshot.canvas.id);
+    if (k) return void reopen(k).catch(console.error);
+    if (sheetLeft) {
+      // beside the sheet at once, as the canvas comes back
+      quickSide.current = Date.now() + 2000;
+      setKOn(true);
+    }
+    openFromAddress().catch(console.error);
   }, []);
   /** A card the address names (`?card=`, from another canvas's Workspaces list): the canvas flies to it and opens it, once. */
   async function openFromAddress() {
