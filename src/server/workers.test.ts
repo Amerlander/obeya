@@ -1615,6 +1615,16 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'demo', paused: true });
   });
 
+  test('a worker about to pause cannot snooze itself instead', async () => {
+    const c = await atWork();
+    workers.pauseAtSafePoint(c.id);
+    const answer = await runtime.last.call('snooze', { until: new Date(Date.now() + 3_600_000).toISOString(), why: 'check the build' });
+    expect(answer).toContain('Not snoozed: the owner pauses you');
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)).toMatchObject({ paused: true });
+    expect(board.item(c.id)!.snoozed).toBeUndefined();
+  });
+
   test('a worker about to pause when Obeya restarts stays paused after it', async () => {
     const c = await atWork();
     workers.pauseAtSafePoint(c.id);

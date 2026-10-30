@@ -158,8 +158,8 @@ title holds) with `state` `done` (default) or `waits_for_owner`, or both, waking
 first, and ends its turn. A card already there or a time already past is refused. It takes effect
 without asking the owner; the session ends, background work with it; workspace and branch stay, the
 slot frees, the app is parked, and no nudge follows. It is allowed only while the card is at work
-(started, in its PR, finishing after the landing); a question or handover in the same turn takes it
-back. Its instructions send waits longer than a background command's two hours, and waits for
+(started, in its PR, finishing after the landing) and the owner is not pausing it (the pause would
+end at the snooze's time); a question or handover in the same turn takes it back. Its instructions send waits longer than a background command's two hours, and waits for
 another card, to `snooze`; checkpoints are one snooze after another. Idea and Question cards' agents
 have no such tool.
 

@@ -95,8 +95,7 @@ export class Explorers {
   pause(cardId: string) {
     const card = this.idea(cardId);
     if (!this.live.has(cardId)) throw new BadRequest('noAgent', card.paused ? 'the agent is paused already' : 'the agent is not working on anything');
-    this.interrupt(cardId, 'paused');
-    this.o.board.work(cardId, { paused: '{}' });
+    this.interrupt(cardId, 'paused', true);
     this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.pausedByOwner);
   }
 
@@ -167,22 +166,27 @@ export class Explorers {
     this.send(card, text, [], quiet);
   }
 
-  /** Ends the idea's session; its id stays, so the conversation can go on later. A pause ends with it (the idea parked, dropped, decided). */
-  close(cardId: string) {
+  /**
+   * Ends the idea's session; its id stays, so the conversation can go on later. A pause ends with it
+   * (the idea parked, dropped, decided), unless it ends for one (`paused`): then the idea is paused
+   * in the same step, so the canvas never counts it as neither paused nor about to pause.
+   */
+  close(cardId: string, paused = false) {
     const live = this.live.get(cardId);
     this.live.delete(cardId);
     live?.work.stop();
     live?.session.close();
     const card = this.o.board.item(cardId);
     if (card?.idea?.thinking) this.o.board.setIdea(cardId, { thinking: false });
-    if (card?.paused || card?.pausing) this.o.board.work(cardId, { paused: null, pausing: null });
+    if (paused) this.o.board.work(cardId, { paused: '{}', pausing: null });
+    else if (card?.paused || card?.pausing) this.o.board.work(cardId, { paused: null, pausing: null });
   }
 
   /**
    * Ends the idea's session in the middle of a turn (parked, dropped, an error): what the agent has
    * not answered yet stays with the idea and goes to it first when the conversation goes on.
    */
-  interrupt(cardId: string, why: Unread['why']) {
+  interrupt(cardId: string, why: Unread['why'], paused = false) {
     const live = this.live.get(cardId);
     if (live) {
       // a reply already given answered the turn's messages
@@ -193,7 +197,7 @@ export class Explorers {
       const { unread } = this.o.board.idea(cardId);
       if (unread?.why === 'paused') this.o.board.setIdea(cardId, { unread: { ...unread, why } });
     }
-    this.close(cardId);
+    this.close(cardId, paused);
   }
 
   /** After a restart: an idea whose agent was in the middle of a reply gets it. */
@@ -371,8 +375,7 @@ export class Explorers {
     // the owner asked it to pause once its reply was given: what was said meanwhile waits for them to let it go on
     if (this.o.board.row(cardId).pausing) {
       live.current = [];
-      this.interrupt(cardId, 'paused');
-      this.o.board.work(cardId, { paused: '{}' });
+      this.interrupt(cardId, 'paused', true);
       this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.pausedByOwner);
       this.o.onReplied?.(cardId, true);
       return;

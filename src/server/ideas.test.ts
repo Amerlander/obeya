@@ -793,6 +793,22 @@ describe('an idea', () => {
     expect(item(i.id).paused).toBeUndefined();
   });
 
+  test("paused with its canvas's agents, an idea's agent holds the canvas's queue until it is resumed", () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });
+    const first = explorer();
+    first.emit({ type: 'session', id: 'sess-1' });
+    canvas.pauseAgents();
+    expect(canvas.board.canvas.paused).toBe(true);
+    turn(first, 'Zu Erstens.');
+    expect(item(i.id).paused).toBe(true);
+    expect(canvas.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
+    canvas.resumeAgents();
+    expect(canvas.board.canvas.paused).toBeUndefined();
+    expect(explorer().spec.resume).toBe('sess-1');
+    expect(item(i.id).paused).toBeUndefined();
+  });
+
   test('told more while paused, its agent goes on with that and what it had not answered; parked, it is no longer paused', () => {
     const i = idea();
     canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });

@@ -2356,13 +2356,14 @@ export class Workers {
         }
         continue;
       }
-      // about to pause at a safe point, it paused for the restart: it stays paused
-      if (row.pausing && !row.paused) {
+      // about to pause at a safe point, it paused for the restart: it stays paused (an idea's or
+      // Question card's agent, which a restart of this repository's agents leaves running, pauses by itself)
+      if (row.pausing && !row.paused && i.kind !== 'question' && i.state !== 'idea') {
         this.o.board.work(i.id, { paused: JSON.stringify({} satisfies PausedState), pausing: null });
         this.o.board.log(i.id, 'state', 'owner', this.o.board.t.worker.pausedByOwner);
       }
       // the owner's pause holds across the restart
-      if (row.paused || row.pausing) {
+      if (row.paused || (row.pausing && i.kind !== 'question' && i.state !== 'idea')) {
         this.pausedOverRestart(i.id, landed);
         continue;
       }
@@ -3874,6 +3875,7 @@ export class Workers {
           if (!card) return 'Not snoozed: the card is gone.';
           if (live.handedOver) return 'Not snoozed: you asked or handed over in this turn, so the card waits for the owner.';
           if (!(card.state === 'working' || card.state === 'inPr' || card.finishing)) return 'Not snoozed: the card waits for the owner; their answer or approval comes as your next message.';
+          if (card.pausing) return 'Not snoozed: the owner pauses you; end your turn, and once they let you go on, snooze then if it is still due.';
           const named = typeof until === 'string' && until.trim() !== '';
           const at = named ? Date.parse(String(until)) : NaN;
           if (named && Number.isNaN(at)) return 'Not snoozed: give the time as ISO 8601 with your timezone offset (2026-10-31T08:00:00+01:00).';
