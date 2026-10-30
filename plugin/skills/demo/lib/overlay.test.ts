@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { Browser, Page } from 'playwright-core';
 import { launchChromium } from '../../../lib/chromium.ts';
+import { paintTimes } from './director.ts';
 
 // The overlay in a real browser, on a page with iframes as a card's HTML artifact has them.
 describe('the demo overlay', () => {
@@ -43,6 +46,21 @@ describe('the demo overlay', () => {
         canvases: 0,
         demo: false,
       });
+    }
+  });
+
+  // Chrome's JPEGs are 4:2:0, which ffmpeg 6 cropped to even heights only: no frame read its time.
+  test.skipIf(!Bun.which('ffmpeg'))('a frame as Chrome encodes it tells when it was painted', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clock-'));
+    try {
+      const file = path.join(dir, '000000.jpg');
+      await page.screenshot({ path: file, type: 'jpeg', quality: 92 });
+      const t = Date.now() / 1000;
+      const [painted] = paintTimes([{ file, t, width: 800, height: 600 }], dir, { width: 800, height: 600 }, 1);
+      expect(painted).not.toBeNull();
+      expect(Math.abs(painted! - t)).toBeLessThan(5);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 

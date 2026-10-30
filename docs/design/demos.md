@@ -311,6 +311,13 @@ left out: the screencast now and then hands one over after later ones, and held 
 the page as it was a moment before (a highlight ring seemed to blink). A clock read as hours earlier
 (a strip under the white veil) is misread, and its frame stays. The overlay runs in the top frame
 only: Playwright runs init scripts in every frame, and each iframe would paint a strip of its own.
+The strip is read in gray before it is cut out: ffmpeg 6 cuts a 4:2:0 JPEG (as Chrome encodes its
+frames) to even heights only, and the one-pixel row failed on every frame.
+
+During the take the recording browser's processes (its own, the GPU's, every renderer, again every
+few seconds for one that starts later) and the director run above normal priority, and the encoding
+after it at normal priority, so it gives way to another demo's take. Where raising a priority needs
+rights (Linux, macOS) the take runs at normal priority (see Decisions).
 
 #### Highlights
 
@@ -551,6 +558,14 @@ translate or install, the first-fullscreen hint), which would catch taps meant f
 - **Encoding stays with libx264 on the processor** (2026-10-28). Rejected: NVIDIA's encoder, no
   faster (reading the JPEG frames takes most of the time) and, at the same quality, files twice the
   size.
+- **The take runs above normal priority** (2026-10-30): on a busy machine (Windows, agents and
+  builds on every core) the page still painted 60 frames a second, but the screencast delivered as
+  few as 8: the copying, encoding and handing over of its frames waited for the CPU, and the video
+  stuttered. Above normal priority it delivered 55 to 60 under the same load; high priority did no
+  better. Rejected: acknowledging a frame before writing it, and a lower JPEG quality, which changed
+  nothing measurable; rendering on a virtual clock, which would decouple the page from the live app
+  and the agents it shows; encoding below normal priority, which a busy machine starved for over
+  ten minutes.
 - **A highlight ring takes only what can be seen** (2026-10-14): a ring around whole boxes took in
   a task message scrolled out of view and covered half the card.
 - **A held voice that stops answering fails its clip** (2026-10-21): one sat at 0 % CPU for 40
