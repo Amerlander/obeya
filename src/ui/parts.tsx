@@ -337,10 +337,9 @@ export function CanvasPill({ canvas, canvases, waiting }: { canvas: CanvasInfo; 
  * A canvas's agents on its row in the switcher (design: Pausing a canvas's agents): while one works
  * there, the moving line of a card at work, which turns into a pause for all of them while the
  * pointer is on the row; with none at work but some paused, a play that resumes them, on the same
- * hover. Where nothing hovers (touch), the button shows throughout; `labelled` (the phone) says
- * what it does beside its mark.
+ * hover. Where nothing hovers (touch), the button shows throughout.
  */
-export function CanvasAgents({ canvas, labelled }: { canvas: CanvasInfo; labelled?: boolean }) {
+export function CanvasAgents({ canvas }: { canvas: CanvasInfo }) {
   const [asked, setAsked] = useState(false);
   const a = canvas.agents;
   if (!a) return null;
@@ -356,7 +355,7 @@ export function CanvasAgents({ canvas, labelled }: { canvas: CanvasInfo; labelle
     <span className={pause ? 'canvas-agents running' : 'canvas-agents'}>
       <button type="button" className="agents-turn" aria-label={`${label}: ${canvas.name}`} disabled={asked} onClick={click}>
         {pause ? <PauseMark /> : <PlayMark />}
-        {labelled ? <span>{label}</span> : <span className="tip">{label}</span>}
+        <span className="tip">{label}</span>
       </button>
     </span>
   );

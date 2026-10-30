@@ -307,12 +307,6 @@ button.pill:hover { box-shadow: var(--lift); }
   .agents-turn { display: grid; }
   .canvas-agents::before { display: none; }
 }
-.ph-canvases { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.ph-canvases li { display: flex; align-items: center; gap: 10px; }
-.ph-canvases .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.ph-canvases .canvas-agents { position: static; transform: none; width: auto; height: auto; }
-.ph-canvases .agents-turn { display: flex; align-items: center; gap: 6px; width: auto; height: auto; min-height: 40px; padding: 0 12px; font: inherit; font-size: 14px;
-  opacity: 1; background: var(--panel); color: var(--c); }
 .pill:is(.workspaces, .usage) { position: relative; padding: 0; }
 #bar .pill:is(.workspaces, .usage) { padding: 0; }
 .pill:is(.workspaces, .usage) .face { display: flex; align-items: center; gap: 8px; height: 100%; padding: 7px 14px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; border-radius: inherit; }

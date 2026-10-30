@@ -131,8 +131,8 @@ With several canvases, each row of the canvas switcher shows the moving line of 
 at least one agent works on that canvas (any agent with a pause, as above). While the pointer is on
 the row, the line turns into a pause button, faint like a card's, „x laufende Agenten pausieren“ in its tooltip; with
 none at work but at least one paused, the row shows ▶ on the same hover, „x pausierte Agenten
-fortsetzen“. On a touch screen the button is always there; the phone lists, above what runs, each
-canvas with agents and the same button with its words. Nothing else of it sits in the bar.
+fortsetzen“. On a touch screen the button is always there. Nothing else of it sits in the bar. The
+phone has none of it, to stay simple (owner, 2026-10-30): pausing is for the desktop.
 
 Pausing pauses each agent at work there as the pause on its card does, at a safe point; those about
 to pause count as paused already. As long as one of them is still paused (or about to be), the cards the Koordinator lets start on that canvas wait in the queue („Wartet:

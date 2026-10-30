@@ -17,7 +17,7 @@ import { Notify, registerWorker } from './notify';
 import { plain } from './markdown';
 import { Cards } from './message';
 import { glide, type Mark, settle, speed, THROWN, thrown } from './panelHeight';
-import { CanvasAgents, CardFace, cardClass, shownState, TalkIcon } from './parts';
+import { CardFace, cardClass, shownState, TalkIcon } from './parts';
 import { videoOf } from './spot';
 import { clock, failText, forTouch, shortDay, t } from './strings';
 import { UsagePill } from './usage';
@@ -624,19 +624,6 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
         </section>
         <section className="ph-section">
           <h2>{t.phone.running}</h2>
-          {/* each canvas's agents, as on its row in the canvas switcher on the desktop */}
-          {several && canvases.some((c) => c.agents) && (
-            <ul className="ph-canvases">
-              {canvases
-                .filter((c) => c.agents)
-                .map((c) => (
-                  <li key={c.id}>
-                    <span className="name">{c.name}</span>
-                    <CanvasAgents canvas={c} labelled />
-                  </li>
-                ))}
-            </ul>
-          )}
           {/* nothing known yet (the server has not answered since the page loaded): no claim that nothing runs */}
           {/* a snoozed card at the end, after those at work now */}
           {ordered.length > 0 && <Running entries={all.filter(({ item }) => runs(item) || isUnderway(item.id)).sort((a, b) => Number(!!a.item.snoozed) - Number(!!b.item.snoozed))} several={several} onOpen={openCard} />}

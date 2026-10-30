@@ -224,7 +224,7 @@ const de = {
   noneRuns: 'Keine Leinwand läuft',
   repos: (n: number) => `${n} Repositories`,
   switchCanvas: 'Leinwand wechseln',
-  /** The pause and resume of a canvas's agents, on its row in the canvas switcher and on the phone. */
+  /** The pause and resume of a canvas's agents, on its row in the canvas switcher. */
   canvasPause: {
     pause: (n: number) => (n === 1 ? '1 laufenden Agenten pausieren' : `${n} laufende Agenten pausieren`),
     resume: (n: number) => (n === 1 ? '1 pausierten Agenten fortsetzen' : `${n} pausierte Agenten fortsetzen`),
