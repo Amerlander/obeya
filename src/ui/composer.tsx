@@ -14,7 +14,7 @@ import { dropDraft, typeInto, updateDraft, useDraft, useDraftField } from './dra
 import { setHeight, textHeight, useFitHeight } from './fitHeight';
 import { Quote } from './message';
 import { type Reply, replyOn, setReply, useReply } from './reply';
-import { knowsSkills, matching, pickedSkill, type Slash, skillWord, slashAt, useSkills } from './skills';
+import { knowsSkills, matching, type Slash, skillWord, slashAt, useSkills, usedSkills } from './skills';
 import { AttachButton, ShotStrip, useShotInput } from './shots';
 import { t } from './strings';
 import type { Skill } from '../core/types';
@@ -148,7 +148,7 @@ export function Composer({
     el.setSelectionRange(from, to);
     typeInto(el, word);
     if (skip) el.setSelectionRange(el.selectionStart + skip, el.selectionStart + skip);
-    pickedSkill();
+    usedSkills();
   };
   // replying to a message is writing to it: the field takes the focus (not for a reply kept from before)
   const quoted = useRef(reply?.quote.ev);
@@ -248,6 +248,7 @@ export function Composer({
               }
               if (n && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
                 e.preventDefault();
+                usedSkills();
                 return setMarked((m) => (m + (e.key === 'ArrowDown' ? 1 : n - 1)) % n);
               }
               if (n && (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey))) {

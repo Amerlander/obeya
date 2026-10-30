@@ -8,7 +8,7 @@ import type { Skill } from '../core/types';
 import { api } from './api';
 import { know, known } from './known';
 
-/** Set once the owner has picked a skill from the menu: its hint under the field goes. */
+/** Set once the owner has used the menu (moved through it with the arrow keys, or picked a skill): its hint under the field goes. */
 export const SKILLS_KNOWN = 'obeya-skills-known';
 
 /** How long a card's list serves before it is asked again. */
@@ -45,8 +45,8 @@ export function useSkills(cardId: string | undefined, fresh?: unknown): Skill[] 
   return useSyncExternalStore(subscribe, () => (cardId ? lists.get(cardId)?.skills : NONE));
 }
 
-/** The owner picked a skill: they know the menu. */
-export const pickedSkill = () => know(SKILLS_KNOWN);
+/** The owner used the menu: they know it. */
+export const usedSkills = () => know(SKILLS_KNOWN);
 export const knowsSkills = () => known(SKILLS_KNOWN);
 
 /** A `/` word the cursor stands at the end of: where it starts in the text, and what follows the slash. */
