@@ -48,8 +48,9 @@ new one Obeya creates for it, or plans it as a project,
 or splits off the part that is settled as a task while the rest stays open. Larger work is planned
 in plan docs, in the repository or in a folder of your own beside it, which show as projects with
 a card per workstream and a project agent to ask about the plan. Each product you build gets a canvas of its own, over one repository or
-several, and one Obeya runs them all. The bar shows how much of your Claude plan's session and week
-is used.
+several, and one Obeya runs them all. A card's agent, or all of a canvas's from the canvas list,
+can be paused and resumed: each finishes its step first. Typing "/" in a card's field offers the
+skills its agent knows. The bar shows how much of your Claude plan's session and week is used.
 
 ![An Obeya canvas: a project with its workstreams, one at work and one in the queue; beside it a demo and a question waiting for you, a task at work, an approved and a live one, and an idea](site/img/canvas.png)
 
