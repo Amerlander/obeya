@@ -8,7 +8,7 @@ Agents are Claude through the Agent SDK on the machine's Claude Code login (the 
 subscription, no API key). The checkout runs the Claude Code binary the SDK brings; the compiled app
 runs the machine's own (`claude` on the `PATH`, else `~/.local/bin`, or `OBEYA_CLAUDE`). Agents get
 Obeya's environment without the marks of a Claude Code session that may have started Obeya
-(`CLAUDE_CODE_*`, `CLAUDECODE`, `CLAUDE_PID`) or of its supervisor (`OBEYA_SUPERVISED`,
+(`CLAUDE_CODE_*`, `CLAUDECODE`, `CLAUDE_PID`) or of what started it (`OBEYA_SUPERVISED`, `OBEYA_FROM_APP`,
 `BUN_BE_BUN`), but with `CLAUDE_CODE_OAUTH_TOKEN`, the login of a machine without a keychain.
 
 A worker is one session per card with streaming input, permission mode `auto`, and the repository's

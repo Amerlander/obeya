@@ -423,6 +423,7 @@ const DUE_WHY: Record<RestartReason, string> = {
   repository: "restart (a repository's settings changed on its default branch)",
   stop: 'stop (the owner is shutting it down)',
   update: 'restart (the owner installs a new version of the app)',
+  takeover: 'restart (the app takes over this Obeya, which ran without it)',
 };
 
 /** Why Obeya restarts the agents of one repository alone: where they work changed, which they start again with. */

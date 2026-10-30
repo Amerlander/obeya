@@ -757,6 +757,17 @@ export function serve(
             return updates.report(body);
           }),
       },
+      // the Mac app's shell finds this Obeya running without the app that started it, so without the
+      // system's permissions for it (the local network): it ends once the workers paused, and the shell
+      // starts it again under itself (app/src/main.rs, `orphaned`)
+      '/api/app-takeover': {
+        POST: () =>
+          handle(() => {
+            // with no worker to wait for, this server ends right after the answer
+            restarter?.request('takeover');
+            return { taking: !!restarter };
+          }),
+      },
       // a shell installed from a checkout has built itself anew while this Obeya runs on without it (started
       // from a terminal), every few seconds until it starts again: it waits while the owner dictates or
       // watches a video, as a restart does; `kept`: whether the page handed over when the shell asked

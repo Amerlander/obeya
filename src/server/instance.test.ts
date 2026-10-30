@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { claim, INSTANCE_FILE, recorded, release, restarting, running } from './instance';
+import { claim, INSTANCE_FILE, recorded, release, restarting, running, takenOver } from './instance';
 import { ownerHeaders } from './owner';
 import { gitRepo, until } from './testing';
 
@@ -21,6 +21,16 @@ test('an entry is given up only by the process that wrote it', () => {
   expect(recorded(dir)?.pid).toBe(4242);
   release(dir, 4242);
   expect(recorded(dir)).toBeNull();
+});
+
+test('an Obeya that ended for the app to take it over leaves its entry marked, which runs on no more', async () => {
+  claim(dir, { ...entry(4242, 4417), app: true });
+  takenOver(dir, 1);
+  expect(recorded(dir)?.takenOver).toBeUndefined();
+  takenOver(dir, 4242);
+  expect(recorded(dir)).toEqual({ ...entry(4242, 4417), app: true, takenOver: true });
+  // its process is gone: a start serves the home
+  expect(await running(dir, process.pid, 100)).toBeNull();
 });
 
 test('runs: a live process whose URL answers; not a dead one, not this one, nor a live one that stays silent', async () => {

@@ -252,6 +252,20 @@ test('installing an update turns a restart that waits into an update, which wait
   expect(gone).toEqual(['update']);
 });
 
+test('an update or a stop wins over a takeover by the app that waits, and new code does not', () => {
+  const gone: string[] = [];
+  const r = new Restarter({ busy: () => [{ canvas: 'c', card: 'a' }], go: (reason) => gone.push(reason), patienceMs: 10_000, intervalMs: 10 });
+  r.request('takeover');
+  r.request('config');
+  expect(r.due()?.reason).toBe('takeover');
+  r.request('update');
+  expect(r.due()?.reason).toBe('update');
+  r.request('takeover');
+  expect(r.due()?.reason).toBe('update');
+  expect(r.now()).toBe(true);
+  expect(gone).toEqual(['update']);
+});
+
 test('a stop wins over an update that waits', () => {
   const gone: string[] = [];
   const r = new Restarter({ busy: () => [{ canvas: 'c', card: 'a' }], go: (reason) => gone.push(reason), patienceMs: 10_000, intervalMs: 10 });

@@ -52,6 +52,22 @@ a click and hands it to the plugin over IPC, which the page may not call, so the
 
 The page gets the microphone without a webview prompt (the system asks once for the app).
 
+macOS grants the local network and the microphone to the app a process counts as part of (its
+"responsible" process): the app that started it, or started what started it, so the server and every
+worker, shell and tool under it count as the app's. A server that outlives the app that started it
+(the app crashed or was killed) counts as its own then, or as the ended app's, and the system blocks
+every connection of its workers into the local network ("No route to host"; curl and ssh are
+exempt). The Mac app therefore looks at the server it attaches to: one an app started (its entry in
+the home says so, `app`) without a live app behind it is asked to end once its workers paused
+(`POST /api/app-takeover`, a restart that waits for workers and the owner as one for landed code
+does, and wins over one; only an update or a stop wins over it). It ends with its entry marked
+(`takenOver`), and the app starts it again under itself, the window on the page it showed; a stop
+meanwhile gives the entry up, and the app ends with it. A server started from a terminal, over SSH
+or by launchd is left alone: someone started it so on purpose, and the system judges it by what
+started it (a terminal's server counts as the terminal's; SSH and launchd are exempt). The app
+itself starts again through the system (see the app from a checkout), never as a child of the one
+before.
+
 Tauri's webview hands files dropped from the desktop to the shell instead of the page (on Windows
 the page's own drop would need Tauri's handler off, and with it the paths), so the page never hears
 a file drop. The shell passes on where a drag is and, at the drop, the files' paths; the page plays
@@ -293,6 +309,15 @@ which Chrome leaves stale after a seek. Without JavaScript or the chapters file 
   passes, removed it denies. Rejected: installing the new build only once the shell ends, which
   leaves a hand-run `bun run app install` with the same fault and the Dock's copy old after a
   crash.
+- **The Mac app takes over a server that runs without the app that started it** (owner,
+  2026-10-30): such a server left every worker without the local network until the owner quit
+  Obeya, and nothing said why. It waits for the workers' turns, so none is cut off. A self-restart of
+  the app leaves no such server: one the app started ends for the new build and the new app starts
+  it, and the new app is started through the system; on 2026-10-29 a shell built before that still
+  started its successor as its child, whose server then counted as the ended shell's. Rejected:
+  having the server disclaim the app (macOS's `responsibility_spawnattrs_setdisclaim`), as a bun
+  without a bundle of its own gets no permissions of its own; the shell replacing itself with
+  `exec`, which the system start already covers.
 - **A rebuilt checkout shell starts again by itself also beside a server started from a terminal,
   keeping the server** (2026-10-29): otherwise the old shell ran on until the owner quit it, with a
   bundle the new build had replaced under it. It goes at the moments a restart for landed code

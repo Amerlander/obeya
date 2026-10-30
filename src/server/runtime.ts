@@ -887,7 +887,7 @@ export function backgroundWork(tasks: { task_id: string; task_type: string; desc
  * the compiled binary run scripts as Bun.
  */
 export function cleanEnv(env: Record<string, string | undefined> = process.env): Record<string, string | undefined> {
-  return Object.fromEntries(Object.entries(env).filter(([k]) => k === 'CLAUDE_CODE_OAUTH_TOKEN' || !/^(CLAUDE_CODE_|CLAUDECODE$|CLAUDE_PID$|OBEYA_SUPERVISED$|BUN_BE_BUN$)/.test(k)));
+  return Object.fromEntries(Object.entries(env).filter(([k]) => k === 'CLAUDE_CODE_OAUTH_TOKEN' || !/^(CLAUDE_CODE_|CLAUDECODE$|CLAUDE_PID$|OBEYA_SUPERVISED$|OBEYA_FROM_APP$|BUN_BE_BUN$)/.test(k)));
 }
 
 /**

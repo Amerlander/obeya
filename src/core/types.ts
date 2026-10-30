@@ -2513,10 +2513,11 @@ export interface GitSetupPreview {
 
 /**
  * Why Obeya starts again: new code on the checkout it runs from, a configuration the owner saved,
- * a repository's `.obeya/settings.json` changed on its default branch where its agents work, or a
- * new version of the app the owner installs; or why it stops for good (Ctrl-C, SIGTERM).
+ * a repository's `.obeya/settings.json` changed on its default branch where its agents work, a
+ * new version of the app the owner installs, or the Mac app taking over an Obeya that runs without
+ * the app that started it (app/src/main.rs, `orphaned`); or why it stops for good (Ctrl-C, SIGTERM).
  */
-export type RestartReason = 'code' | 'config' | 'repository' | 'update' | 'stop';
+export type RestartReason = 'code' | 'config' | 'repository' | 'update' | 'takeover' | 'stop';
 
 /** A newer version of the app that its shell has downloaded (app/src/update.rs), shown in the bar. */
 export interface AppUpdate {

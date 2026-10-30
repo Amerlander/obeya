@@ -179,7 +179,7 @@ test("agents run the Agent SDK's Claude Code from the checkout, the machine's ow
 });
 
 test("an agent's environment keeps a machine's Claude login but not another session's marks", () => {
-  const env = cleanEnv({ PATH: '/bin', CLAUDE_CODE_OAUTH_TOKEN: 't', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDECODE: '1', OBEYA_SUPERVISED: '1', BUN_BE_BUN: '1' });
+  const env = cleanEnv({ PATH: '/bin', CLAUDE_CODE_OAUTH_TOKEN: 't', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDECODE: '1', OBEYA_SUPERVISED: '1', OBEYA_FROM_APP: '1', BUN_BE_BUN: '1' });
   expect(env).toEqual({ PATH: '/bin', CLAUDE_CODE_OAUTH_TOKEN: 't' });
 });
 

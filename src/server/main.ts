@@ -21,7 +21,10 @@
 // ends once none is (at most 15 minutes); a second Ctrl-C ends it at once. Workers it stopped are
 // resumed when Obeya starts again. Installing a newer version of the app (`POST
 // /api/app-update/install`) goes the same way, and then Obeya ends with UPDATE for the app's shell,
-// which installs it and starts the app again.
+// which installs it and starts the app again. So does the Mac app taking over an Obeya that runs
+// without the app that started it (`POST /api/app-takeover`): Obeya ends with TAKEOVER, marks its
+// entry so, and the app starts it again. The app starts Obeya with OBEYA_FROM_APP, which its entry
+// records (`app`).
 //
 // One Obeya per home (instance.ts): a start on a home where one runs says where and ends. The
 // running one has its port and pid in $OBEYA_HOME/server.json; while its server starts again, a
@@ -50,11 +53,11 @@ import { forgejoForge, originOf } from './forgejo';
 import { fileForge } from './file-forge';
 import { NarrationHost } from './narration';
 import { claudeExecutable, endAgentsHere, sdkRuntime } from './runtime';
-import { claim, release, restarting, running } from './instance';
+import { claim, release, restarting, running, takenOver } from './instance';
 import { recordingRuntime, replayRuntime } from './replay';
 import { MachineSetup, welcome } from './machine';
 import { addToPath, extendPath } from './path';
-import { headOf, installDependencies, ownCheckout, RESTART, RESTART_FROM_FILE, RESTART_PATIENCE_MS, Restarter, UPDATE, watchOwnCode } from './self-update';
+import { headOf, installDependencies, ownCheckout, RESTART, RESTART_FROM_FILE, RESTART_PATIENCE_MS, Restarter, TAKEOVER, UPDATE, watchOwnCode } from './self-update';
 import { AppUpdates } from './app-update';
 import { SourceUpdates } from './source-update';
 import { claudeUsage, UsageMeter } from './usage';
@@ -129,7 +132,8 @@ if (!values.dev && !process.env.OBEYA_SUPERVISED) {
       stdio: ['inherit', 'inherit', 'inherit'],
     });
     const code = await child.exited;
-    if (stopping || (code !== RESTART && code !== RESTART_FROM_FILE)) release(home, process.pid);
+    if (code === TAKEOVER && !stopping) takenOver(home, process.pid);
+    else if (stopping || (code !== RESTART && code !== RESTART_FROM_FILE)) release(home, process.pid);
     else restarting(home, process.pid);
     if (stopping) process.exit(code === RESTART || code === RESTART_FROM_FILE ? 0 : code);
     if (code === RESTART_FROM_FILE) {
@@ -195,20 +199,26 @@ let exitCode = RESTART;
 const live = () => canvases?.all() ?? [];
 /** Starts the server again once no worker is in the middle of a turn, or when the owner says so. */
 const busy = () => live().flatMap((c) => c.busy().map((card) => ({ canvas: c.id, card })));
+const leave = (reason: RestartReason) => {
+  server?.stop(true);
+  if (reason === 'stop') return shutdown(0);
+  if (reason === 'update') return shutdown(UPDATE);
+  if (own && ranFrom) {
+    const done = installDependencies(own, ranFrom);
+    if (done.ran && done.ok) console.log(`Obeya: installed the new dependencies in ${own}`);
+    else if (done.ran) console.error(`Obeya: installing the new dependencies in ${own} failed; starting again anyway\n${done.output}`);
+  }
+  // after a takeover the app starts it again, not the supervisor
+  shutdown(reason === 'takeover' ? TAKEOVER : exitCode);
+};
 const restarter = new Restarter({
   busy,
   // a command in its undo window holds a restart off even when the page that said it reloads
   held: () => (live().some((c) => c.commander.holding()) ? ['voice'] : []),
   go: (reason) => {
-    server?.stop(true);
-    if (reason === 'stop') return shutdown(0);
-    if (reason === 'update') return shutdown(UPDATE);
-    if (own && ranFrom) {
-      const done = installDependencies(own, ranFrom);
-      if (done.ran && done.ok) console.log(`Obeya: installed the new dependencies in ${own}`);
-      else if (done.ran) console.error(`Obeya: installing the new dependencies in ${own} failed; starting again anyway\n${done.output}`);
-    }
-    shutdown(exitCode);
+    // the app that asked hears the answer first, which may be the request that goes at once
+    if (reason === 'takeover') return void setTimeout(() => leave(reason), 100);
+    leave(reason);
   },
 });
 // workers in the middle of a turn hear of a restart that waits for them, and pause for it
@@ -318,7 +328,7 @@ const shutdown = (code: number) => {
   transcriber.stop();
   narration.stop();
   // the supervisor stays across a restart, and gives the entry up when it ends
-  if (!process.env.OBEYA_SUPERVISED) release(home, process.pid);
+  if (!process.env.OBEYA_SUPERVISED) (code === TAKEOVER ? takenOver : release)(home, process.pid);
   process.exit(code);
 };
 // stopping waits for the workers like a restart; a second Ctrl-C has it go ahead at once
@@ -348,7 +358,7 @@ const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.a
 // what held the server up, or a page, for the owner to notice: in this log and in the home's stalls.log
 const stalls = new Stalls({ home }).start();
 server = serve(canvases, { transcriber, setup: voiceSetup }, Number(values.port), values.dev, config, restarter, narration, machine, stop, updates, access, push, sources, usage, stalls);
-claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION });
+claim(home, { pid: process.env.OBEYA_SUPERVISED ? process.ppid : process.pid, port: server.port!, url: `http://127.0.0.1:${server.port}`, version: VERSION, ...(process.env.OBEYA_FROM_APP ? { app: true } : {}) });
 // the address as a one-time link that signs a browser in (owner.ts)
 const link = access.owner.link(`http://127.0.0.1:${server.port}`);
 console.log(`Obeya ${own ? `from ${own}` : VERSION} on ${link} (${source === 'file' ? configFile : 'canvases from the command line'}), agents on ${claudeExecutable() ?? 'the Claude Code the Agent SDK brings'}`);

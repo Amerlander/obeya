@@ -909,6 +909,25 @@ describe('a newer version of the app', () => {
     expect(gone).toEqual(['update']);
   });
 
+  test('the app taking over an Obeya that runs without it ends it once the workers paused, also when a restart for new code waits', async () => {
+    const gone: string[] = [];
+    let busy = [{ canvas: 'main', card: 'k1' }];
+    const restarter = new Restarter({ busy: () => busy, go: (reason) => gone.push(reason), patienceMs: 60_000, intervalMs: 10 });
+    server.stop(true);
+    server = serve([canvas], { transcriber: { transcribe: async () => ({ text: '', doubtful: false }) } }, 0, false, undefined, restarter, undefined, undefined, undefined, new AppUpdates());
+    restarter.request('code');
+    expect(await (await post('/api/app-takeover', '')).json()).toEqual({ taking: true });
+    await until(() => restarter.due()?.reason === 'takeover');
+    // the supervisor would start it again in place, still without the app: it ends for the app instead
+    expect(restarter.due()?.reason).toBe('takeover');
+    restarter.request('code');
+    expect(restarter.due()?.reason).toBe('takeover');
+    expect(gone).toEqual([]);
+    busy = [];
+    await until(() => gone.length === 1);
+    expect(gone).toEqual(['takeover']);
+  });
+
   test('a new build of the shell starts again without the server, not while the owner speaks, and the page hands over what a reload keeps', async () => {
     const gone: string[] = [];
     const restarter = new Restarter({ busy: () => [{ canvas: 'main', card: 'k1' }], go: (reason) => gone.push(reason) });

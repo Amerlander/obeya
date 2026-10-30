@@ -30,6 +30,9 @@
 //   and builds itself anew when app/ changes there (update.rs).
 // - Starting again (an update, a new build) brings the window back where it was, on the page it showed
 //   (`relaunch`).
+// - On a Mac an Obeya that runs without the app that started it lacks the system's permissions for
+//   that app (the local network): the shell has it end once its workers paused and starts it again
+//   under itself (`orphaned`).
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -175,12 +178,40 @@ pub(crate) fn home() -> PathBuf {
     .unwrap_or_else(|| std::env::home_dir().unwrap_or_default().join(".obeya"))
 }
 
-/// The port of the Obeya that runs on `home` (src/server/instance.ts).
+/// The home's entry of the Obeya that runs on it (src/server/instance.ts).
+fn entry(home: &Path) -> Option<serde_json::Value> {
+  serde_json::from_str(&fs::read_to_string(home.join("server.json")).ok()?).ok()
+}
+
+/// The port of the Obeya that runs on `home`.
 fn running(home: &Path) -> Option<u16> {
-  let text = fs::read_to_string(home.join("server.json")).ok()?;
-  let entry: serde_json::Value = serde_json::from_str(&text).ok()?;
-  let port = u16::try_from(entry["port"].as_u64()?).ok()?;
+  let port = u16::try_from(entry(home)?["port"].as_u64()?).ok()?;
   answers(port).then_some(port)
+}
+
+/// Whether the Obeya that runs on `home` runs without the app that started it. On a Mac the system
+/// grants its permissions (the local network, the microphone) to the app a process counts as part
+/// of: the one that started it, or started what started it. Once that app has ended (it crashed, or
+/// was killed) the server counts as its own, or as the ended one's, and every LAN connection of its
+/// workers fails with "No route to host". Only a server an app started (`app` in its entry) counts:
+/// one started from a terminal, over SSH or by launchd runs as its owner meant it to.
+#[cfg(target_os = "macos")]
+fn orphaned(home: &Path) -> bool {
+  extern "C" {
+    fn responsibility_get_pid_responsible_for_pid(pid: i32) -> i32;
+    fn kill(pid: i32, sig: i32) -> i32;
+  }
+  const ESRCH: i32 = 3;
+  let Some(entry) = entry(home).filter(|e| e["app"] == true) else { return false };
+  let Some(pid) = entry["pid"].as_i64().and_then(|p| i32::try_from(p).ok()) else { return false };
+  // SAFETY: both take a pid and touch nothing else; signal 0 only asks whether the process is there
+  let responsible = unsafe { responsibility_get_pid_responsible_for_pid(pid) };
+  responsible > 0 && (responsible == pid || (unsafe { kill(responsible, 0) } != 0 && std::io::Error::last_os_error().raw_os_error() == Some(ESRCH)))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn orphaned(_: &Path) -> bool {
+  false
 }
 
 fn pick_port() -> u16 {
@@ -300,6 +331,8 @@ fn start_server(app: &AppHandle, home: &Path, port: u16, log: &(fs::File, PathBu
   cmd
     .args(["--port", &port.to_string()])
     .env("OBEYA_HOME", home)
+    // its entry in the home says so (`orphaned`)
+    .env("OBEYA_FROM_APP", "1")
     .stdin(Stdio::null())
     .stdout(log.0.try_clone()?)
     .stderr(log.0.try_clone()?);
@@ -331,58 +364,83 @@ fn serve(app: AppHandle, obeya: Arc<Obeya>, updates: Arc<update::Updates>) {
     obeya.port.store(port, Ordering::SeqCst);
     navigate(&app, &obeya);
   };
-  if let Some(port) = running(&home) {
-    attach(port);
-    return watch(&app, &obeya, &home);
+  loop {
+    if let Some(port) = running(&home) {
+      attach(port);
+      if !watch(&app, &obeya, &home) {
+        return;
+      }
+      // it ended for this shell to start it under itself: the window comes back on the page it showed
+      let page = main_window(&app).and_then(|w| w.url().ok()).filter(|u| obeya.ours(u) && u.scheme() == "http");
+      *obeya.first.lock().unwrap() = page.map(|u| next_of(&u));
+    }
+    if let Started::Ended = start(&app, &obeya, &updates, &home, &attach) {
+      return;
+    }
   }
-  let Some(log) = log_file(&home) else {
-    return fail(
-      &app,
+}
+
+/// How a start of the server came out.
+enum Started {
+  /// It ran, and has ended (the app with it, or for an update).
+  Ended,
+  /// Another start on this home got there first: the server said so and ended.
+  Beaten,
+}
+
+/// Starts the server, shows its canvas once it answers, and waits for it to end.
+fn start(app: &AppHandle, obeya: &Obeya, updates: &update::Updates, home: &Path, attach: &dyn Fn(u16)) -> Started {
+  let Some(log) = log_file(home) else {
+    fail(
+      app,
       say(
         &format!("Obeya kann nicht in {} schreiben.", home.display()),
         &format!("Obeya cannot write to {}.", home.display()),
       ),
     );
+    return Started::Ended;
   };
   let port = pick_port();
-  let mut child = match start_server(&app, &home, port, &log) {
+  let mut child = match start_server(app, home, port, &log) {
     Ok(c) => c,
     Err(e) => {
-      return fail(
-        &app,
+      fail(
+        app,
         say(&format!("Obeya ließ sich nicht starten: {e}"), &format!("Obeya could not be started: {e}")),
-      )
+      );
+      return Started::Ended;
     }
   };
   let started = Instant::now();
   while !answers(port) {
     if let Ok(Some(status)) = child.try_wait() {
-      // another start on this home got there first: the server said so and ended
-      if let Some(port) = running(&home) {
-        attach(port);
-        return watch(&app, &obeya, &home);
+      if running(home).is_some() {
+        return Started::Beaten;
       }
-      return fail(&app, ended(status, &log.1));
+      fail(app, ended(status, &log.1));
+      return Started::Ended;
     }
     if started.elapsed() > START_PATIENCE {
-      return fail(
-        &app,
+      fail(
+        app,
         say(
           &format!("Obeya antwortet nicht.\n\n{}", tail(&log.1)),
           &format!("Obeya does not answer.\n\n{}", tail(&log.1)),
         ),
       );
+      return Started::Ended;
     }
     thread::sleep(Duration::from_millis(150));
   }
   attach(port);
   obeya.child.store(true, Ordering::SeqCst);
   match child.wait() {
-    Ok(status) if status.code() == Some(update::EXIT) => update::install(&app, &obeya, &updates),
+    Ok(status) if status.code() == Some(update::EXIT) => update::install(app, obeya, updates),
     Ok(status) if status.success() || obeya.stopping.load(Ordering::SeqCst) => app.exit(0),
-    Ok(status) => fail(&app, ended(status, &log.1)),
-    Err(e) => fail(&app, e.to_string()),
+    Ok(status) => fail(app, ended(status, &log.1)),
+    Err(e) => fail(app, e.to_string()),
   }
+  Started::Ended
 }
 
 fn ended(status: std::process::ExitStatus, log: &Path) -> String {
@@ -393,20 +451,30 @@ fn ended(status: std::process::ExitStatus, log: &Path) -> String {
 }
 
 /// An Obeya the shell did not start in this run (an earlier run of the app did, or a terminal): the
-/// app ends with it.
-fn watch(app: &AppHandle, obeya: &Obeya, home: &Path) {
+/// app ends with it. One that runs without the app that started it (`orphaned`) is asked to end once
+/// its workers paused (`POST /api/app-takeover`); true once it has (its entry says so, `takenOver`),
+/// for this shell to start it again under itself. A stop meanwhile ends it for good, the app with it.
+fn watch(app: &AppHandle, obeya: &Obeya, home: &Path) -> bool {
   let port = obeya.port.load(Ordering::SeqCst);
   let mut silent = 0;
+  let mut taking = false;
   loop {
     thread::sleep(Duration::from_secs(1));
+    if !taking && !obeya.stopping.load(Ordering::SeqCst) && orphaned(home) {
+      taking = post(port, "/api/app-takeover", &serde_json::json!({})).is_some_and(|a| a["taking"] == true);
+    }
     silent = if answers(port) { 0 } else { silent + 1 };
     // a restart keeps the home's entry, marked while new dependencies go in (up to 90 s, as a start
     // waits for it); a stop ends it for good and gives the entry up
     let entry = fs::read_to_string(home.join("server.json")).ok();
     let stopped = obeya.stopping.load(Ordering::SeqCst) || entry.is_none();
+    if silent > 0 && !stopped && entry.as_ref().is_some_and(|e| e.contains("\"takenOver\"")) {
+      return true;
+    }
     let patience = if entry.is_some_and(|e| e.contains("\"restarting\"")) { 90 } else { 30 };
     if silent > 0 && stopped || silent > patience {
-      return app.exit(0);
+      app.exit(0);
+      return false;
     }
   }
 }

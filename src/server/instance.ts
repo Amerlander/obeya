@@ -15,6 +15,10 @@ export interface Instance {
   version: string;
   /** Its server ended to start again (new code, a saved configuration) and does not answer yet. */
   restarting?: boolean;
+  /** Started by the app's shell (app/), which may take it over once it runs without the app (app/src/main.rs, `orphaned`). */
+  app?: boolean;
+  /** It ended for the app's shell to start it again under itself; the process is gone. */
+  takenOver?: boolean;
 }
 
 export const INSTANCE_FILE = 'server.json';
@@ -35,6 +39,12 @@ export function claim(home: string, instance: Instance) {
 export function restarting(home: string, pid: number) {
   const i = recorded(home);
   if (i?.pid === pid) claim(home, { ...i, restarting: true });
+}
+
+/** Marks the entry of `pid`, which ends now, as ended for the app to take over (`takenOver`). */
+export function takenOver(home: string, pid: number) {
+  const i = recorded(home);
+  if (i?.pid === pid) claim(home, { ...i, takenOver: true });
 }
 
 /** How long a start waits for an Obeya that is starting again. */

@@ -16,6 +16,8 @@ export const RESTART = 75;
 export const RESTART_FROM_FILE = 76;
 /** The server ended for the app's shell to install a new version of the app and start it again (app/src/update.rs). */
 export const UPDATE = 77;
+/** The server ended for the app's shell to start it again under itself (app/src/main.rs, `orphaned`). */
+export const TAKEOVER = 78;
 
 /** How long a restart waits for workers to finish their turns before it cuts them off. */
 export const RESTART_PATIENCE_MS = 15 * 60_000;
@@ -74,6 +76,7 @@ export class Restarter {
   private current: Due | null = null;
   private stopping = false;
   private updating = false;
+  private taking = false;
   private gone = false;
   private stopWaiting = () => {};
   private listeners = new Set<() => void>();
@@ -105,17 +108,19 @@ export class Restarter {
 
   /**
    * Asks for a restart; one that is due already covers the next reason too, and turns into an
-   * update when asked for one (the update restarts too), or into a stop (nothing starts again).
+   * update when asked for one (the update restarts too), into a takeover by the app (which starts
+   * it again), or into a stop (nothing starts again).
    */
   request(reason: RestartReason) {
     if (this.gone) return;
     if (reason === 'stop') this.stopping = true;
     if (reason === 'update' && !this.stopping) this.updating = true;
+    if (reason === 'takeover') this.taking = true;
     if (this.current) {
       if (reason === 'stop' && this.current.reason !== 'stop') {
         this.current = { ...this.current, reason, owner: [] };
         this.emit();
-      } else if (reason === 'update' && this.current.reason !== 'stop' && this.current.reason !== 'update') {
+      } else if (OUTRANKS[reason] > OUTRANKS[this.current.reason]) {
         this.current = { ...this.current, reason };
         this.emit();
       }
@@ -165,13 +170,16 @@ export class Restarter {
     this.gone = true;
     this.stopWaiting();
     this.current = null;
-    this.o.go(this.stopping ? 'stop' : this.updating ? 'update' : reason);
+    this.o.go(this.stopping ? 'stop' : this.updating ? 'update' : this.taking ? 'takeover' : reason);
   }
 
   private emit() {
     for (const fn of this.listeners) fn();
   }
 }
+
+/** Which reason a restart that is due turns into when asked for another: the one that ends more of this server. */
+const OUTRANKS: Record<RestartReason, number> = { code: 0, config: 0, repository: 0, takeover: 1, update: 2, stop: 3 };
 
 const key = (b: Busy[]) => b.map((x) => `${x.canvas}/${x.card}`).join(' ');
 
