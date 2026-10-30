@@ -435,6 +435,12 @@ ends, at `stop` (through CDP, since on Windows killing its holder leaves it behi
 Without `CLAUDE_PID` (a terminal) there is one browser per user. `--fake-mic` plays a WAV as the
 microphone.
 
+The commands drive Chromium only. For WebKit (Safari's engine, and the macOS app's window), Firefox
+or a script in Playwright's API, the skill's `playwright` prints the import line of the
+`playwright-core` it launches its browser with, as a file URL that a script anywhere can import
+(a bare `playwright-core` resolves only inside Obeya's tree), and which of Playwright's own browsers
+the machine has; `playwright install` installs the missing ones.
+
 What headless Chromium can't reproduce (the on-screen keyboard and `visualViewport`, video
 fullscreen, rotation) workers check in Obeya's repository with `scripts/android-phone.ts`: Chrome in
 the Android emulator, driven from the shell (start, open, eval, tap, type, rotate, screenshot,
@@ -513,6 +519,11 @@ translate or install, the first-fullscreen hint), which would catch taps meant f
 - **A dry run before the first render, and failures that say where**: twice a scene waited for a
   state that never came and showed it only after synthesis; a worker once took the screenshot's
   path, the only path in the message, for the page's address.
+- **The browser skill names the Playwright it brings** (2026-10-30): a worker that wanted WebKit
+  searched the whole home directory six levels deep for a `playwright-core`, which made macOS ask
+  the owner for access to Music and iCloud Drive on the app's behalf. The skill says where it is.
+  Rejected: forbidding the search in the prompt; WebKit and Firefox in the skill's own commands, which
+  speak CDP, a protocol neither engine has.
 - **Demos run under Node, not Bun** (2026-10-09): Bun 1.3.12 closed a child's pipe when it collected
   the process object, after the descriptor had gone to the next child, so the recording browser
   lost its DevTools pipe and every demo run with `bun` hung after its first scene. A demo started

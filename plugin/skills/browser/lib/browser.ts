@@ -23,6 +23,9 @@
 //                                     ArrowUp/Down/Left/Right)
 //     type:TEXT  wait:MS  shot:FILE.png  eval:JS
 //     X,Y may be @<css selector> instead: the centre of the first matching element
+//   playwright                       print the import of the Playwright it is launched with, for a
+//                                    script of one's own, and which of Playwright's browsers are installed
+//   playwright install <browser>…    install Playwright's own webkit, firefox or chromium
 //
 // Each Claude Code session has a browser of its own: its state (port, pid) is in a file named by
 // the session's process (`CLAUDE_PID`), and the process holding the browser (`serve`, started by
@@ -30,11 +33,12 @@
 // browser per user, until `stop`. Playwright launches it (`plugin/lib/chromium.ts`), so it is the
 // Chromium the demo skill records with, with a fresh profile that goes with it.
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const fail = (msg: string): never => {
   console.error(msg);
@@ -495,6 +499,31 @@ async function stop() {
   console.log('Browser stopped.');
 }
 
+/**
+ * The module a script imports Playwright from: the `playwright-core` this browser is launched with,
+ * found up the tree from here (a checkout's node_modules, or the one beside the plugin among
+ * Obeya's resources and on a host). A file URL, which an import takes on Windows too.
+ */
+export function playwrightModule(): string {
+  return import.meta.resolve('playwright-core');
+}
+
+/** `playwright`: the import line and Playwright's own browsers; `playwright install …` installs them. */
+async function playwright(args: string[]) {
+  const url = playwrightModule();
+  if (args[0] === 'install') {
+    const cli = path.join(path.dirname(fileURLToPath(url)), 'cli.js');
+    const r = spawnSync(process.execPath, [cli, 'install', ...args.slice(1)], { stdio: 'inherit' });
+    process.exit(r.status ?? 1);
+  }
+  const pw = (await import(url)) as typeof import('playwright-core');
+  console.log(`import { chromium, firefox, webkit } from '${url}';`);
+  for (const name of ['webkit', 'firefox', 'chromium'] as const) {
+    const exe = pw[name].executablePath();
+    console.log(fs.existsSync(exe) ? `${name}: installed` : `${name}: not installed (playwright install ${name})`);
+  }
+}
+
 async function main([command, ...args]: string[]) {
   switch (command) {
     case 'serve':
@@ -608,8 +637,11 @@ async function main([command, ...args]: string[]) {
       return;
     }
 
+    case 'playwright':
+      return playwright(args);
+
     default:
-      fail('Usage: browser.ts <start|stop|status|tabs|open|nav|close|eval|text|html|screenshot|pdf|input> — see header comment for details.');
+      fail('Usage: browser.ts <start|stop|status|tabs|open|nav|close|eval|text|html|screenshot|pdf|input|playwright> — see header comment for details.');
   }
 }
 
