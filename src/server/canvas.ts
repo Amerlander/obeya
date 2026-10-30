@@ -13,7 +13,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, pausable, resumable, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, SHARED_FIELDS, type SharedSettings, type SpotInput, type TrustGroup } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, pausable, resumable, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, SHARED_FIELDS, type SharedSettings, type Skill, type SpotInput, type TrustGroup } from '../core/types';
 import { inQueue } from '../core/queue';
 import { BadRequest, Board, pathOfRef, replyNote, type StoredContribution } from './board';
 import type { ChangeRoute } from '../core/types';
@@ -35,6 +35,11 @@ import { outsidePlanDir, readPlanDocs, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, planDirNoteBox, unionBounds } from '../core/layout';
 import { type AgentRuntime, idleRuntime, withAgentSetting, withLimitWait, withRepoTrust } from './runtime';
 import { commandsOf, heldGroups, withoutHeld } from './trust';
+import { Skills } from './skills';
+
+/** The skill lists of all canvases: several share a repository, and the user's skills are the same on each. */
+const sharedSkills = new Skills();
+import { OBEYA_PLUGIN } from './demo';
 import { changesCode, RESTART_PATIENCE_MS, whenIdle } from './self-update';
 import { Sharing, siteIncomplete } from './share';
 import { siteMissing, siteName } from './site';
@@ -54,6 +59,8 @@ export interface CanvasDeps {
   /** Obeya's data directory (workspaces live under it). */
   home: string;
   runtime: AgentRuntime;
+  /** The skills the cards' agents know (`skillsOf`); Claude Code on this machine tells, when left out. */
+  skills?: Skills;
   /** Runs the cards' workers; `runtime` when left out. */
   workerRuntime?: AgentRuntime;
   /**
@@ -205,6 +212,8 @@ export class CanvasRuntime {
   readonly files: Files;
   readonly answers: Answers;
   readonly revisions: Revisions;
+  /** The skills of the cards' agents, by repository. */
+  private readonly skills: Skills;
   /** Demos shared with colleagues, on the demo site of the card's repository. */
   readonly sharing: Sharing;
   /** Its repositories, the home one first. */
@@ -249,6 +258,7 @@ export class CanvasRuntime {
     const workerRuntime = deps.workerRuntime ?? (deps.idleWorkers ? idleRuntime : undefined);
     deps = { ...deps, runtime: runtime(deps.runtime), ...(workerRuntime ? { workerRuntime: runtime(workerRuntime) } : {}) };
     this.deps = deps;
+    this.skills = deps.skills ?? sharedSkills;
     // the main branch the owner set counts from the start: the repository's id, its settings and its Lesestand go by it
     for (const r of config.repos) this.useBranch(r);
     this.config = config;
@@ -1256,6 +1266,20 @@ export class CanvasRuntime {
   /** What the card's work changes (`Workers.diff`), for an archived card too. */
   diff(cardId: string, full: boolean): Promise<CardDiff | null> {
     return this.repoOf(this.board.card(cardId) ?? cardId).workers.diff(cardId, full);
+  }
+
+  /**
+   * The skills the owner can ask the card's agent for by `/name` in their words: those of its
+   * repository (as its default branch has them), the user's, and those of the plugins it loads.
+   * None on a card whose agent works outside a repository (a Question card's) or that none takes.
+   */
+  async skillsOf(cardId: string): Promise<Skill[]> {
+    const card = this.board.item(cardId);
+    if (!card || card.kind === 'question' || !this.runs(card)) return [];
+    const cwd = this.repoOf(card).read.path;
+    // an idea's agent loads no plugins; a review card's reads none of the repository's settings
+    const idea = card.state === 'idea';
+    return this.skills.of({ cwd, plugins: idea ? [] : [OBEYA_PLUGIN], untrusted: (!idea && !!card.contribution) || this.claudeHeld(cwd) });
   }
 
   /** Whether the app in the card's workspace answers, for the owner to try it by hand (`Workers.appUp`). */

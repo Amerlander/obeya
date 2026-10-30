@@ -1928,6 +1928,12 @@ const de = {
     pasteHint: (k: { paste: string; grab?: string }) =>
       `Screenshots fügst du auch mit ${k.paste} aus der Zwischenablage ein, ohne sie erst als Datei zu speichern.${k.grab ? ` ${k.grab} legt einen Screenshot direkt dort ab.` : ''}`,
   },
+  /** The menu of the agent's skills that `/` opens in a field whose words go to a card's agent. */
+  skills: {
+    menu: 'Skills des Agenten',
+    hint: '„/“ ruft einen Skill des Agenten auf, wie in Claude Code.',
+    loading: 'Skills werden geladen …',
+  },
   /** On an empty canvas: speaking first (and where its card lands), the double-click second. */
   empty: { none: 'Noch keine Aufgaben.', speak: 'Halte die Leertaste und sag, was Obeya bauen soll.', where: 'Die Karte erscheint dort, wo der Mauszeiger beim Loslassen steht.', click: 'Oder doppelklicke auf die Fläche, um selbst eine anzulegen.' },
 };
@@ -3727,6 +3733,12 @@ const en: Strings = {
     winShiftS: 'Win+Shift+S',
     pasteHint: (k: { paste: string; grab?: string }) =>
       `You can also paste screenshots from the clipboard with ${k.paste}, without saving them as a file first.${k.grab ? ` ${k.grab} puts a screenshot straight there.` : ''}`,
+  },
+  /** The menu of the agent's skills that `/` opens in a field whose words go to a card's agent. */
+  skills: {
+    menu: "The agent's skills",
+    hint: '“/” asks the agent for one of its skills, as in Claude Code.',
+    loading: 'Loading skills …',
   },
   empty: { none: 'No tasks yet.', speak: 'Hold Space and say what Obeya should build.', where: 'The card appears where the pointer is when you let go.', click: 'Or double-click on the canvas to create one yourself.' },
 };

@@ -11,6 +11,8 @@ import { readShared } from '../adapters';
 import { commandsOf } from './trust';
 import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 import { git, HERE } from './workspaces';
+import { type SkillPlace, Skills } from './skills';
+import { OBEYA_PLUGIN } from './demo';
 
 let dir: string;
 const dirs: string[] = [];
@@ -1426,3 +1428,29 @@ test("a canvas's pause lasts while one of its paused agents cannot go on, its re
     c.shutdown();
   }
 }, 30_000);
+
+describe("the skills of a card's agent", () => {
+  test('are those Claude Code lists in its repository, with the plugins its agent loads', async () => {
+    const asked: SkillPlace[] = [];
+    const web = join(dir, 'web');
+    const c = new CanvasRuntime(
+      { name: 'Skills', repos: [{ path: web, clones: 1, settings: { land: 'pr' } }] },
+      { store: new Store(':memory:'), home: join(dir, 'skills-home'), runtime: new FakeRuntime(), forge: noForge, skills: new Skills(async (p) => (asked.push(p), [{ name: 'review', description: 'Reviews' }])) },
+    );
+    try {
+      const task = c.board.create({ title: 'Task', x: 0, y: 0 });
+      expect(await c.skillsOf(task.id)).toEqual([{ name: 'review', description: 'Reviews' }]);
+      const idea = c.board.create({ title: 'Idea', x: 0, y: 0, idea: true });
+      await c.skillsOf(idea.id);
+      const read = c.repos[0]!.read.path;
+      expect(asked).toEqual([
+        { cwd: read, plugins: [OBEYA_PLUGIN], untrusted: false },
+        // an idea's agent loads no plugins
+        { cwd: read, plugins: [], untrusted: false },
+      ]);
+      expect(await c.skillsOf('nope').catch(() => 'refused')).toEqual([]);
+    } finally {
+      c.shutdown();
+    }
+  });
+});

@@ -2813,6 +2813,7 @@ function Talk({ item, past, field }: { item: Item; past?: boolean; field?: TalkF
           allowEmpty={picked || deciding}
           obeya={field.listener}
           noImages={field.noImages}
+          skills={field.listener ? undefined : item.id}
           chip={
             (at || deciding) && (
               <>

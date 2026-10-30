@@ -2632,3 +2632,12 @@ export interface Notice {
   /** The card (`cardId`) moved to this canvas: a page that has it open follows it there. */
   movedTo?: string;
 }
+
+/** A skill (or command) of Claude Code the owner can ask a card's agent for by `/name` in their words. */
+export interface Skill {
+  name: string;
+  /** What it does, as its file says. */
+  description: string;
+  /** What to write after the name (`<file>`), when it says. */
+  hint?: string;
+}

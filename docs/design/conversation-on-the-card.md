@@ -279,6 +279,31 @@ connection breaks before the answer, the page asks Obeya by the recording's id w
 and returns words and screenshots to the field only if not; the command's line then says „Obeya hat
 es; nur die Antwort kam nicht an.“ instead of „Das hat nicht geklappt“.
 
+### Skills by `/`
+
+In the field where a card's agent hears the owner's words (a task's, an idea's, a review card's; not
+where the Koordinator reads them, nor on a Question card), `/` at the start of the text or of a word
+opens a menu of the skills the agent can be asked for, as in Claude Code: the repository's, the
+user's, those of the plugins the agent loads (Obeya's own for a worker) and Claude Code's own skills
+(`/code-review`), in that order, each with its argument hint and the first line of its description;
+not Claude Code's controls of a session (`/compact`, `/model`), which Obeya runs itself. A path
+(`/src/ui`) opens none. What follows the slash filters: names that start with it first (also after a
+plugin's prefix, `obeya:demo`), then those that contain it; the menu shows only while something
+fits. The arrow keys mark, Enter, Tab or a click picks, Esc closes the menu and leaves the card
+open. Picking types `/name ` over the word, as if by hand (⌘Z takes it back). The words reach the
+agent as they are: Claude Code's skill tool takes `/name` in a message as the owner asking for that
+skill, at the start or in the middle of a sentence. Until the owner has picked a skill once, a hint
+under the field says so while it has the cursor („„/“ ruft einen Skill des Agenten auf, wie in
+Claude Code.“).
+
+Claude Code says which skills there are: Obeya starts it in the repository's Lesestand with the
+agent's plugins and settings, asks for its commands and skills, and ends it without a message (no
+tokens; a few seconds). A repository whose Claude Code configuration waits for the owner's trust
+(see Trusting a repository's commands) offers the user's skills alone, as its agents get them; so does a review
+card, whose agent reads none of the repository's settings. A list is kept for two minutes per
+place; after that it serves while it is asked again. A worker on another machine gets this
+machine's list.
+
 ### Marking screenshots
 
 A screenshot still in a field opens ready to be marked: a drag frames a region, a click sets a pin,
@@ -383,3 +408,10 @@ image.
   phone above all. The named files stay in view, being results themselves; a handover without demo
   or named files shows its files open, since some result must show. The size of the change moved
   from the branch line to the folded list, so count, size and files stand together.
+- **Claude Code lists the skills, and the owner's `/name` reaches the agent unchanged** (2026-10-30,
+  GitHub issue #27). Rejected: Obeya reading the skill directories itself (plugins, marketplaces,
+  the account's and Claude Code's own skills: Claude Code's discovery to rebuild and keep up with);
+  the list of a running session alone (none for a card waiting to start or done); passing a message
+  that starts with `/name` to Claude Code as a slash command (Obeya says what the owner's words are,
+  a note on a handover, say, so they never start the message, and words that reach the agent during
+  a turn come with a tool result, where nothing is expanded).
