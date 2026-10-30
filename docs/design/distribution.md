@@ -63,6 +63,10 @@ WebKitGTK's MediaRecorder records nothing (2.50 and 2.52, 2026-10-08), so the Li
 Web Audio samples and sends a WAV (tried only headless; a Linux desktop with a real microphone is
 untried).
 
+WebKit, the webview on macOS and Linux, knows `user-select` only by its `-webkit-` prefix: with the
+unprefixed property alone, dragging a card selects some of its text in the app, though not in Chrome
+(2026-10-30). The stylesheet sets both wherever it sets one, and a test holds it to that.
+
 #### The app from a checkout
 
 `bun run app` builds the shell alone and runs it from the terminal on the checkout's server (`bun

@@ -76,7 +76,7 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 .item { position: absolute; }
 /* the note on a plan directory, above the projects: quiet beside the cards */
 .plan-dir { position: absolute; transform: translateY(-100%); box-sizing: border-box; padding: 12px 14px; border-radius: 4px; font-size: 13px; line-height: 1.4;
-  background: var(--container); border: 1.5px solid var(--container-line); color: var(--ink); cursor: grab; user-select: none; }
+  background: var(--container); border: 1.5px solid var(--container-line); color: var(--ink); cursor: grab; -webkit-user-select: none; user-select: none; }
 /* one the owner put somewhere stands on its top, and grows downwards as docs join it */
 .plan-dir.put { transform: none; }
 .plan-dir.dragging { cursor: grabbing; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
@@ -124,7 +124,7 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 /* an index card pinned to the wall: card stock with nearly square corners, a short hard shadow, the state as a
    rule across the top; title in a serif, the small print in a condensed sans */
 .card { background: var(--card); border-radius: 2px; box-shadow: var(--shadow); padding: 13px 14px 12px 14px;
-  cursor: pointer; overflow: visible; transition: box-shadow .18s, transform .18s, opacity .25s; user-select: none;
+  cursor: pointer; overflow: visible; transition: box-shadow .18s, transform .18s, opacity .25s; -webkit-user-select: none; user-select: none;
   font-family: var(--cond); }
 .card:hover { box-shadow: var(--lift); transform: translate(-1px, -2px); }
 .card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; pointer-events: none;
@@ -1195,7 +1195,7 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 /* a screenshot of a field, to mark: the marks over the image move with it, the bar with Undo and Done under it */
 .lightbox.marking { flex-direction: column; gap: 14px; }
 .lightbox.marking img { max-height: calc(100% - 58px); }
-.lb-marks { position: absolute; transform-origin: 0 0; cursor: crosshair; touch-action: none; user-select: none; overflow: visible; }
+.lb-marks { position: absolute; transform-origin: 0 0; cursor: crosshair; touch-action: none; -webkit-user-select: none; user-select: none; overflow: visible; }
 .lb-bar { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 4px; background: var(--card); box-shadow: var(--lift);
   cursor: default; animation: fade .38s ease-out; transition: opacity .2s; }
 .lb-bar .btn { padding: 6px 14px; display: inline-flex; align-items: center; gap: 6px; }
@@ -1245,7 +1245,7 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .d-file > .hint { margin: 6px 10px; }
 .d-lines { margin: 0; border: 1px solid var(--line); border-top: 0; font: 12px/1.5 var(--mono); }
 .d-lines > div { display: flex; }
-.d-no { flex: 0 0 4.5ch; padding: 0 6px; text-align: right; color: var(--muted); user-select: none; opacity: .75; }
+.d-no { flex: 0 0 4.5ch; padding: 0 6px; text-align: right; color: var(--muted); -webkit-user-select: none; user-select: none; opacity: .75; }
 .d-text { flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; padding-right: 10px; }
 .d-lines > .d-add { background: color-mix(in srgb, var(--approved) 14%, transparent); color: inherit; }
 .d-lines > .d-del { background: color-mix(in srgb, var(--error) 12%, transparent); color: inherit; }
@@ -1281,7 +1281,7 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 #sheet-grip::after { content: ""; position: absolute; left: 4px; top: 50%; width: 4px; height: 44px; margin-top: -22px; border-radius: 2px;
   background: var(--planned); opacity: .55; transition: background .15s, opacity .15s, height .15s, margin-top .15s; }
 #sheet-grip:hover::after, .resizing #sheet-grip::after { background: var(--muted); opacity: 1; height: 64px; margin-top: -32px; }
-.resizing, .resizing * { cursor: ew-resize !important; user-select: none; }
+.resizing, .resizing * { cursor: ew-resize !important; -webkit-user-select: none; user-select: none; }
 .resizing .sheet, .resizing #sheet-grip, .resizing #bar, .resizing #talk-docked, .resizing #ptt, .resizing #acks, .resizing .empty { transition: none; }
 .sheet h2 { margin: 2px 0 8px; font-size: 24px; line-height: 1.15; }
 /* a sheet's heading keeps clear of the button in its top corner (Obeya's, or the ✕) */
@@ -1571,7 +1571,7 @@ ol.timeline { list-style: none; padding: 0; margin: 0 0 4px; }
 .c-setup li.later .c-mark { color: var(--muted); }
 .c-setup li.missing .c-name { font-weight: 600; }
 .c-how { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin: 3px 0 4px; }
-.c-how code { padding: 2px 6px; border-radius: 2px; background: var(--card); border: 1px solid var(--line); user-select: all; }
+.c-how code { padding: 2px 6px; border-radius: 2px; background: var(--card); border: 1px solid var(--line); -webkit-user-select: all; user-select: all; }
 .c-how a { font-size: 12px; }
 .c-json { font: 11.5px/1.4 var(--mono); background: var(--chip); border-radius: 3px; padding: 10px; overflow: auto; }
 
@@ -1884,7 +1884,7 @@ button.link:hover { text-decoration: underline; }
 .git-ignore-file summary { cursor: pointer; }
 .git-ignore-file pre { font: 12px var(--mono); margin: 6px 0; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 4px; }
 .setup code { font: 12px var(--mono); }
-.setup .c-how code { padding: 2px 6px; border-radius: 2px; background: var(--card); border: 1px solid var(--line); user-select: all; }
+.setup .c-how code { padding: 2px 6px; border-radius: 2px; background: var(--card); border: 1px solid var(--line); -webkit-user-select: all; user-select: all; }
 
 /* „Telefon verbinden“ (access.tsx): the QR code beside the address and the code to type */
 #phone { position: fixed; inset: 0; z-index: 60; background: var(--dim); display: flex; align-items: center; justify-content: center; padding: 24px; animation: fade .15s ease-out; }
