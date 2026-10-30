@@ -145,9 +145,18 @@ pull request, what landed), the conversation on the right with the open question
 one Send, and the decisions (build, accept, approve, stop, archive) in a row below both. The last
 demo stays while the worker works again (see The demo on the card). A task with nothing for the left
 yet is its conversation alone, as narrow as that, and widens once there is a result. A task waiting
-for its first start is a split: its full text and what it waits for on the left. Words typed there
-stand unread and go to the worker with the task when it starts; spoken words go to the Koordinator, which passes a
-note on.
+for its first start (planned, snoozed to start later, or in the queue) is a split: its full text
+(editable where the owner wrote it) and what it waits for on the left, its conversation on the
+right. Only a card the owner has just created stays its text alone until it closes or starts, so the
+task goes into the text, not into a note.
+
+On every planned card, a stopped one too, the field takes notes for the agent that takes the card on
+(„Hinweis an den Agenten – er bekommt ihn, sobald er startet“). Typed notes stand unread („Noch nicht
+gelesen · sobald der Agent startet“, with a bin to take them back) and go to the worker with the task
+when it starts, by the owner's click, at the time it was snoozed to, or out of the queue; a stopped
+card's worker gets them with the message it resumes with. Planned as a project, the card's worker
+gets them with its task; discussed as an idea, its exploration agent opens the discussion with them.
+Spoken words go to the Koordinator, which passes a note on the same way.
 
 The field is the same on every card and in Obeya's sheet: one frame, the text growing up to 30 % of
 the window (no scrollbar below that), the screenshot button, the microphone (see Voice in) and Send
@@ -322,6 +331,12 @@ image.
   with `reply`. Rejected: their last words before the owner's next message (often "Ich committe
   jetzt") and a small model summarizing each turn (cost on every turn). A note withdraws an open
   question rather than answering it, which would log a remark as a decision.
+- **A planned card takes notes for its agent** (2026-10-30, GitHub issue #24): a scheduled task
+  offered only to start it or to snooze it, so what the owner thought of meanwhile (what to watch
+  out for) had to go into the task's text or wait for the agent. Rejected: notes only on queued
+  cards (2026-10-16 until then); a field on a card just created, which offered two places for the
+  task. Spoken words still go to the Koordinator, since „starte das“ and „stell das zurück“ are
+  what is said to a planned card, and no agent is there yet to pass them on.
 - **One layout for every card with a conversation** (2026-10-07). Rejected: a task stacking demo,
   buttons, feedback and conversation in one column, with the demo's question its own field and Send.
 - **The task is the conversation's first message** (2026-10-08), so the conversation reads from the

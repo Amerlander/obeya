@@ -2,7 +2,7 @@
 
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
-import { inQueue } from '../core/queue';
+import { holdsNotes } from '../core/queue';
 import { answering, askable, type CardEvent, type Demo, finishingUp, type Item, needsYou, openQuestions, ownWords, pausable, type Question, resumable, started, type Talk as Exchange } from '../core/types';
 import { readAnswer } from './answer';
 import type { Field } from './api';
@@ -463,8 +463,8 @@ export function parseQuestion(text: string): { text: string; options: string[] }
  */
 export function ownerField(item: Pick<Item, 'state' | 'need' | 'question' | 'finishing' | 'branch' | 'prototypeOf' | 'archivedAt' | 'queue'>): Field | null {
   if (item.state === 'waiting') return item.need === 'question' ? 'answer' : item.need === 'demo' && item.question ? 'demo' : 'feedback';
-  // a finished card's agent is resumed for what the owner asks about it; a card waiting to start holds the note for the agent that takes it on
-  return item.state === 'working' || item.state === 'inPr' || item.finishing || askable(item) || inQueue(item) ? 'note' : null;
+  // a finished card's agent is resumed for what the owner asks about it; a planned card holds the note for the agent that takes it on
+  return item.state === 'working' || item.state === 'inPr' || item.finishing || askable(item) || holdsNotes(item) ? 'note' : null;
 }
 
 /**
@@ -537,7 +537,7 @@ export const obeyaWorks = (talk: Exchange[]) =>
 export const worked = (i: Pick<Item, 'state' | 'branch' | 'landedPart'>) => i.state !== 'idea' && i.state !== 'proposal' && (!!i.branch || !!i.landedPart);
 
 /** What decides a card's layout. */
-type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'files' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes' | 'queue'> & Partial<Pick<Item, 'source'>>;
+type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'files' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes' | 'queue'> & Partial<Pick<Item, 'source' | 'id' | 'archivedAt'>>;
 
 /**
  * What a task an agent worked on shows beside its conversation: a demo, the files it named as the
@@ -561,8 +561,17 @@ export const result = (i: Laid) =>
  */
 export const split = (i: Laid) => i.state === 'idea' || i.state === 'proposal' || waitsFirstStart(i) || ((!!i.prototypeEnd || worked(i)) && result(i));
 
-/** A task waiting in the queue for its first start: no agent has worked on it yet. */
-export const waitsFirstStart = (i: Pick<Item, 'state' | 'branch' | 'landedPart' | 'queue'>) => inQueue(i) && !worked(i);
+/**
+ * A task no agent has worked on yet, planned or in the queue: its text stands beside its
+ * conversation, where notes wait for the agent that takes it on. Not while the owner writes a card
+ * they have just created (`beingWritten`) and has not started yet: its text alone, so the task goes
+ * into the text, not into a note.
+ */
+export const waitsFirstStart = (i: Pick<Item, 'state' | 'branch' | 'landedPart' | 'queue'> & Partial<Pick<Item, 'id' | 'archivedAt'>>) =>
+  holdsNotes(i) && !worked(i) && (!!i.queue || !(i.id && beingWritten.has(i.id)));
+
+/** The cards created on this page that have stayed open since: the owner is writing their task. */
+export const beingWritten = new Set<string>();
 
 /** A task an agent works or worked on without a result yet: its conversation stands alone, the card only as wide as it. */
 export const talkAlone = (i: Laid) => (!!i.prototypeEnd || worked(i)) && !result(i);

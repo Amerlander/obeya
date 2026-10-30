@@ -14,7 +14,7 @@ import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
 import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, pausable, resumable, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, SHARED_FIELDS, type SharedSettings, type Skill, type SpotInput, type TrustGroup } from '../core/types';
-import { inQueue } from '../core/queue';
+import { holdsNotes } from '../core/queue';
 import { BadRequest, Board, pathOfRef, replyNote, type StoredContribution } from './board';
 import type { ChangeRoute } from '../core/types';
 import { type Command, Commander } from './commands';
@@ -1303,11 +1303,11 @@ export class CanvasRuntime {
       clearTimeout(w?.timer);
       this.writing.set(cardId, { before: w?.before ?? before ?? '', timer: setTimeout(() => this.written(cardId), this.deps.writingPauseMs ?? 60_000) });
     }
-    // an idea's agent starts from the card's text, and opens the discussion with it
+    // an idea's agent starts from the card's text and the notes left on it for a worker, and opens the discussion with them
     if (p.state === 'idea' && state !== 'idea') {
       this.written(cardId);
       void this.koordinator.name(cardId);
-      this.explorers.open(cardId);
+      this.explorers.open(cardId, undefined, this.repoOf(cardId).workers.takeNotes(cardId));
     }
   }
 
@@ -1387,16 +1387,16 @@ export class CanvasRuntime {
    * What the owner says or types with a card open that an agent listens on (`agentListens`) goes
    * straight to that agent, by the card's state: talk to an idea, words a proposal is reworked by,
    * the answer to its worker's question, or else words the worker takes in (a note while it works,
-   * words on its handover, a question once its work is done, a note held for the worker of a card
-   * waiting to start). The agent passes on what asks Obeya for something (`to_obeya`).
+   * words on its handover, a question once its work is done, a note held for the agent that takes on
+   * a planned card). The agent passes on what asks Obeya for something (`to_obeya`).
    * `replyTo`: the message of the card's conversation the words reply to; `spot`: the place in the
    * card's demo video they are about.
    */
   tell(cardId: string, text: string, images: string[], spoken: boolean, replyTo?: number, spot?: SpotInput) {
     const card = this.board.item(cardId);
     if (!card) throw new BadRequest('unknownCard', 'unknown card');
-    // a card waiting to start holds the words for the agent that takes it on
-    if (!agentListens(card) && !inQueue(card)) throw new BadRequest('noAgent', 'no agent works on this card');
+    // a planned card holds the words for the agent that takes it on
+    if (!agentListens(card) && !holdsNotes(card)) throw new BadRequest('noAgent', 'no agent works on this card');
     const said = { text, spoken, ...(images.length ? { images } : {}), ...(replyTo ? { replyTo } : {}) };
     // the agent passes a request on in its words; the Koordinator reads the owner's own beside them
     this.said.set(cardId, { text, spoken });

@@ -17,6 +17,12 @@ export function queueOrder(items: Item[]): Item[] {
 
 const behind = (i: Item) => (i.queue && 'behind' in i.queue ? i.queue.behind : []);
 
+/**
+ * A card no agent works on until it starts: planned, in the queue or not, a stopped one too. What the
+ * owner types on it waits there for the agent that takes it on, and goes to it with the task.
+ */
+export const holdsNotes = (i: Pick<Item, 'state' | 'archivedAt'>) => i.state === 'planned' && !i.archivedAt;
+
 /** A card that has not been started: planned and not in the queue (a stopped one too). */
 export const notStarted = (i: Pick<Item, 'state' | 'queue'>) => i.state === 'planned' && !i.queue;
 

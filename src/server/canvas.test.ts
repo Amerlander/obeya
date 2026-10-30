@@ -203,8 +203,40 @@ describe('a canvas with several repositories', () => {
     await settle();
     expect(item(p.id).state).toBe('working');
     const worker = runtime.sessions.find((s) => s.spec.role === 'worker')!;
-    expect(worker.inbox[0]).toContain('A note from the owner while your card waited to start:\n\nAuch die alten Karten nachtragen.');
+    expect(worker.inbox[0]).toContain('A note the owner left on the card while no agent worked on it:\n\nAuch die alten Karten nachtragen.');
     expect(canvas.board.events(p.id).find((e) => e.text === 'Auch die alten Karten nachtragen.')!.unread).toBeUndefined();
+  });
+
+  test('notes left on a planned card before anyone starts it go with the task to its worker', async () => {
+    const card = canvas.board.create({ title: 'Export', x: 0, y: 0, body: 'CSV-Export für Rechnungen.' });
+    canvas.tell(card.id, 'Achte auf Umlaute in den Spaltennamen.', [], false);
+    canvas.tell(card.id, 'Und auf das Datumsformat.', [], true);
+    expect(item(card.id).state).toBe('planned');
+    expect(canvas.board.events(card.id).filter((e) => e.author === 'owner').map((e) => [e.text, e.unread])).toEqual([
+      ['Achte auf Umlaute in den Spaltennamen.', true],
+      ['Und auf das Datumsformat.', true],
+    ]);
+    expect(runtime.sessions.filter((s) => s.spec.role === 'worker')).toHaveLength(0);
+    canvas.act(card.id, { action: 'start' });
+    await settle();
+    expect(item(card.id).state).toBe('working');
+    const worker = runtime.sessions.find((s) => s.spec.role === 'worker')!;
+    expect(worker.inbox).toHaveLength(1);
+    expect(worker.inbox[0]).toContain('CSV-Export für Rechnungen.');
+    expect(worker.inbox[0]).toContain('A note the owner left on the card while no agent worked on it:\n\nAchte auf Umlaute in den Spaltennamen.');
+    expect(worker.inbox[0]).toMatch(/A note the owner left on the card while no agent worked on it \(.*\):\n\nUnd auf das Datumsformat\./);
+    expect(canvas.board.events(card.id).filter((e) => e.author === 'owner' && e.unread)).toHaveLength(0);
+  });
+
+  test('notes left on a planned card that becomes an idea open its discussion', () => {
+    const card = canvas.board.create({ title: 'Export', x: 0, y: 0, body: 'CSV-Export für Rechnungen.' });
+    canvas.tell(card.id, 'Vielleicht reicht auch Excel.', [], false);
+    canvas.patch(card.id, { state: 'idea' });
+    const s = runtime.sessions.filter((x) => x.spec.tools.some((t) => t.name === 'update_brief')).at(-1)!;
+    expect(s.inbox[0]).toContain('left the notes below on it');
+    expect(s.inbox[0]).toContain('Vielleicht reicht auch Excel.');
+    expect(canvas.board.events(card.id).find((e) => e.text === 'Vielleicht reicht auch Excel.')!.unread).toBeUndefined();
+    expect(canvas.board.row(card.id).unheard).toBeNull();
   });
 
   test("the options picked on a proposal go into its text as decided, the others as open", () => {

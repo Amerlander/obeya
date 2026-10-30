@@ -37,7 +37,7 @@ import { videoOf } from './spot';
 import { CanvasPill, CardView, shownState, DepLinks, Edges, Links, Minimap, OldBunPill, ProjectView, RestartPill, Sheet, SourcePill, TalkIcon, UpdatePill, WorkspacesPill } from './parts';
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
 import { failText, t } from './strings';
-import { split, talkAlone } from './talk';
+import { beingWritten, split, talkAlone } from './talk';
 import { noticeLine, tellers, useAck, voiceTarget } from './tell';
 
 export function App() {
@@ -534,6 +534,7 @@ function Canvas({
     await sleep(UNFOLD_MS);
     panel.style.display = 'none';
     panel.className = '';
+    beingWritten.delete(f.id);
     setOpenId(null);
     setFocus(f.project);
     // a new card left empty was not wanted; one with a task but no title, Obeya names
@@ -616,6 +617,7 @@ function Canvas({
   async function createAt(world: Pos) {
     const [w, h] = CARD_SIZE.task;
     const card = await api.create({ title: '', x: Math.round(world.x - w / 2), y: Math.round(world.y - h / 2) });
+    beingWritten.add(card.id);
     flushSync(() => {
       // the snapshot that carries it may have come first: then it is no longer pending
       if (!snapshotRef.current.items.some((i) => i.id === card.id)) setPending((p) => [...p, card]);

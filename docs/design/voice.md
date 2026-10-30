@@ -117,7 +117,8 @@ after the work). Spoken words carry the remark that speech recognition may have 
 stand in the conversation under „Du“ at once; nothing waits for „Rückgängig“.
 
 On any other card (planned, queued, finished without an agent), with a project open or nothing, the
-Koordinator reads the words with that card or project in focus.
+Koordinator reads the words with that card or project in focus. What is typed into a planned card's
+field waits there for the agent that takes the card on (see Card layout).
 
 #### Passing a request on to Obeya
 

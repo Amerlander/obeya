@@ -129,10 +129,14 @@ export class Explorers {
 
   /**
    * A planned card became an idea, or the owner took up an idea a worker proposed (`proposed`): its
-   * agent opens the discussion with what the card says, before the owner writes.
+   * agent opens the discussion with what the card says, before the owner writes, and with the notes
+   * the owner left on the planned card for a worker (`notes`).
    */
-  open(cardId: string, proposed?: 'idea' | 'task') {
-    this.tell(cardId, proposed === 'idea' ? OPENING_PROPOSED : proposed === 'task' ? OPENING_PROPOSED_TASK : OPENING);
+  open(cardId: string, proposed?: 'idea' | 'task', notes?: { text: string; images: string[] }) {
+    const card = this.o.board.item(cardId);
+    if (!card || card.state !== 'idea') return;
+    if (notes?.text) return this.send(card, `${OPENING_NOTES}\n\n---\n\n${notes.text}`, notes.images, false);
+    this.send(card, proposed === 'idea' ? OPENING_PROPOSED : proposed === 'task' ? OPENING_PROPOSED_TASK : OPENING, [], false);
   }
 
   /**
@@ -593,6 +597,9 @@ function prototypeState(p: Item): string {
 /** How the agent opens the discussion of an idea the owner wrote, or one a worker proposed. */
 const OPENING =
   'The owner wrote this as a card to be built, then chose to discuss it first. They have not said more yet: what the card says above is where the conversation starts. Look into it and open the discussion.';
+
+const OPENING_NOTES =
+  'The owner wrote this as a card to be built, left the notes below on it for the agent that would take it on, then chose to discuss it first. What the card says above and these notes are where the conversation starts. Look into them and open the discussion.';
 
 const OPENING_PROPOSED =
   "A worker proposed this idea while on another card, and the owner took it up to discuss it. They have not said more yet: what the card says above is where the conversation starts, with what the owner decided on the proposal and the questions still open. Look into it and open the discussion.";

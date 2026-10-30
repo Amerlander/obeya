@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { type CardEvent, formatQuestion, type Item, needsYou, openQuestions, pausable } from '../core/types';
 import { answerText } from './answer';
-import { agentWorks, cardTalk, demoHandover, koordinatorReads, obeyaWorks, opensWithTalk, ownerField, parseQuestion, runs, split, talkAlone, talkTurns, unseen, unseenTurns } from './talk';
+import { agentWorks, beingWritten, cardTalk, demoHandover, koordinatorReads, obeyaWorks, opensWithTalk, ownerField, parseQuestion, runs, split, talkAlone, talkTurns, unseen, unseenTurns } from './talk';
 import { MESSAGES } from '../core/messages';
 
 let id = 0;
@@ -388,9 +388,11 @@ test('a card has one field for the owner, and under a demo with a question it ta
   expect(ownerField({ state: 'done', branch: 'obeya/x' })).toBe('note');
   expect(ownerField({ state: 'live', branch: 'obeya/x', archivedAt: '2026-10-08T10:00:00Z' })).toBeNull();
   expect(ownerField({ state: 'live', branch: 'obeya/x', prototypeOf: 'idea' })).toBeNull();
-  // a card waiting to start holds the note for the agent that takes it on
+  // a planned card, in the queue or not, a stopped one too, holds the note for the agent that takes it on
   expect(ownerField({ state: 'planned', queue: { checking: true, since: '2026-10-16T10:00:00Z' } })).toBe('note');
-  expect(ownerField({ state: 'planned' })).toBeNull();
+  expect(ownerField({ state: 'planned' })).toBe('note');
+  expect(ownerField({ state: 'planned', branch: 'obeya/x' })).toBe('note');
+  expect(ownerField({ state: 'planned', branch: 'obeya/x', archivedAt: '2026-10-08T10:00:00Z' })).toBeNull();
 });
 
 test('ideas, proposals and tasks an agent worked on with a result share the layout with the conversation beside', () => {
@@ -402,9 +404,15 @@ test('ideas, proposals and tasks an agent worked on with a result share the layo
   expect(split({ state: 'working', branch: 'obeya/x', demo })).toBe(true);
   expect(split({ state: 'inPr', branch: 'obeya/x' })).toBe(true);
   expect(split({ state: 'working', branch: 'obeya/x', brief: 'Kurz' })).toBe(true);
-  expect(split({ state: 'planned' })).toBe(false);
-  // waiting for its first start, a task keeps its text beside the conversation
+  // waiting for its first start, planned or in the queue, a task keeps its text beside the conversation
+  expect(split({ state: 'planned' })).toBe(true);
   expect(split({ state: 'planned', queue: { checking: true, since: '2026-10-16T10:00:00Z' } })).toBe(true);
+  // a card the owner has just created and still writes is its text alone, until it closes or starts
+  beingWritten.add('new');
+  expect(split({ id: 'new', state: 'planned' })).toBe(false);
+  expect(split({ id: 'new', state: 'planned', queue: { checking: true, since: '2026-10-16T10:00:00Z' } })).toBe(true);
+  beingWritten.delete('new');
+  expect(split({ id: 'new', state: 'planned' })).toBe(true);
   expect(split({ state: 'planned', branch: 'obeya/x', queue: { checking: true, since: '2026-10-16T10:00:00Z' } })).toBe(false);
   expect(split({ state: 'done' })).toBe(false);
 });
@@ -426,7 +434,7 @@ test("a workstream an agent works on keeps its plan doc's text beside the conver
   expect(talkAlone({ state: 'working', branch: 'obeya/x', source: 'plan' })).toBe(false);
   expect(split({ state: 'working', branch: 'obeya/x', source: 'plan' })).toBe(true);
   expect(split({ state: 'live', branch: 'obeya/x', source: 'plan' })).toBe(true);
-  expect(split({ state: 'planned', source: 'plan' })).toBe(false);
+  expect(split({ state: 'planned', source: 'plan' })).toBe(true);
 });
 
 test('a workstream planned again after a part of it landed keeps what landed beside its conversation', () => {

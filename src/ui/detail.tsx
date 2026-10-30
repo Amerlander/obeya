@@ -14,7 +14,7 @@ import { Branch } from './diff';
 import { ResultFiles } from './files';
 import { DiscardChanges, FolderBox, FolderLine, useFolderDiff } from './folder';
 import { landedRef, PauseMark, PlayMark, shownTitle } from './parts';
-import { inQueue } from '../core/queue';
+import { holdsNotes } from '../core/queue';
 import { QueueList, scrollerOf, useMenuClose, useQueueMove, useQueueSort, waitedOn } from './queue';
 import { dimensions, shownTags } from '../core/page-tags';
 import { Inline, plain } from './markdown';
@@ -201,7 +201,7 @@ export function Detail(p: Props) {
   const worked = isWorked(item);
   // a new repository the start creates first: the button names it, a line under it says what it does
   const fresh = newRepoWords(choice, false);
-  // a task waiting for its first start keeps its text in full beside its conversation, where notes wait for its agent
+  // a task waiting for its first start, planned or in the queue, keeps its text in full beside its conversation, where notes wait for its agent
   const waits = waitsFirstStart(item);
   // a demo, video or HTML artifact, goes to a page where the repository has a share target, else it is exported as a file; prototypes stay here
   const shares = p.repos.find((r) => r.id === item.repo);
@@ -500,8 +500,14 @@ export function Detail(p: Props) {
           main={
             <>
               {queueBox}
-              <Body md={item.body} />
-              <Shots ids={item.images} />
+              {editable ? (
+                <ManualFields item={item} repos={p.repos} choice={choice} fresh onEdit={p.onEdit} grow />
+              ) : (
+                <>
+                  <Body md={item.body} />
+                  <Shots ids={item.images} />
+                </>
+              )}
               <Scope files={item.scope} />
             </>
           }
@@ -579,7 +585,7 @@ export function Detail(p: Props) {
             )
           }
           // what is typed into a card waiting to start waits for its agent, not for Obeya
-          talk={<TaskTalk item={item} listener={inQueue(item) ? undefined : listener} act={act} tell={tell} />}
+          talk={<TaskTalk item={item} listener={holdsNotes(item) ? undefined : listener} act={act} tell={tell} />}
           cite={!!ownerField(item) && cardDraft(item.id)}
         />
       ) : (
@@ -603,7 +609,7 @@ export function Detail(p: Props) {
       {error && <p className="p-error">{error}</p>}
 
       {/* the decisions of a card nobody worked on yet, below what it shows, as on every card */}
-      {item.state === 'planned' && !worked && !waits && !item.queue && (
+      {item.state === 'planned' && !worked && !item.queue && (
         <div className="actions">
           {/* one snoozed to start later starts now with „Jetzt zurückholen“ on its line in the conversation */}
           {item.newRepo?.due ? (
@@ -679,7 +685,7 @@ export function Detail(p: Props) {
           )}
         </div>
       )}
-      {item.state === 'planned' && !worked && !waits && !item.queue && fresh && <p className="hint">{fresh.hint}</p>}
+      {item.state === 'planned' && !worked && !item.queue && fresh && <p className="hint">{fresh.hint}</p>}
       {review && item.noChange && !item.prototypeOf && <p className="hint">{inFolder ? t.folder.noChangeHint : t.noChangeHint}</p>}
       {review && direct && !item.prototypeOf && <p className="hint">{t.directHint}</p>}
     </>
@@ -1388,7 +1394,7 @@ function Conversation({
           held.includes(e.id) ? (
             line({ e, steps: [] })
           ) : (
-            <Message key={e.id} turn={{ e, steps: [] }} unread={t.talk.unread(idea || question || proposal ? 'reply' : inQueue(item) ? 'start' : 'step')} onDelete={() => takeBack(item.id, e)} />
+            <Message key={e.id} turn={{ e, steps: [] }} unread={t.talk.unread(idea || question || proposal ? 'reply' : holdsNotes(item) ? 'start' : 'step')} onDelete={() => takeBack(item.id, e)} />
           ),
         )}
         {!working && !past && koordinatorReads(events) && <Reading />}
@@ -2694,7 +2700,7 @@ function TaskTalk({
         field
           ? {
               key: `${item.state}:${item.need ?? ''}:${field}:${key}`,
-              placeholder: { note: item.snoozed && !item.snoozed.waiting && !item.snoozed.start ? t.snooze.compose : item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : inQueue(item) ? t.compose.queued : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
+              placeholder: { note: item.snoozed && !item.snoozed.waiting && !item.snoozed.start ? t.snooze.compose : item.paused ? t.pause.compose : askable(item) || item.followUp ? t.compose.followUp : agentWorks(item) ? t.compose.working : holdsNotes(item) ? t.compose.queued : t.compose.idle, answer: t.compose.question, feedback: t.compose.review, demo: t.compose.demo, discuss: '', revise: t.compose.revise }[field],
               listener,
               onWords: tell(field),
               onPicked: (text, [picks = []], images, replyTo) => act({ action: 'answer', text, picks, images, ...(replyTo ? { replyTo } : {}) }, { close: false }),

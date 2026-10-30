@@ -13,7 +13,7 @@ import type { CanvasRuntime } from './canvas';
 import { SiteSetup } from './site-setup';
 import { parsePlace } from '../core/layout';
 import { type Focus, type Heard, type Input, isField } from './commands';
-import { inQueue } from '../core/queue';
+import { holdsNotes } from '../core/queue';
 import type { Config } from './config';
 import { serveAnswerFile, serveCardFile, serveDemoFile, serveMockFrame } from './demo';
 import { type NarrationHost, parseClipRequest } from './narration';
@@ -364,9 +364,9 @@ export function serve(
       rmSync(dir, { recursive: true, force: true });
     }
   };
-  // a card waiting to start takes what is typed into its field for the agent that will take it on;
-  // spoken words go to the Koordinator, which starts it anyway or takes it out of the queue
-  const listens = (card: Item, input: Input) => agentListens(card) || (input.field === 'note' && inQueue(card));
+  // a planned card takes what is typed into its field for the agent that will take it on; spoken
+  // words go to the Koordinator, which starts it, snoozes it or takes it out of the queue
+  const listens = (card: Item, input: Input) => agentListens(card) || (input.field === 'note' && holdsNotes(card));
   /**
    * What the owner said or typed: with an agent on the open card, straight to that agent (which
    * passes on what asks Obeya for something); else the Koordinator reads it. `null`: Whisper heard

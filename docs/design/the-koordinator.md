@@ -372,10 +372,10 @@ passed the words on through `to_obeya` hears that the owner finds the link under
   and a waiting card is checked again when its blockers finish.
 - **A new card does not overtake a queued one it likely conflicts with**, even one far from done:
   fairness over parallelism; „Trotzdem starten“ remains.
-- **A card waiting to start stays full size and takes notes** (2026-10-16). Rejected: shrinking it
-  to a planned card's panel while Obeya checks it, which left the owner's thoughts waiting until the
-  agent ran. Spoken words still go to the Koordinator, since no agent is there to pass on „trotzdem
-  starten“.
+- **A card waiting to start stays full size and takes notes** (2026-10-16; every planned card
+  since 2026-10-30, see Card layout). Rejected: shrinking it to a planned card's panel while Obeya
+  checks it, which left the owner's thoughts waiting until the agent ran. Spoken words still go to
+  the Koordinator, since no agent is there to pass on „trotzdem starten“.
 - **A card's change list is its own work, read without blocking** (2026-10-21, GitHub issue #2).
   Rejected: diffing each card in full against the main branch, one after the other on the server's
   thread: cards on a feature branch 766 commits ahead each counted the whole branch (30–70 s per

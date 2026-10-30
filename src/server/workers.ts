@@ -35,7 +35,7 @@ import { defaultBranchCommit } from './read-tree';
 import type { CardRow } from './db';
 import { type Forge, parsePrUrl, sameRepo } from './forge';
 import { clip, messageOf } from '../core/text';
-import { inQueue } from '../core/queue';
+import { holdsNotes } from '../core/queue';
 
 export interface WorkerOptions {
   board: Board;
@@ -901,11 +901,11 @@ export class Workers {
         true,
         said,
       );
-    } else if (inQueue(card)) {
-      // the card waits to start: the words go with the task to the worker that takes it on
+    } else if (holdsNotes(card)) {
+      // no agent works on the card yet: the words go with the task to the one that takes it on
       const said = [this.o.board.log(cardId, 'hint', 'owner', text, { images: shots, replyTo, spot: place, unread: true }).id];
       if (text) this.o.onOwnerInput?.(card, 'note', text);
-      this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said, text: `A note from the owner while your card waited to start${spoken ? ` (${SPOKEN})` : ''}:\n\n${words}`, images }] satisfies Unheard[]) });
+      this.o.board.work(cardId, { unheard: JSON.stringify([...this.unheard(cardId), { said, text: `A note the owner left on the card while no agent worked on it${spoken ? ` (${SPOKEN})` : ''}:\n\n${words}`, images }] satisfies Unheard[]) });
     } else if (this.waitsForClone(cardId)) {
       // no session to take them in now: they go with the message that resumes it in the clone
       const said = [this.o.board.log(cardId, 'hint', 'owner', text, { images: shots, replyTo, spot: place, unread: true }).id];
@@ -2640,6 +2640,11 @@ export class Workers {
     this.o.board.work(cardId, { unheard: null });
     this.o.board.readNow(cardId, unheard.flatMap((u) => u.said));
     return unheard;
+  }
+
+  /** The planned card became an idea: the notes the owner left on it for a worker go to its exploration agent instead. */
+  takeNotes(cardId: string): { text: string; images: string[] } {
+    return this.withUnheard(cardId, '', []);
   }
 
   /** A message that starts a turn, with the owner's words that waited for the worker's next step after it. */
