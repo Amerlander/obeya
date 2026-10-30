@@ -2,7 +2,7 @@
 // confirms them in one sentence, and runs them after a short delay unless the owner takes them back.
 
 import { z } from 'zod';
-import { type AgentSetting, agentListens, answering, askable, type Awaited, awaited, type AwaitedState, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, openQuestions, pausable, plannableAsProject, prototypeWorkstream, snoozable, SNOOZE_LIMIT, type Queue, type SpotInput, type Talk, type TalkAfter, type TalkQuote, type TalkRef } from '../core/types';
+import { type AgentSetting, agentListens, answering, askable, type Awaited, awaited, type AwaitedState, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, openQuestions, pausable, plannableAsProject, resumable, prototypeWorkstream, snoozable, SNOOZE_LIMIT, type Queue, type SpotInput, type Talk, type TalkAfter, type TalkQuote, type TalkRef } from '../core/types';
 import { inQueue, notStarted } from '../core/queue';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
@@ -1103,7 +1103,7 @@ export class Commander {
         if (!pausable(card)) return `its agent is not working on anything right now, so there is nothing to pause (${is})`;
         break;
       case 'resume':
-        if (!card.paused) return `its agent is not paused (${is})`;
+        if (!resumable(card)) return card.snoozed ? `its agent is snoozed, not paused: wake wakes it (${is})` : `its agent is not paused (${is})`;
         break;
       case 'snooze': {
         if (!snoozable(card)) return `the card is neither planned, at work nor waiting for the owner, so there is nothing to snooze (${is})`;

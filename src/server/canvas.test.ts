@@ -1355,3 +1355,74 @@ test("a canvas's pause ends once none of its agents is paused any more, and last
     c.shutdown();
   }
 }, 30_000);
+
+test("a card the owner snoozed counts as no paused agent: resuming the canvas leaves it asleep, and it does not hold the queue", async () => {
+  const c = new CanvasRuntime({ name: 'Pause', repos: [{ path: repo('solo', 'Solo'), clones: 2 }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge });
+  try {
+    const atWork = async (title: string, session: string) => {
+      const card = c.board.create({ title, x: 0, y: 0 });
+      await c.repos[0]!.workers.start(card.id);
+      const worker = runtime.sessions.at(-1)!;
+      worker.emit({ type: 'session', id: session });
+      worker.emit({ type: 'text', text: 'Arbeite.' });
+      return card;
+    };
+    const later = await atWork('Later', 's-later');
+    const now = await atWork('Now', 's-now');
+    // „Später …“: its worker stops until then, holding what comes for it as a paused one does
+    c.act(later.id, { action: 'snooze', until: new Date(Date.now() + 3_600_000).toISOString() });
+    expect(c.board.canvas.agents).toEqual({ running: 1, paused: 0 });
+    c.pauseAgents();
+    expect(c.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
+    // the one paused resumed on its own card: none is paused any more, and the queue runs again
+    c.act(now.id, { action: 'resume' });
+    expect(c.board.canvas.paused).toBeUndefined();
+    // nor does resuming the canvas wake the snoozed one
+    c.resumeAgents();
+    expect(c.board.item(later.id)!.snoozed).toMatchObject({ by: 'owner' });
+    expect(runtime.sessions.some((s) => s.spec.resume === 's-later')).toBe(false);
+  } finally {
+    c.shutdown();
+  }
+}, 30_000);
+
+test("a canvas's pause lasts while one of its paused agents cannot go on, its repository gone from the canvas", async () => {
+  const both: RepoConfig[] = [
+    { path: repo('front', 'Front'), clones: 1 },
+    { path: repo('back', 'Back'), clones: 1 },
+  ];
+  const c = new CanvasRuntime({ name: 'Pause', repos: both }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge });
+  try {
+    const [front, back] = c.repos.map((r) => r.ref.id);
+    const atWork = async (repo: string, session: string) => {
+      const card = c.board.create({ title: repo, x: 0, y: 0, repo });
+      await c.repoOf(card.id).workers.start(card.id);
+      const worker = runtime.sessions.at(-1)!;
+      worker.emit({ type: 'session', id: session });
+      worker.emit({ type: 'text', text: 'Arbeite.' });
+      return card;
+    };
+    await atWork(front!, 's-front');
+    const gone = await atWork(back!, 's-back');
+    c.pauseAgents();
+    expect(c.board.canvas.agents).toEqual({ running: 0, paused: 2 });
+    c.apply({ name: 'Pause', repos: [both[0]!] });
+    await until(() => c.repos.length === 1);
+    const errors = quiet();
+    c.resumeAgents();
+    errors.restore();
+    expect(errors.lines.join('\n')).toContain(`the agent of ${gone.id} did not resume`);
+    expect(runtime.sessions.some((s) => s.spec.resume === 's-front')).toBe(true);
+    // the card that could not go on is still paused, and the cards let start still wait
+    expect(c.board.item(gone.id)!.paused).toBe(true);
+    expect(c.board.canvas).toMatchObject({ paused: true, agents: { paused: 1 } });
+    // its repository back, it goes on, and the pause ends
+    c.apply({ name: 'Pause', repos: both });
+    await until(() => c.repos.length === 2);
+    c.resumeAgents();
+    expect(runtime.sessions.some((s) => s.spec.resume === 's-back')).toBe(true);
+    expect(c.board.canvas.paused).toBeUndefined();
+  } finally {
+    c.shutdown();
+  }
+}, 30_000);

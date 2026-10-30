@@ -3,7 +3,7 @@
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { inQueue } from '../core/queue';
-import { answering, askable, type CardEvent, type Demo, finishingUp, type Item, needsYou, openQuestions, ownWords, pausable, type Question, started, type Talk as Exchange } from '../core/types';
+import { answering, askable, type CardEvent, type Demo, finishingUp, type Item, needsYou, openQuestions, ownWords, pausable, type Question, resumable, started, type Talk as Exchange } from '../core/types';
 import { readAnswer } from './answer';
 import type { Field } from './api';
 
@@ -256,7 +256,7 @@ export function cardTalk(item: Item, events: CardEvent[], past = false): Talk {
  */
 export function talkState(item: Item, past = false) {
   const working = !past && agentWorks(item);
-  const paused = !past && !!item.paused && !item.snoozed;
+  const paused = !past && resumable(item);
   const open = past ? [] : openQuestions(item);
   return { working, paused, open, key: JSON.stringify([working, paused, open]) };
 }

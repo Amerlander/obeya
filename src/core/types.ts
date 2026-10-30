@@ -62,8 +62,14 @@ export interface WorkerTurn {
   over: boolean;
 }
 
+/** The card's agent is snoozed (by itself or the owner, „Später …“): it stops until its time, and neither pauses nor resumes meanwhile. */
+const snoozedAway = (i: Pick<Item, 'snoozed'>) => !!i.snoozed && !i.snoozed.waiting;
+
 export const pausable = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'snoozed'>) =>
-  !i.paused && !(i.snoozed && !i.snoozed.waiting) && (i.kind === 'question' ? !!i.thread?.thinking : i.state === 'idea' && i.idea ? i.idea.thinking : !!i.inTurn);
+  !i.paused && !snoozedAway(i) && (i.kind === 'question' ? !!i.thread?.thinking : i.state === 'idea' && i.idea ? i.idea.thinking : !!i.inTurn);
+
+/** The owner paused the card's agent, and it waits for them to resume it; a snoozed one, which holds what comes for it as a paused one does, waits for its time instead. */
+export const resumable = (i: Pick<Item, 'paused' | 'snoozed'>) => !!i.paused && !snoozedAway(i);
 
 /**
  * A finished card an agent worked on, on the canvas, with no agent on it now: what the owner asks

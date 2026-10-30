@@ -122,8 +122,12 @@ Pausing pauses each agent at work there as its own pause does, at once. As long 
 still paused, the cards the Koordinator lets start on that canvas wait in the queue („Wartet:
 Leinwand pausiert“) instead of taking the slots that pausing freed. Resuming resumes every paused
 agent there, as „Weitermachen“ does, and the waiting cards start. Once none on the canvas is paused
-any more (the owner resumed each on its card, or their cards went), the queue runs again by itself.
-A restart leaves it as it was: the cards stay paused and the canvas holds its queue.
+any more (the owner resumed each on its card, or their cards went), the queue runs again by itself;
+one that could not go on (its repository left the canvas) is still paused and keeps the queue held.
+A restart leaves it as it was: the cards stay paused and the canvas holds its queue. A snoozed card
+is not a paused agent, though its worker stopped the same way: it counts for neither number, the
+canvas's resume leaves it asleep, it holds no queue, and its card shows no ▶; it wakes at its time
+or by „Jetzt zurückholen“.
 
 ### Snoozing a card
 
