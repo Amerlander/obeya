@@ -8,6 +8,7 @@
 // `node demo.ts --revoice en` narrates the rendered demo anew in another language (`revoice.ts`).
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { Browser, BrowserContext, Locator, Page } from 'playwright-core';
 import { launchChromium, SILENT_SPEECH } from '../../../lib/chromium.ts';
@@ -588,6 +589,28 @@ async function dryRun(spec: DemoSpec, viewport: { width: number; height: number 
   spec.scenes.forEach((s, i) => console.log(`  ${String(i + 1).padStart(2)}  ok  ${took[i]!.toFixed(1).padStart(5)} s  ${s.title}`));
 }
 
+/**
+ * The recording browser's processes (its own, the GPU's, the renderers') and the director above the
+ * rest of the machine for the take, back to normal after it (`level`). On a busy machine
+ * the page still painted 60 frames a second, but the screencast delivered as few as 8 of them: its
+ * copying, encoding and handing over waited for the CPU (2026-10-30). Where raising needs rights
+ * (Linux, macOS), the processes stay as they are.
+ */
+async function prioritize(browser: Browser | null, level: number) {
+  const pids = [process.pid];
+  if (browser) {
+    const cdp = await browser.newBrowserCDPSession().catch(() => undefined);
+    const info = await cdp?.send('SystemInfo.getProcessInfo').catch(() => undefined);
+    pids.push(...(info?.processInfo ?? []).map((p) => p.id));
+    await cdp?.detach().catch(() => {});
+  }
+  for (const pid of pids) {
+    try {
+      os.setPriority(pid, level);
+    } catch {}
+  }
+}
+
 async function startScreencast(ctx: BrowserContext, page: Page, dir: string, size: { width: number; height: number }, scale: number) {
   const frames: Frame[] = [];
   const cdp = await ctx.newCDPSession(page);
@@ -604,6 +627,11 @@ async function startScreencast(ctx: BrowserContext, page: Page, dir: string, siz
     else if (now() - lastFrame > STALL_SECONDS) stall(new Error(`the recording page sent no frame for ${STALL_SECONDS} s: it hangs`));
   }, 1000);
   watch.unref();
+  // a renderer that starts later (another site in the page) is raised too
+  const raise = () => prioritize(ctx.browser(), os.constants.priority.PRIORITY_ABOVE_NORMAL);
+  await raise();
+  const raising = setInterval(raise, 5000);
+  raising.unref();
   cdp.on('Page.screencastFrame', (f) => {
     lastFrame = now();
     const file = path.join(dir, `${String(frames.length).padStart(6, '0')}.jpg`);
@@ -625,6 +653,7 @@ async function startScreencast(ctx: BrowserContext, page: Page, dir: string, siz
     stalled,
     stop: async () => {
       clearInterval(watch);
+      clearInterval(raising);
       tick();
       const slept = sleepCause(since);
       if (slept) throw new Error(slept);
@@ -639,14 +668,16 @@ async function startScreencast(ctx: BrowserContext, page: Page, dir: string, siz
  * gray row through the strip of every frame, cut out by ffmpeg in one pass. Null for a frame
  * whose strip cannot be read, and for all of them when ffmpeg fails.
  */
-function paintTimes(frames: Frame[], dir: string, size: { width: number; height: number }, scale: number): (number | null)[] {
+export function paintTimes(frames: Frame[], dir: string, size: { width: number; height: number }, scale: number): (number | null)[] {
   const width = CLOCK.bits * CLOCK.cell;
   const y = (size.height - CLOCK.bottom - Math.ceil(CLOCK.cell / 2)) * scale;
   // a frame with more pixels than points (`sharp`) is read back at one pixel per point
   const crop = `crop=${width * scale}:1:${CLOCK.left * scale}:${y}${scale > 1 ? `,scale=${width}:1:flags=neighbor` : ''}`;
+  // gray before the crop: ffmpeg 6 crops a 4:2:0 JPEG to even heights only, so a row of one pixel
+  // failed every frame there and no frame was put on its paint time
   const r = spawnSync(
     'ffmpeg',
-    ['-loglevel', 'error', '-f', 'image2', '-start_number', '0', '-i', path.join(dir, '%06d.jpg'), '-vf', `${crop},format=gray`, '-f', 'rawvideo', 'pipe:1'],
+    ['-loglevel', 'error', '-f', 'image2', '-start_number', '0', '-i', path.join(dir, '%06d.jpg'), '-vf', `format=gray,${crop}`, '-f', 'rawvideo', 'pipe:1'],
     { maxBuffer: 1 << 30 },
   );
   if (r.status !== 0 || r.stdout.length !== frames.length * width) return frames.map(() => null);
@@ -739,6 +770,8 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
     throw await failure('the end of the take', page, work, error);
   }
   await closeBrowser(browser);
+  // the encoding at normal priority: below it, a busy machine starved it for minutes
+  await prioritize(null, os.constants.priority.PRIORITY_NORMAL);
   const total = videoTime(tEnd, t0, d.cuts);
   const cut = cast.frames.find((f) => Math.round(f.width) !== viewport.width || Math.round(f.height) !== viewport.height);
   if (cut) console.warn(`screencast frames are ${Math.round(cut.width)}×${Math.round(cut.height)}, not ${viewport.width}×${viewport.height}: part of the page is missing`);
