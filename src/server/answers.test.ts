@@ -501,6 +501,23 @@ describe('a thread on a Question card', () => {
     expect(board().talk().at(-1)!.unread).toBeUndefined();
   });
 
+  test('its agent paused at a safe point gives its answer first, and is paused then', async () => {
+    const { card } = await moved();
+    canvas.tell(card.id, 'und im Oktober?', [], false);
+    const a = answerer();
+    canvas.act(card.id, { action: 'pause', safePoint: true });
+    expect(a.closed).toBe(false);
+    expect(board().item(card.id)).toMatchObject({ pausing: true, thread: { thinking: true } });
+    a.call('answer_owner', { text: 'Oktober: 12 ct.' });
+    a.emit({ type: 'idle' });
+    await settle();
+    expect(board().events(card.id).filter((e) => e.kind === 'talk').at(-1)!.text).toBe('Oktober: 12 ct.');
+    expect(board().item(card.id)).toMatchObject({ paused: true, thread: { answers: 3 } });
+    expect(board().item(card.id)!.pausing).toBeUndefined();
+    canvas.act(card.id, { action: 'resume' });
+    expect(board().item(card.id)!.paused).toBeUndefined();
+  });
+
   test('its agent paused while it reads keeps what it was asked, stays paused across a restart, and answers it once resumed', async () => {
     const { card } = await moved();
     expect(() => canvas.act(card.id, { action: 'pause' })).toThrow('not working on anything');

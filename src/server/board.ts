@@ -1384,7 +1384,7 @@ export class Board {
     const row = this.store.card(cardId);
     if (!row || row.workspace !== path) return this.changed();
     const working = row.state === 'working';
-    this.work(cardId, { workspace: null, app: null, parked: null, ...(working ? { state: 'planned', paused: null, snoozed: null } : {}) });
+    this.work(cardId, { workspace: null, app: null, parked: null, ...(working ? { state: 'planned', paused: null, pausing: null, snoozed: null } : {}) });
     if (!row.deleted_at) this.log(cardId, 'state', 'obeya', this.t.worker.workspaceGone(path, working));
   }
 
@@ -2434,6 +2434,7 @@ function work(r: CardRow): Partial<Item> {
     ...(detail.noChange && handed ? { noChange: true } : {}),
     ...(detail.lands && handed ? { lands: detail.lands } : {}),
     ...(r.paused ? { paused: true } : {}),
+    ...(r.pausing && !r.paused ? { pausing: true } : {}),
     ...(r.snoozed ? { snoozed: JSON.parse(r.snoozed) as Snooze } : {}),
     ...(r.app && r.workspace && !r.parked ? { app: r.app } : {}),
   };

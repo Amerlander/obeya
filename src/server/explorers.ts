@@ -100,13 +100,31 @@ export class Explorers {
     this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.pausedByOwner);
   }
 
-  /** The owner lets the paused agent go on: it answers what it had not answered yet. */
+  /**
+   * The owner pauses the idea's agent at a safe point (the card's pause, the canvas's): it finishes
+   * the reply it works on, and is paused then, before it takes up what was said meanwhile.
+   */
+  pauseAtSafePoint(cardId: string) {
+    const card = this.idea(cardId);
+    if (!this.live.has(cardId) || card.pausing) throw new BadRequest('noAgent', card.paused || card.pausing ? 'the agent is paused already' : 'the agent is not working on anything');
+    this.o.board.work(cardId, { pausing: new Date().toISOString() });
+    this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.pausing);
+  }
+
+  /** The owner lets the paused agent go on: it answers what it had not answered yet. One about to pause after its reply works on instead. */
   resume(cardId: string) {
     const card = this.idea(cardId);
+    if (card.pausing) return this.pauseTakenBack(cardId);
     if (!card.paused) throw new BadRequest('notPaused', 'the agent is not paused');
     // a reply already given left nothing unanswered: it goes on with what it did after it, its words no new reply
     const unanswered = !!this.o.board.idea(cardId).unread;
     this.send(card, unanswered ? 'Answer them now.' : RESUMED, [], !unanswered, [], true);
+  }
+
+  /** The owner lets the agent about to pause after its reply go on after all (`resume`, or their words to it). */
+  private pauseTakenBack(cardId: string) {
+    this.o.board.work(cardId, { pausing: null });
+    this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.resumedByOwner);
   }
 
   /**
@@ -157,7 +175,7 @@ export class Explorers {
     live?.session.close();
     const card = this.o.board.item(cardId);
     if (card?.idea?.thinking) this.o.board.setIdea(cardId, { thinking: false });
-    if (card?.paused) this.o.board.work(cardId, { paused: null });
+    if (card?.paused || card?.pausing) this.o.board.work(cardId, { paused: null, pausing: null });
   }
 
   /**
@@ -182,6 +200,13 @@ export class Explorers {
   resumeAll() {
     for (const i of this.o.board.snapshot().items) {
       if (i.state !== 'idea' || !i.idea?.thinking) continue;
+      // about to pause after its reply, which the restart cut off: it stays paused, its words unanswered
+      if (i.pausing) {
+        this.o.board.setIdea(i.id, { thinking: false });
+        this.o.board.work(i.id, { paused: '{}', pausing: null });
+        this.o.board.log(i.id, 'state', 'owner', this.o.board.t.worker.pausedByOwner);
+        continue;
+      }
       // with its repository not on the canvas, what it has not answered waits for the owner's next words
       if (this.o.board.row(i.id).session_id && !i.repoDown) this.send(i, 'Obeya was restarted while you worked on your reply. Answer the owner’s last message now.');
       else {
@@ -207,6 +232,8 @@ export class Explorers {
 
   /** `owner`: the owner's words, which let a paused agent go on; what Obeya tells it waits with what it has not answered yet. */
   private send(card: Item, message: string, images: string[] = [], quiet = false, said: number[] = [], owner = false) {
+    // the owner's words let an agent about to pause after its reply go on, as they do a paused one
+    if (owner && this.o.board.row(card.id).pausing) this.pauseTakenBack(card.id);
     const live = this.live.get(card.id);
     if (live) {
       // queued, it goes in with whatever else came, which may well need a reply
@@ -341,6 +368,15 @@ export class Explorers {
     live.lastText = '';
     live.said = undefined;
     live.quiet = false;
+    // the owner asked it to pause once its reply was given: what was said meanwhile waits for them to let it go on
+    if (this.o.board.row(cardId).pausing) {
+      live.current = [];
+      this.interrupt(cardId, 'paused');
+      this.o.board.work(cardId, { paused: '{}' });
+      this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.pausedByOwner);
+      this.o.onReplied?.(cardId, true);
+      return;
+    }
     if (live.queue.length) return this.sendQueued(cardId, live, []);
     this.close(cardId);
     this.o.onReplied?.(cardId, true);

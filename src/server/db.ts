@@ -93,6 +93,8 @@ export interface CardRow {
   thread: string | null;
   /** JSON, while the owner has paused the card's agent: for a worker what came for it meanwhile (`PausedState` in workers.ts), `{}` for an idea's or a Question card's agent, which keep what waits for them with the idea or the thread. */
   paused: string | null;
+  /** Since when (ISO) the owner has asked the card's agent to pause once it has brought its work to a safe point; null once it paused, went on or stopped. */
+  pausing: string | null;
   /** JSON: the owner's words Obeya holds for the card's worker until it takes them in, at its next tool step or turn (`Unheard` in workers.ts). */
   unheard: string | null;
   /** The address its worker opens the app in the card's workspace at, while it runs (`app_running`); gone once Obeya stops the app or the workspace goes. */
@@ -441,6 +443,8 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN page_heard TEXT;',
   // Obeya's reply on a card to what its agent passed on from the owner's words (`to_obeya`)
   'ALTER TABLE events ADD COLUMN forwarded INTEGER;',
+  // since when the owner asked the card's agent to pause at a safe point, until it has (ISO)
+  'ALTER TABLE cards ADD COLUMN pausing TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply, forwarded';

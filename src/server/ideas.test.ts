@@ -773,6 +773,26 @@ describe('an idea', () => {
     expect(talk(i.id).at(-1)).toEqual(['explorer', 'Zu Erstens.']);
   });
 
+  test('its agent paused at a safe point finishes its reply first, and is paused then', () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });
+    const first = explorer();
+    first.emit({ type: 'session', id: 'sess-1' });
+    canvas.act(i.id, { action: 'pause', safePoint: true });
+    expect(first.closed).toBe(false);
+    expect(item(i.id)).toMatchObject({ pausing: true, idea: { thinking: true } });
+    turn(first, 'Zu Erstens.');
+    expect(talk(i.id).at(-1)).toEqual(['explorer', 'Zu Erstens.']);
+    expect(first.closed).toBe(true);
+    expect(item(i.id)).toMatchObject({ paused: true, idea: { thinking: false } });
+    expect(item(i.id).pausing).toBeUndefined();
+    // the owner's words let it go on, as they do a paused one
+    canvas.act(i.id, { action: 'discuss', text: 'Zweitens.' });
+    expect(explorer().spec.resume).toBe('sess-1');
+    expect(explorer().inbox[0]).toContain('Zweitens.');
+    expect(item(i.id).paused).toBeUndefined();
+  });
+
   test('told more while paused, its agent goes on with that and what it had not answered; parked, it is no longer paused', () => {
     const i = idea();
     canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });

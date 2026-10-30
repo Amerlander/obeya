@@ -2,7 +2,7 @@
 // confirms them in one sentence, and runs them after a short delay unless the owner takes them back.
 
 import { z } from 'zod';
-import { type AgentSetting, agentListens, answering, askable, type Awaited, awaited, type AwaitedState, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, openQuestions, pausable, plannableAsProject, resumable, prototypeWorkstream, snoozable, SNOOZE_LIMIT, type Queue, type SpotInput, type Talk, type TalkAfter, type TalkQuote, type TalkRef } from '../core/types';
+import { type AgentSetting, agentListens, answering, askable, type Awaited, awaited, type AwaitedState, blocksSaving, type CanvasConfig, finished, handedOver, type Item, type NextStep, type Notice, openQuestions, pausableNow, plannableAsProject, halted, prototypeWorkstream, snoozable, SNOOZE_LIMIT, type Queue, type SpotInput, type Talk, type TalkAfter, type TalkQuote, type TalkRef } from '../core/types';
 import { holdsNotes, notStarted } from '../core/queue';
 import { answerTag, fromAnswerTag } from './answers';
 import { BadRequest, type Board, excerpt, replyNote } from './board';
@@ -1100,10 +1100,10 @@ export class Commander {
         break;
       case 'pause':
         if (card.paused) return 'its agent is paused already';
-        if (!pausable(card)) return `its agent is not working on anything right now, so there is nothing to pause (${is})`;
+        if (!pausableNow(card)) return `its agent is not working on anything right now, so there is nothing to pause (${is})`;
         break;
       case 'resume':
-        if (!resumable(card)) return card.snoozed ? `its agent is snoozed, not paused: wake wakes it (${is})` : `its agent is not paused (${is})`;
+        if (!halted(card)) return card.snoozed ? `its agent is snoozed, not paused: wake wakes it (${is})` : `its agent is not paused (${is})`;
         break;
       case 'snooze': {
         if (!snoozable(card)) return `the card is neither planned, at work nor waiting for the owner, so there is nothing to snooze (${is})`;
@@ -1210,6 +1210,8 @@ export class Commander {
         ? `; snoozed by ${i.snoozed.by === 'agent' ? 'its agent' : 'the owner'} until ${i.snoozed.on ? `the card „${i.snoozed.on.title}“ ${i.snoozed.on.state === 'done' ? 'is done' : 'waits for the owner'}${i.snoozed.until ? `, ${when(i.snoozed.until)} at the latest` : ''}` : when(i.snoozed.until!)}${i.snoozed.why ? ` (then: ${clip(oneLine(i.snoozed.why), 120)})` : ''}${i.snoozed.waiting ? ': it waits for the owner again then, and is not on their list until then' : i.snoozed.start ? ': it starts then; start or wake starts it now' : ': nothing of its agent runs until then; a note or wake wakes it earlier'}`
         : i.paused
         ? '; its agent is paused by the owner: nothing of it runs until resume or what the owner says to it, which it goes on with'
+        : i.pausing
+        ? '; the owner asked its agent to pause at a safe point: it ends its turn once the step it is in is done, and is paused then; resume or what the owner says to it lets it work on instead'
         : i.inTurn && i.state !== 'working'
           ? '; its agent is working on something right now'
           : i.background?.length

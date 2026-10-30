@@ -3,7 +3,7 @@
 import { memo, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { type Bounds, dependencyOrder, shapeOf } from '../core/layout';
 import { clip } from '../core/text';
-import { answering, type AppUpdate, type CanvasInfo, type BlockedClone, type ClonePool, finished, finishedArchivable, finishingUp, handedOver, type Item, needsYou, openQuestions, pausable, type PendingRestart, resumable, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
+import { answering, type AppUpdate, type CanvasInfo, type BlockedClone, type ClonePool, finished, finishedArchivable, finishingUp, handedOver, type Item, needsYou, openQuestions, pausable, type PendingRestart, halted, type PoolHost, type ProjectHistory, type SourceUpdate, stoppedArchivable, titleFrom } from '../core/types';
 import { ProjectTalk } from './koordinator';
 import { api } from './api';
 import type { Cam } from './camera';
@@ -79,23 +79,23 @@ export const PlayMark = () => (
 );
 
 /**
- * On a card on the canvas, the pause of its agent at work, or the resume of its paused one, as the
- * bubble in its conversation has them: where a card's play and archive buttons stand, faint, while
- * the pointer is on the card.
+ * On a card on the canvas, the pause of its agent at work, at a safe point, or the resume of its
+ * paused one (or of one about to pause, which then works on): where a card's play and archive
+ * buttons stand, faint, while the pointer is on the card.
  */
 function CardTurn({ item }: { item: Item }) {
-  const paused = resumable(item);
+  const paused = halted(item);
   if (!paused && !pausable(item)) return null;
   return (
     <button
       className={paused ? 'play turn resume' : 'play turn'}
-      title={paused ? t.pause.resumeHint : t.pause.hint}
+      title={item.pausing ? t.pause.takeBackHint : paused ? t.pause.resumeHint : t.pause.safeHint}
       aria-label={paused ? t.pause.resume : t.pause.button}
       // the canvas would take the press as the start of a drag or a click that opens the card
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
-        void api.act(item.id, { action: paused ? 'resume' : 'pause' }).catch(() => {});
+        void api.act(item.id, paused ? { action: 'resume' } : { action: 'pause', safePoint: true }).catch(() => {});
       }}
     >
       {paused ? <PlayMark /> : <PauseMark />}

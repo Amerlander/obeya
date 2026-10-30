@@ -1521,4 +1521,110 @@ describe('pausing: the owner halts a worker and lets it go on', () => {
     expect(board.item(c.id)).toMatchObject({ state: 'waiting', answering: true, inTurn: true });
     expect(board.item(c.id)!.paused).toBeUndefined();
   });
+
+  test('pausing at a safe point tells the worker, which ends its turn once its step is done, and is paused then', async () => {
+    const c = await atWork();
+    const session = runtime.last;
+    workers.pauseAtSafePoint(c.id);
+    expect(session.closed).toBe(false);
+    expect(session.inbox.at(-1)).toContain('The owner pauses you now');
+    expect(session.inbox.at(-1)).toContain('after at most 15 minutes');
+    expect(board.item(c.id)).toMatchObject({ state: 'working', pausing: true, inTurn: true });
+    expect(board.item(c.id)!.paused).toBeUndefined();
+    expect(pausable(board.item(c.id)!)).toBe(false);
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'owner', text: 'Hält an, sobald die Arbeit an einem sicheren Punkt ist.' });
+    expect(() => workers.pauseAtSafePoint(c.id)).toThrow('paused already');
+    session.emit({ type: 'text', text: 'Tests grün, ich halte an.' });
+    session.emit({ type: 'idle' });
+    // no nudge and no question to the owner: it paused
+    expect(session.closed).toBe(true);
+    expect(board.item(c.id)).toMatchObject({ state: 'working', paused: true });
+    expect(board.item(c.id)!.pausing).toBeUndefined();
+    expect(board.item(c.id)!.question).toBeUndefined();
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'owner', text: 'Pausiert.' });
+    workers.resume(c.id);
+    expect(runtime.last.spec.resume).toBe('sess-1');
+    expect(board.item(c.id)!.paused).toBeUndefined();
+  });
+
+  test('a worker about to pause can still be paused at once', async () => {
+    const c = await atWork();
+    const session = runtime.last;
+    workers.pauseAtSafePoint(c.id);
+    workers.pause(c.id);
+    expect(session.closed).toBe(true);
+    expect(board.item(c.id)).toMatchObject({ paused: true });
+    expect(board.item(c.id)!.pausing).toBeUndefined();
+  });
+
+  test('a worker about to pause with its render still running hears, when the render wakes it, that the owner still waits', async () => {
+    const c = await atWork();
+    const session = runtime.last;
+    workers.pauseAtSafePoint(c.id);
+    expect(session.toolStep()).toBeUndefined();
+    session.emit({ type: 'idle', background: 1 });
+    expect(board.item(c.id)).toMatchObject({ pausing: true });
+    expect(session.closed).toBe(false);
+    session.emit({ type: 'tool', name: 'Bash', input: { command: 'tail -2 render.log' } });
+    expect(session.toolStep()).toContain('The owner still waits for you to pause');
+    expect(session.toolStep()).toBeUndefined();
+    session.emit({ type: 'idle' });
+    expect(session.closed).toBe(true);
+    expect(board.item(c.id)).toMatchObject({ paused: true });
+  });
+
+  test("resuming a worker about to pause, or the owner's words to it, let it work on", async () => {
+    const c = await atWork();
+    const session = runtime.last;
+    workers.pauseAtSafePoint(c.id);
+    workers.resume(c.id);
+    expect(session.inbox.at(-1)).toBe('The owner no longer wants you to pause: go on with your work.');
+    expect(board.item(c.id)!.pausing).toBeUndefined();
+    expect(board.events(c.id).at(-1)).toMatchObject({ kind: 'state', author: 'owner', text: 'Weiter.' });
+    workers.pauseAtSafePoint(c.id);
+    // between its steps, so the words go in at once
+    session.emit({ type: 'idle', background: 1 });
+    workers.message(c.id, 'Nimm lieber CSV.');
+    expect(session.inbox.at(-1)).toContain('The owner no longer wants you to pause');
+    expect(session.inbox.at(-1)).toContain('Nimm lieber CSV.');
+    expect(board.item(c.id)!.pausing).toBeUndefined();
+    session.emit({ type: 'idle' });
+    expect(board.item(c.id)!.paused).toBeUndefined();
+  });
+
+  test('a worker that does not come to a safe point in time is paused at once', async () => {
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter: generic, pauseLimit: 20 }));
+    const c = await atWork();
+    const session = runtime.last;
+    workers.pauseAtSafePoint(c.id);
+    expect(session.inbox.at(-1)).toContain('after at most 1 minute.');
+    await new Promise((r) => setTimeout(r, 40));
+    expect(session.closed).toBe(true);
+    expect(board.item(c.id)).toMatchObject({ paused: true });
+  });
+
+  test('a worker about to pause that hands over is paused on its handover, the card waiting for approval', async () => {
+    const c = await atWork();
+    const clone = board.row(c.id).workspace!;
+    writeFileSync(join(clone, 'export.ts'), 'export {}\n');
+    git(clone, 'add', '.');
+    git(clone, 'commit', '--quiet', '-m', 'Export');
+    workers.pauseAtSafePoint(c.id);
+    await runtime.last.call('ready_for_review', { summary: 'Export gebaut.', demo: artifact() });
+    runtime.last.emit({ type: 'idle' });
+    expect(board.item(c.id)).toMatchObject({ state: 'waiting', need: 'demo', paused: true });
+  });
+
+  test('a worker about to pause when Obeya restarts stays paused after it', async () => {
+    const c = await atWork();
+    workers.pauseAtSafePoint(c.id);
+    workers.shutdown();
+    const n = runtime.sessions.length;
+    workers.resumeAll();
+    expect(runtime.sessions.length).toBe(n);
+    expect(board.item(c.id)).toMatchObject({ paused: true });
+    expect(board.item(c.id)!.pausing).toBeUndefined();
+    workers.resume(c.id);
+    expect(runtime.last.spec.resume).toBe('sess-1');
+  });
 });

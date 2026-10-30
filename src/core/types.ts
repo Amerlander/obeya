@@ -65,11 +65,18 @@ export interface WorkerTurn {
 /** The card's agent is snoozed (by itself or the owner, „Später …“): it stops until its time, and neither pauses nor resumes meanwhile. */
 const snoozedAway = (i: Pick<Item, 'snoozed'>) => !!i.snoozed && !i.snoozed.waiting;
 
-export const pausable = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'snoozed'>) =>
+/** The card's agent runs a turn the owner can pause at once (the pause on the bubble of its turn), also while it is about to pause at a safe point. */
+export const pausableNow = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'snoozed'>) =>
   !i.paused && !snoozedAway(i) && (i.kind === 'question' ? !!i.thread?.thinking : i.state === 'idea' && i.idea ? i.idea.thinking : !!i.inTurn);
+
+/** The card's agent is at work and can be paused, at a safe point (the card's pause, the canvas's) or at once; not one about to pause already. */
+export const pausable = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'pausing' | 'snoozed'>) => !i.pausing && pausableNow(i);
 
 /** The owner paused the card's agent, and it waits for them to resume it; a snoozed one, which holds what comes for it as a paused one does, waits for its time instead. */
 export const resumable = (i: Pick<Item, 'paused' | 'snoozed'>) => !!i.paused && !snoozedAway(i);
+
+/** The card's agent is paused, or about to pause at a safe point: what the card's ▶ and the canvas's resume let go on. */
+export const halted = (i: Pick<Item, 'paused' | 'pausing' | 'snoozed'>) => (!!i.paused || !!i.pausing) && !snoozedAway(i);
 
 /**
  * A finished card an agent worked on, on the canvas, with no agent on it now: what the owner asks
@@ -412,6 +419,11 @@ export interface Item {
    * the owner's next words to it.
    */
   paused?: true;
+  /**
+   * The owner asked the card's agent to pause once it has brought its work to a safe point (the
+   * card's pause, the canvas's): it works on until its turn ends, and is `paused` then.
+   */
+  pausing?: true;
   /** Set aside until a point in time: nothing of its agent runs, and it does not wait for the owner meanwhile. */
   snoozed?: Snooze;
   /**
@@ -941,7 +953,7 @@ export interface CanvasInfo {
   configRev?: number;
   /** The owner paused the canvas's agents: cards the Koordinator lets start wait in the queue until they resume them. */
   paused?: true;
-  /** Its agents at work now (`pausable`) and those the owner paused, for the canvas switcher; absent while none is either. */
+  /** Its agents at work now (`pausable`) and those the owner paused or that are about to pause (`halted`), for the canvas switcher; absent while none is either. */
   agents?: { running: number; paused: number };
 }
 
@@ -1320,8 +1332,11 @@ export type CardAction =
   /** A card the owner closed without a title (`nameless`): Obeya names it from its text. */
   | { action: 'name' }
   | { action: 'stop' }
-  /** The worker stops at once and goes on later where it stopped (`resume`, or the owner's next words to it). */
-  | { action: 'pause' }
+  /**
+   * The agent stops at once and goes on later where it stopped (`resume`, or the owner's next words
+   * to it); `safePoint`: it first brings its work to a safe point and ends its turn, then stops.
+   */
+  | { action: 'pause'; safePoint?: true }
   | { action: 'resume' }
   /**
    * Set aside until `until` (ISO): a card at work stops until then as on a pause, one waiting for the

@@ -3,7 +3,7 @@
 import { LANGUAGES } from '../core/locale';
 import { MESSAGES } from '../core/messages';
 import { holdsNotes } from '../core/queue';
-import { answering, askable, type CardEvent, type Demo, finishingUp, type Item, needsYou, openQuestions, ownWords, pausable, type Question, resumable, started, type Talk as Exchange } from '../core/types';
+import { answering, askable, type CardEvent, type Demo, finishingUp, type Item, needsYou, openQuestions, ownWords, pausableNow, type Question, resumable, started, type Talk as Exchange } from '../core/types';
 import { readAnswer } from './answer';
 import type { Field } from './api';
 
@@ -506,10 +506,10 @@ export function unseenTurns(talk: Talk, events: CardEvent[], seen = -1): Turn[] 
 
 /**
  * Whether the card's agent is at work on it, so its conversation ends with the agent at work: an
- * agent working on something, which the owner can pause (`pausable`), or a proposal reworked.
+ * agent working on something, which the owner can pause (`pausableNow`), or a proposal reworked.
  */
 export const agentWorks = (i: Pick<Item, 'kind' | 'state' | 'idea' | 'thread' | 'inTurn' | 'paused' | 'snoozed' | 'proposal'>) =>
-  pausable(i) || (i.state === 'proposal' && !!i.proposal?.revising);
+  pausableNow(i) || (i.state === 'proposal' && !!i.proposal?.revising);
 
 /**
  * Whether the Koordinator still reads what the owner said on the card: their words stand in the log

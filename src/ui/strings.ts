@@ -248,10 +248,18 @@ const de = {
   pause: {
     button: 'Pausieren',
     hint: 'Pausieren: hält den Agenten sofort an, auch mitten in einem Schritt, mit allem, was er gerade laufen hat. Er behält seine Sitzung und macht dort weiter, wo er war, sobald du „Weitermachen“ klickst oder ihm schreibst.',
+    /** The card's pause on the canvas, which lets the agent come to a safe point first. */
+    safeHint: 'Pausieren: der Agent bringt erst den Schritt zu Ende, an dem er gerade ist, und hält dann an. Er behält seine Sitzung und macht dort weiter, sobald du „Weitermachen“ klickst oder ihm schreibst.',
     resume: 'Weitermachen',
     resumeHint: 'Der Agent macht dort weiter, wo du ihn angehalten hast.',
+    /** On a card whose agent is about to pause at a safe point. */
+    takeBackHint: 'Der Agent hält doch nicht an und arbeitet weiter.',
     /** After the agent's name, in the conversation where it worked. */
     paused: 'pausiert',
+    /** After the agent's name, while it brings its work to a safe point to pause there. */
+    pausingTalk: 'hält an …',
+    /** The card's state while its agent brings its work to a safe point to pause there. */
+    pausing: 'Agent hält an …',
     working: 'Agent pausiert',
     inPr: 'Im PR · Agent pausiert',
     live: 'Live · Agent pausiert',
@@ -2152,9 +2160,13 @@ const en: Strings = {
   pause: {
     button: 'Pause',
     hint: 'Pause: halts the agent at once, even in the middle of a step, with whatever it has running. It keeps its session and goes on where it was as soon as you click “Resume” or write to it.',
+    safeHint: 'Pause: the agent first finishes the step it is in, then stops. It keeps its session and goes on from there as soon as you click “Resume” or write to it.',
     resume: 'Resume',
     resumeHint: 'The agent goes on where you paused it.',
+    takeBackHint: 'The agent does not pause after all and works on.',
     paused: 'paused',
+    pausingTalk: 'pausing …',
+    pausing: 'Agent pausing …',
     working: 'Agent paused',
     inPr: 'In PR · agent paused',
     live: 'Live · agent paused',
@@ -3805,11 +3817,13 @@ const longDay = (d: Date, today: Date) =>
 /** A number, with `digits` decimals at most. */
 const number = (n: number, digits = 0) => n.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
-export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; contribution?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; snoozed?: Snooze; prototypeEnd?: 'discarded' | 'built'; retro?: string; proposal?: { setup?: true }; branch?: string }) =>
+export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; state: CardState; need?: Need; pr?: unknown; contribution?: unknown; queue?: Queue; idea?: Idea; question?: unknown; answering?: true; answered?: true; finishing?: boolean; followUp?: boolean; paused?: true; pausing?: true; snoozed?: Snooze; prototypeEnd?: 'discarded' | 'built'; retro?: string; proposal?: { setup?: true }; branch?: string }) =>
   i.snoozed
     ? i.snoozed.on
       ? t.snooze.on(i.snoozed.on.title, i.snoozed.on.state, i.snoozed.until && snoozeWhen(i.snoozed.until))
       : t.snooze.until(snoozeWhen(i.snoozed.until!))
+    : i.pausing
+    ? t.pause.pausing
     : i.kind === 'question'
     ? i.paused
       ? t.pause.working

@@ -86,10 +86,24 @@ Confirmation and undo.
 A note reaches the worker at any time without stopping it. To stop it mid-work, the conversation's
 bubble that shows the agent at work („Agent arbeitet …“) has a pause mark, faint. At the desk it
 shows only while the pointer is on the bubble, so a long run does not keep a button in view; on a
-touch screen it is always there. By voice „halt mal an“. On the canvas, the card shows the same
-faint pause while the pointer is on it, in the corner where other cards show their play and archive
-buttons (see The canvas), and a paused card shows a faint ▶ there on the same hover, which resumes
-it as „Weitermachen“ does.
+touch screen it is always there. By voice „halt mal an“. Both pause at once.
+
+On the canvas, the card shows a faint pause while the pointer is on it, in the corner where other
+cards show their play and archive buttons (see The canvas), which pauses at a safe point instead:
+the agent brings its work to a clean stop first, as for a restart (see Waiting for the workers). A
+worker hears that the owner pauses it: it finishes the step it is in, starts nothing long, stops the
+background work it can start again and ends its turn, without handing over if it is not done. An
+idea's or Question card's agent finishes the reply it works on. Meanwhile the card reads „Agent hält
+an …“ and its bubble „Agent hält an …“, whose pause still stops it at once. Once the turn ends,
+however it ends (with a handover or a question too), the agent is paused as by the bubble's pause;
+background work the worker let run keeps it from pausing until it ends, and the turn that work
+starts hears that the owner still waits. A worker that has not ended its turn after 15 minutes is
+paused at once. One with nothing running that could be cut off (its workspace still being made
+ready, waiting for the usage limit) pauses at once. A restart meanwhile leaves it paused. On the
+same hover, a paused card, and one about to pause, shows a faint ▶ there, which resumes it as
+„Weitermachen“ does; the one about to pause hears that it works on instead, and so it does with the
+owner's words to it.
+
 The bubble and the pause exist exactly while an agent runs a turn (background work included): a
 Question card's agent reading, an idea's agent replying, a worker in any card state (at work, taking
 in the owner's words on its handover, in its PR, finishing after the landing). An idle agent (a PR
@@ -99,8 +113,8 @@ A worker's bubble also lists its background work under „Im Hintergrund“, eac
 described it, with how long it has run, counting from when Obeya first saw it (the SDK gives no
 start time); the SDK's own housekeeping does not show.
 
-Pausing ends the session at once, mid-step if need be, with whatever it ran, and keeps the card's
-state and the session. A worker keeps workspace and branch, frees its slot, and its app is parked
+Pausing (at once, or once the turn has ended) ends the session, mid-step if need be, with whatever
+it ran, and keeps the card's state and the session. A worker keeps workspace and branch, frees its slot, and its app is parked
 after the grace; one paused on its handover leaves the card waiting for approval („Demo bereit ·
 Agent pausiert“), Freigeben included. An idea's or Question card's agent keeps what it had not
 answered. The bubble stays where the agent stopped, in pencil grey, „Agent pausiert · ▶
@@ -120,8 +134,8 @@ none at work but at least one paused, the row shows ▶ on the same hover, „x 
 fortsetzen“. On a touch screen the button is always there; the phone lists, above what runs, each
 canvas with agents and the same button with its words. Nothing else of it sits in the bar.
 
-Pausing pauses each agent at work there as its own pause does, at once. As long as one of them is
-still paused, the cards the Koordinator lets start on that canvas wait in the queue („Wartet:
+Pausing pauses each agent at work there as the pause on its card does, at a safe point; those about
+to pause count as paused already. As long as one of them is still paused (or about to be), the cards the Koordinator lets start on that canvas wait in the queue („Wartet:
 Leinwand pausiert“) instead of taking the slots that pausing freed. Resuming resumes every paused
 agent there, as „Weitermachen“ does, and the waiting cards start. Once none on the canvas is paused
 any more (the owner resumed each on its card, or their cards went), the queue runs again by itself;
@@ -275,13 +289,22 @@ as a learned preference does. Older answers agents gave in the owner's name stay
 - **The pause sits on the bubble of the running turn** (2026-10-15), not in the action row: the row
   holds decisions about the card, pausing is about the turn now running, and the pause exists
   exactly when a turn runs (also while a worker takes in the owner's words on a waiting card, before
-  a paid render, say). „Stoppen“ is named so it does not read like a pause. Rejected: pausing at the
-  next safe point, as for a restart: the owner pauses an agent going the wrong way.
+  a paid render, say). „Stoppen“ is named so it does not read like a pause. Rejected: the bubble's pause
+  waiting for the next safe point, as for a restart: there the owner stops an agent going the wrong
+  way (the card's pause waits, see below).
 - **The pause, the reply and the copy button show on hover at the desk, from the first use on**
   (2026-10-29, owner): always in view, even faint, the pause drew the eye on every running turn. A
   newcomer finds a button that appears where the pointer goes, so none stays in view until its
   first use. Rejected: always visible; visible until used once. A touch screen, without hover,
   shows them all.
+- **The card's pause and the canvas's pause wait for a safe point; the bubble's pauses at once**
+  (2026-10-30, owner): pausing from the canvas sets work aside for later, and an agent cut off
+  mid-step leaves half-done work (a test run, a render, uncommitted edits) to sort out on resume. The
+  bubble's pause stays for an agent going the wrong way. The safe point is the one restarts already
+  use, with the same 15 minutes at most. Rejected: one pause for all three places (either cuts off
+  work the owner only wanted set aside, or lets an agent go on that is going the wrong way); a turn
+  ending with a handover leaving the agent unpaused (a canvas whose agents all handed over would
+  start its queue again).
 - **A canvas pauses as its agents, each with its own pause** (2026-10-29, owner and maintainer, PR
   #22): the owner with several canvases steers where the tokens go, pausing the less important
   ones. The canvas has no state of its own beyond holding its queue: what shows and what resumes

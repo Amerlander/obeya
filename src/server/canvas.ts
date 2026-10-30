@@ -13,7 +13,7 @@ import { repoName } from '../adapters/generic';
 import type { DemoSite, RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, pausable, resumable, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, SHARED_FIELDS, type SharedSettings, type Skill, type SpotInput, type TrustGroup } from '../core/types';
+import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, type AgentSetting, buildableOn, type CanvasConfig, prototypeWorkstream, type CardAction, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, pausable, halted, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, SHARED_FIELDS, type SharedSettings, type Skill, type SpotInput, type TrustGroup } from '../core/types';
 import { holdsNotes } from '../core/queue';
 import { BadRequest, Board, pathOfRef, replyNote, type StoredContribution } from './board';
 import type { ChangeRoute } from '../core/types';
@@ -1050,14 +1050,14 @@ export class CanvasRuntime {
 
   /**
    * The owner pauses the canvas's agents (design: Pausing a canvas's agents): each one at work now
-   * pauses as its card's own pause has it, and until they resume them, the cards the Koordinator
-   * lets start wait in the queue. With none at work, nothing changes.
+   * pauses at a safe point as its card's own pause has it, and until they resume them, the cards the
+   * Koordinator lets start wait in the queue. With none at work, nothing changes.
    */
   pauseAgents() {
     let paused = 0;
     for (const i of this.board.snapshot().items.filter(pausable)) {
       try {
-        this.agentOf(i.id).pause(i.id);
+        this.agentOf(i.id).pauseAtSafePoint(i.id);
         paused++;
       } catch (e) {
         console.error(`Obeya: the agent of ${i.id} did not pause: ${messageOf(e)}`);
@@ -1070,19 +1070,19 @@ export class CanvasRuntime {
   }
 
   /**
-   * The owner resumes the canvas's paused agents: each goes on as its card's own resume has it, and
-   * the cards waiting for it start. Snoozed ones sleep on; one that cannot go on (its repository is
-   * down) stays paused, and so the canvas's pause lasts.
+   * The owner resumes the canvas's paused agents, and those about to pause: each goes on as its
+   * card's own resume has it, and the cards waiting for it start. Snoozed ones sleep on; one that
+   * cannot go on (its repository is down) stays paused, and so the canvas's pause lasts.
    */
   resumeAgents() {
-    for (const i of this.board.snapshot().items.filter(resumable)) {
+    for (const i of this.board.snapshot().items.filter(halted)) {
       try {
         this.agentOf(i.id).resume(i.id);
       } catch (e) {
         console.error(`Obeya: the agent of ${i.id} did not resume: ${messageOf(e)}`);
       }
     }
-    if (!this.paused || this.board.snapshot().items.some(resumable)) return;
+    if (!this.paused || this.board.snapshot().items.some(halted)) return;
     this.showPaused(false);
     this.board.changed();
   }
@@ -1102,13 +1102,14 @@ export class CanvasRuntime {
   }
 
   /**
-   * Counts the canvas's agents at work and those the owner paused, for the switchers. Once none is
-   * paused any more (the owner resumed each on its card, or their cards went), the canvas's pause ends.
+   * Counts the canvas's agents at work and those the owner paused (or that are about to pause), for
+   * the switchers. Once none is either any more (the owner resumed each on its card, or their cards
+   * went), the canvas's pause ends.
    */
   private countAgents() {
     const items = this.board.snapshot().items;
     const running = items.filter(pausable).length;
-    const paused = items.filter(resumable).length;
+    const paused = items.filter(halted).length;
     if (this.paused && !paused) this.showPaused(false);
     if (running || paused) this.board.canvas.agents = { running, paused };
     else delete this.board.canvas.agents;
@@ -1524,10 +1525,9 @@ export class CanvasRuntime {
       case 'stop':
         return this.repoOf(cardId).workers.stop(cardId);
       case 'pause':
-      case 'resume': {
-        const agent = this.agentOf(cardId);
-        return a.action === 'pause' ? agent.pause(cardId) : agent.resume(cardId);
-      }
+        return a.safePoint ? this.agentOf(cardId).pauseAtSafePoint(cardId) : this.agentOf(cardId).pause(cardId);
+      case 'resume':
+        return this.agentOf(cardId).resume(cardId);
       case 'snooze':
         return this.snooze(cardId, a.until);
       case 'wake':
@@ -1655,7 +1655,7 @@ export class CanvasRuntime {
     if (card.thread?.thinking) throw new BadRequest('ideaThinking', 'its agent is still reading; discuss it as an idea once the answer is there');
     if (!this.runs(card)) throw repoDown(card);
     // a paused agent's question goes into the discussion with the rest of the thread
-    this.board.work(cardId, { kind: 'task', state: 'idea', idea: JSON.stringify({ status: 'open', brief: '' }), session_id: null, paused: null });
+    this.board.work(cardId, { kind: 'task', state: 'idea', idea: JSON.stringify({ status: 'open', brief: '' }), session_id: null, paused: null, pausing: null });
     this.board.log(cardId, 'state', 'owner', this.board.t.answer.asIdea);
     this.explorers.tell(cardId, this.answers.opening(cardId));
   }

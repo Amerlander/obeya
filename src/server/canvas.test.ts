@@ -1340,7 +1340,12 @@ test("pausing a canvas's agents pauses each at work, holds the cards let start m
     worker.emit({ type: 'text', text: 'Arbeite.' });
     expect(c.board.canvas.agents).toEqual({ running: 1, paused: 0 });
     c.pauseAgents();
-    // as the card's own pause: its session ends at once
+    // as the card's own pause: it brings its work to a safe point first, and counts as paused meanwhile
+    expect(worker.closed).toBe(false);
+    expect(worker.inbox.at(-1)).toContain('The owner pauses you now');
+    expect(c.board.item(a.id)!.pausing).toBe(true);
+    expect(c.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
+    worker.emit({ type: 'idle' });
     expect(worker.closed).toBe(true);
     expect(c.board.item(a.id)!.paused).toBe(true);
     expect(c.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
@@ -1375,6 +1380,7 @@ test("a canvas's pause ends once none of its agents is paused any more, and last
     const worker = runtime.sessions.at(-1)!;
     worker.emit({ type: 'session', id: 's-a' });
     worker.emit({ type: 'text', text: 'Arbeite.' });
+    // Obeya stops while the agent is about to pause: it is paused when Obeya runs again
     c.pauseAgents();
   } finally {
     c.shutdown();
@@ -1439,6 +1445,8 @@ test("a canvas's pause lasts while one of its paused agents cannot go on, its re
     await atWork(front!, 's-front');
     const gone = await atWork(back!, 's-back');
     c.pauseAgents();
+    // both end their turn at a safe point
+    for (const s of runtime.sessions.filter((s) => s.spec.resume === undefined && s.spec.role === 'worker').slice(-2)) s.emit({ type: 'idle' });
     expect(c.board.canvas.agents).toEqual({ running: 0, paused: 2 });
     c.apply({ name: 'Pause', repos: [both[0]!] });
     await until(() => c.repos.length === 1);
