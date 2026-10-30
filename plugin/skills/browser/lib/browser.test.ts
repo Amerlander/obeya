@@ -182,12 +182,12 @@ describe('browser skill', () => {
     await browser(pid, 'stop');
   }, 30_000);
 
-  test("playwright names the import of the Playwright it launches with, which a script anywhere runs, and Playwright's browsers", async () => {
+  test("playwright names the import of the Playwright it launches with, which a script anywhere runs, and Playwright's WebKit and Firefox", async () => {
     const out = (await browser(null, 'playwright')).split('\n');
-    expect(out[0]).toMatch(/^import \{ chromium, firefox, webkit \} from 'file:\/\/.+playwright-core\/index\.mjs';$/);
-    expect(out.slice(1).map((l) => l.split(':')[0])).toEqual(['webkit', 'firefox', 'chromium']);
+    expect(out[0]).toMatch(/^import \{ chromium, firefox, webkit \} from "file:\/\/.+playwright-core\/index\.mjs";$/);
+    expect(out.slice(1).map((l) => l.split(':')[0])).toEqual(['webkit', 'firefox']);
     // a script outside any project with node_modules (the test's temp directory)
-    const script = join(dir, 'probe.ts');
+    const script = join(dir, 'probe.mjs');
     writeFileSync(script, `${out[0]}\nconsole.log(typeof webkit.launch, typeof chromium.connectOverCDP);\n`);
     const p = Bun.spawnSync(['node', script], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
     expect({ code: p.exitCode, out: p.stdout.toString().trim() }).toEqual({ code: 0, out: 'function function' });

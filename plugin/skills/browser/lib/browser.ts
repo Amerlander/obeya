@@ -24,8 +24,9 @@
 //     type:TEXT  wait:MS  shot:FILE.png  eval:JS
 //     X,Y may be @<css selector> instead: the centre of the first matching element
 //   playwright                       print the import of the Playwright it is launched with, for a
-//                                    script of one's own, and which of Playwright's browsers are installed
-//   playwright install <browser>…    install Playwright's own webkit, firefox or chromium
+//                                    script of one's own, and whether Playwright's WebKit and Firefox are installed
+//   playwright install <browser>…    install Playwright's own webkit or firefox (--with-deps: with the
+//                                    system libraries they need on Linux)
 //
 // Each Claude Code session has a browser of its own: its state (port, pid) is in a file named by
 // the session's process (`CLAUDE_PID`), and the process holding the browser (`serve`, started by
@@ -508,7 +509,11 @@ export function playwrightModule(): string {
   return import.meta.resolve('playwright-core');
 }
 
-/** `playwright`: the import line and Playwright's own browsers; `playwright install …` installs them. */
+/**
+ * `playwright`: the import line and which of Playwright's own WebKit and Firefox are installed (its
+ * Chromium is left out: a launch takes its headless shell, which `executablePath` does not name);
+ * `playwright install …` installs them.
+ */
 async function playwright(args: string[]) {
   const url = playwrightModule();
   if (args[0] === 'install') {
@@ -517,10 +522,9 @@ async function playwright(args: string[]) {
     process.exit(r.status ?? 1);
   }
   const pw = (await import(url)) as typeof import('playwright-core');
-  console.log(`import { chromium, firefox, webkit } from '${url}';`);
-  for (const name of ['webkit', 'firefox', 'chromium'] as const) {
-    const exe = pw[name].executablePath();
-    console.log(fs.existsSync(exe) ? `${name}: installed` : `${name}: not installed (playwright install ${name})`);
+  console.log(`import { chromium, firefox, webkit } from ${JSON.stringify(url)};`);
+  for (const name of ['webkit', 'firefox'] as const) {
+    console.log(fs.existsSync(pw[name].executablePath()) ? `${name}: installed` : `${name}: not installed (playwright install ${name})`);
   }
 }
 

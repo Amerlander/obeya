@@ -438,8 +438,8 @@ microphone.
 The commands drive Chromium only. For WebKit (Safari's engine, and the macOS app's window), Firefox
 or a script in Playwright's API, the skill's `playwright` prints the import line of the
 `playwright-core` it launches its browser with, as a file URL that a script anywhere can import
-(a bare `playwright-core` resolves only inside Obeya's tree), and which of Playwright's own browsers
-the machine has; `playwright install` installs the missing ones.
+(a bare `playwright-core` resolves only inside Obeya's tree), and whether Playwright's own WebKit
+and Firefox are installed; `playwright install` installs them.
 
 What headless Chromium can't reproduce (the on-screen keyboard and `visualViewport`, video
 fullscreen, rotation) workers check in Obeya's repository with `scripts/android-phone.ts`: Chrome in

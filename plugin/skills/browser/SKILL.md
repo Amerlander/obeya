@@ -36,7 +36,7 @@ screenshot <file.png> [--tab id] [--full]   # --full = full page height
 pdf <file.pdf> [--tab id]
 input <step>… [--tab id]          # trusted mouse/keyboard input, see below
 playwright                        # the import line of Playwright for a script, and its browsers
-playwright install <browser>…     # install Playwright's own webkit, firefox or chromium
+playwright install <browser>…     # install Playwright's own webkit or firefox
 ```
 
 `--tab` accepts an id prefix; without it, the first (most recently used) tab is targeted.
@@ -92,18 +92,18 @@ re-run `tabs` to see the new URL.
 The commands drive Chromium. For a page in WebKit (the engine of Safari and of macOS web views) or
 Firefox, or for a longer run in Playwright's API, write a script against the Playwright this skill
 launches its browser with; it is installed already, and `playwright` prints the line that imports
-it, from anywhere, and which of Playwright's own browsers are on the machine:
+it, from anywhere, and whether Playwright's own WebKit and Firefox are on the machine:
 
 ```bash
 node $B playwright
-# import { chromium, firefox, webkit } from 'file:///…/node_modules/playwright-core/index.mjs';
+# import { chromium, firefox, webkit } from "file:///…/node_modules/playwright-core/index.mjs";
 # webkit: installed
 # firefox: not installed (playwright install firefox)
 ```
 
-Put that line at the top of the script (`probe.ts`, say, anywhere) and run it with `node` or `bun`:
+Put that line at the top of the script (`probe.mjs`, say, anywhere) and run it with `node` or `bun`:
 
-```ts
+```js
 const browser = await webkit.launch();
 const page = await browser.newPage();
 await page.goto('http://127.0.0.1:4480/');
@@ -112,7 +112,8 @@ await browser.close();
 ```
 
 A browser that is not installed yet comes with `node $B playwright install webkit` (a download, once
-per machine). A script can also attach to this session's own Chromium, muted as it is:
+per machine; on Linux `install --with-deps webkit` also brings the system libraries it needs). A
+script can also attach to this session's own Chromium, muted as it is:
 `chromium.connectOverCDP('http://127.0.0.1:<port>')`, the port from `status`; its `close()` then
 only disconnects.
 
