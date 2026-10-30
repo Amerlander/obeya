@@ -73,8 +73,32 @@ export function noteMessage(type: string, bytes: number, at: number, ms: number)
   if (noted.length > KEPT) noted.shift();
 }
 
+/**
+ * The heartbeat: a worker's timer, which the browser does not hold back with the page's own (WebKit
+ * runs those about once a second in a window it takes for idle, in view or not), sends the time
+ * every tick for the page to take in; a page that takes it in late was held up. The worker's clock
+ * starts elsewhere than the page's, so only differences between its times are compared.
+ */
+const HEARTBEAT = `setInterval(() => postMessage(performance.now()), ${TICK_MS});`;
+
+/**
+ * The stall that a beat taken in at `now` tells of, `late` after it was sent: none where it came
+ * soon enough, and only what came after `free`, when the page took the beat before in (the beats
+ * queued behind a stall tell of the same one). `least` is how late a beat must be to tell of one.
+ */
+export function stallOf(late: number, now: number, free: number, least = STALL_MS): { from: number; to: number } | null {
+  const from = Math.max(now - late, free);
+  return now - from >= least ? { from, to: now } : null;
+}
+
 /** Watches this page for stalls; `send` passes one on to the server, and says whether it could. */
 export function watchPageStalls(send: (s: PageStall) => boolean) {
+  let heart: Worker;
+  try {
+    heart = new Worker(URL.createObjectURL(new Blob([HEARTBEAT], { type: 'text/javascript' })));
+  } catch {
+    return;
+  }
   const frames: LongFrame[] = [];
   const supported = typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes?.includes('long-animation-frame');
   if (supported)
@@ -87,28 +111,32 @@ export function watchPageStalls(send: (s: PageStall) => boolean) {
   // of yet: one during a reconnect goes out once the page is connected again
   const found: { from: number; to: number; before: string[] }[] = [];
   const unsent: PageStall[] = [];
-  let last = performance.now();
+  let free = performance.now();
+  // the least that worker's and page's clocks were apart on taking a beat in: what any beat took more was its wait
+  let apart = Infinity;
   // the browser holds a page out of view back by itself: a pause it was out of view in, however
   // briefly, is no stall, so going out of view and back starts the count afresh
   let visible = document.visibilityState === 'visible';
   document.addEventListener('visibilitychange', () => {
-    last = performance.now();
+    free = performance.now();
     visible = document.visibilityState === 'visible';
   });
-  setInterval(() => {
+  heart.onmessage = (e: MessageEvent<number>) => {
     const now = performance.now();
-    const from = last;
-    last = now;
-    if (now - from >= STALL_MS && visible) found.push({ from, to: now, before: beforeOf(noted, from, now) });
+    apart = Math.min(apart, now - e.data);
+    // with long frames to tell its length, a beat a tick short of a stall may have missed its start
+    const stall = stallOf(now - e.data - apart, now, free, supported ? STALL_MS - TICK_MS : STALL_MS);
+    free = now;
+    if (stall && visible) found.push({ ...stall, before: beforeOf(noted, stall.from, stall.to) });
     while (found.length && (!supported || now - found[0]!.to >= REPORTED_MS)) {
       const f = found.shift()!;
       const long = supported ? framesWithin(frames, f.from, f.to) : [];
-      // the ticks see a stall up to one tick short; the long frames tell its length to the millisecond
-      const ms = Math.max(f.to - f.from - TICK_MS, long.reduce((sum, l) => sum + l.duration, 0));
+      // the beat went out up to a tick after the stall began; the long frames tell its length to the millisecond
+      const ms = Math.max(f.to - f.from, long.reduce((sum, l) => sum + l.duration, 0));
       // and a machine asleep runs nothing at all: without long frames to tell, a very long pause is sleep
       if (ms >= STALL_MS && (supported ? long.length : ms < SLEPT_MS)) unsent.push({ ms: Math.round(ms), scripts: scriptsOf(long), before: f.before });
     }
     while (unsent.length > KEPT) unsent.shift();
     while (unsent.length && send(unsent[0]!)) unsent.shift();
-  }, TICK_MS);
+  };
 }

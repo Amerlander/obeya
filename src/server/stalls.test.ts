@@ -70,6 +70,53 @@ test('a stall the ticks see short is as long as its samples span', () => {
   expect(lines[0]).toBe('Obeya: the server stalled for 0.5 s; meanwhile it answered no page and heard no agent');
 });
 
+test('a page that stalls again and again the same way gets one entry, and the stalls like it are counted in one line', () => {
+  const lines: string[] = [];
+  home = mkdtempSync(join(tmpdir(), 'obeya-stalls-'));
+  stalls = new Stalls({ home, log: (l) => lines.push(l) });
+  const t = 1_000_000;
+  const where = 'this machine, canvas main';
+  // one a second, as a page whose length is all the browser tells
+  for (let i = 0; i < 120; i++) stalls.page({ ms: 700 + (i % 5) * 100, scripts: [], before: [] }, where, 'p1', t + i * 1000);
+  // another page, and a stall of this one that went elsewhere, are logged on their own
+  stalls.page({ ms: 900, scripts: [], before: [] }, 'Pixel, canvas main', 'p2', t + 30_000);
+  // as another window on the same canvas
+  stalls.page({ ms: 900, scripts: [], before: [] }, where, 'p3', t + 35_000);
+  stalls.page({ ms: 1300, scripts: [{ what: 'WebSocket.onmessage: (anonymous) (index.js@1204)', ms: 1100 }], before: [] }, where, 'p1', t + 40_000);
+  expect(lines).toEqual([
+    'Obeya: a page (this machine, canvas main) stalled for 0.7 s; meanwhile it took no click or key',
+    'Obeya: a page (Pixel, canvas main) stalled for 0.9 s; meanwhile it took no click or key',
+    'Obeya: a page (this machine, canvas main) stalled for 0.9 s; meanwhile it took no click or key',
+    'Obeya: a page (this machine, canvas main) stalled for 1.3 s; meanwhile it took no click or key',
+    '  1.1 s WebSocket.onmessage: (anonymous) (index.js@1204)',
+  ]);
+  // a minute without one like them ends the run
+  stalls.flush(t + 178_000);
+  expect(lines.length).toBe(5);
+  stalls.flush(t + 179_000);
+  expect(lines.slice(5)).toEqual([expect.stringMatching(/^Obeya: a page \(this machine, canvas main\) stalled 119 more times in 119 s like the one logged at \d{4}-\d\d-\d\dT[\d:.]+Z, for 0\.7–1\.1 s each$/)]);
+  // the next one starts a run of its own
+  stalls.page({ ms: 800, scripts: [], before: [] }, where, 'p1', t + 200_000);
+  expect(lines.length).toBe(7);
+  const file = readFileSync(join(home, STALLS_FILE), 'utf8');
+  expect(file).toMatch(/^\d{4}-\d\d-\d\dT[\d:.]+Z\nObeya: a page \(this machine, canvas main\) stalled for 0\.7 s/);
+  expect(file).toContain('stalled 119 more times');
+});
+
+test('a run that goes on all night is logged once an hour', () => {
+  const lines: string[] = [];
+  home = mkdtempSync(join(tmpdir(), 'obeya-stalls-'));
+  stalls = new Stalls({ home, log: (l) => lines.push(l) });
+  const t = 1_000_000;
+  for (let i = 0; i < 3 * 3600; i++) stalls.page({ ms: 900, scripts: [], before: [] }, 'this machine, canvas main', 'p1', t + i * 1000);
+  const first = readFileSync(join(home, STALLS_FILE), 'utf8').split('\n')[0];
+  const run = (n: number) => `Obeya: a page (this machine, canvas main) stalled ${n} more times in 60 min like the one logged at ${first}, for 0.9 s each`;
+  expect(lines.slice(1)).toEqual([run(3599), run(3600)]);
+  // stopped, the server logs what it counted so far
+  stalls.stop();
+  expect(lines.at(-1)).toBe(run(3600));
+});
+
 test('a synchronous process that holds the server up goes into the log and stalls.log, by its command and the code that ran it', async () => {
   home = mkdtempSync(join(tmpdir(), 'obeya-stalls-'));
   const lines: string[] = [];

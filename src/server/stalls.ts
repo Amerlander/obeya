@@ -23,6 +23,10 @@ const KEPT_BYTES = 1_000_000;
 const RAN_SHARE = 0.25;
 /** How often the profiler samples the thread's stack, in microseconds: 250 samples in the shortest stall logged. */
 const SAMPLE_US = 2000;
+/** A page's stalls of one kind that come no further apart than this are one run, logged together. */
+const RUN_GAP_MS = 60_000;
+/** A run that goes on is logged at least this often. */
+const RUN_LOGGED_MS = 3600_000;
 /** JavaScriptCore's line and column of a frame it knows no source position of. */
 const NO_POSITION = 4294967295;
 
@@ -96,6 +100,27 @@ export function describePageStall(s: PageStall, where: string): string[] {
   ];
 }
 
+/** A run of a page's stalls of one kind: the first logged, those after it counted until the run is logged. */
+interface Run {
+  where: string;
+  /** When the first was logged. */
+  first: string;
+  /** Since when the run counts, and when the last of it came. */
+  since: number;
+  last: number;
+  count: number;
+  least: number;
+  most: number;
+}
+
+/** The line a run gets. */
+export function describeRun(r: Run): string {
+  const s = Math.round((r.last - r.since) / 1000);
+  const span = s < 120 ? `${s} s` : `${Math.round(s / 60)} min`;
+  const each = r.least === r.most ? seconds(r.least) : `${(r.least / 1000).toFixed(1)}–${seconds(r.most)}`;
+  return `Obeya: a page (${r.where}) stalled ${r.count} more ${r.count === 1 ? 'time' : 'times'} in ${span} like the one logged at ${r.first}, for ${each} each`;
+}
+
 /** What a page sent of its stall, if it is one: the server takes nothing else from it, and no more than it logs. */
 export function pageStall(msg: unknown): PageStall | null {
   const m = msg as Partial<PageStall> | null;
@@ -137,6 +162,7 @@ function tick() {
   last = now;
   const samples = drain();
   watching?.tick(since, now, samples);
+  watching?.flush();
 }
 
 /**
@@ -147,6 +173,8 @@ function tick() {
  */
 export class Stalls {
   private waited: (Waited & { end: number })[] = [];
+  /** The runs of page stalls, by the page and where their time went. */
+  private runs = new Map<string, Run>();
   private spawnSync: typeof Bun.spawnSync | undefined;
 
   constructor(private readonly o: StallOptions) {}
@@ -177,13 +205,39 @@ export class Stalls {
   }
 
   stop() {
+    this.flush(Infinity);
     if (watching === this) watching = null;
     if (this.spawnSync) Bun.spawnSync = this.spawnSync;
   }
 
-  /** A page's stall, from the page on `where` (this machine, or a paired device). */
-  page(s: PageStall, where: string) {
-    this.write(describePageStall(s, where));
+  /**
+   * A page's stall, from the page `page` on `where` (this machine, or a paired device), at `at` (on
+   * the monotonic clock). One like those the page reported just before (where the time went the
+   * same, the length aside) is only counted: a page that stalls again and again would push
+   * everything else out of `stalls.log`.
+   */
+  page(s: PageStall, where: string, page = '', at = performance.now()) {
+    this.flush(at);
+    const key = JSON.stringify([page, where, s.scripts.map((x) => x.what)]);
+    const run = this.runs.get(key);
+    if (run) {
+      Object.assign(run, { last: at, count: run.count + 1, least: Math.min(run.least, s.ms), most: Math.max(run.most, s.ms) });
+      return;
+    }
+    const first = new Date().toISOString();
+    this.runs.set(key, { where, first, since: at, last: at, count: 0, least: Infinity, most: 0 });
+    this.write(describePageStall(s, where), first);
+  }
+
+  /** Logs the runs that ended by `at` (none like them for a minute), and those that went on for an hour. */
+  flush(at = performance.now()) {
+    for (const [key, r] of this.runs) {
+      const ended = at - r.last >= RUN_GAP_MS;
+      if (!ended && at - r.since < RUN_LOGGED_MS) continue;
+      if (r.count) this.write([describeRun(r)]);
+      if (ended) this.runs.delete(key);
+      else Object.assign(r, { since: at, count: 0, least: Infinity, most: 0 });
+    }
   }
 
   /**
@@ -202,13 +256,13 @@ export class Stalls {
     if (lines) this.write(lines);
   }
 
-  private write(lines: string[]) {
+  private write(lines: string[], time = new Date().toISOString()) {
     const log = this.o.log ?? ((line: string) => console.log(line));
     for (const line of lines) log(line);
     const file = join(this.o.home, STALLS_FILE);
     try {
       if ((statSync(file, { throwIfNoEntry: false })?.size ?? 0) > KEPT_BYTES) renameSync(file, join(this.o.home, 'stalls.previous.log'));
-      appendFileSync(file, `${new Date().toISOString()}\n${lines.join('\n')}\n\n`);
+      appendFileSync(file, `${time}\n${lines.join('\n')}\n\n`);
     } catch {}
   }
 }

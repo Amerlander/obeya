@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { beforeOf, framesWithin, type LongFrame, scriptsOf } from './stalls';
+import { beforeOf, framesWithin, type LongFrame, scriptsOf, stallOf } from './stalls';
 
 const script = (invoker: string, fn: string, duration: number) => ({ invoker, sourceURL: 'http://127.0.0.1:4417/_bun/client/index-a1b2.js?v=3', sourceFunctionName: fn, sourceCharPosition: 1204, duration });
 
@@ -28,4 +28,18 @@ test('what the page took in within the three seconds before a stall goes with it
     { at: 11_200, what: 'usage' },
   ];
   expect(beforeOf(noted, 10_000, 11_000)).toEqual(['snapshot (412 KB) 0.2 s before', 'snapshot (2 MB, read in 900 ms) 0.0 s before']);
+});
+
+test('a heartbeat the page takes in half a second late tells of a stall, and the beats queued behind it of none', () => {
+  // taken in on time, as the beats of a page whose own timers the browser holds back
+  expect(stallOf(20, 1020, 900)).toBeNull();
+  expect(stallOf(490, 1490, 900)).toBeNull();
+  // the thread was busy from the beat on
+  expect(stallOf(800, 1800, 900)).toEqual({ from: 1000, to: 1800 });
+  // the next beat waited behind the same stall
+  expect(stallOf(700, 1800.1, 1800)).toBeNull();
+  // and one that waited behind it and another after it tells of the other
+  expect(stallOf(1500, 2600, 1800)).toEqual({ from: 1800, to: 2600 });
+  // where the long frames tell the length, a beat a tick short of a stall may tell of one
+  expect(stallOf(451, 1551, 1000, 400)).toEqual({ from: 1100, to: 1551 });
 });

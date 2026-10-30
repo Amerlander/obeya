@@ -299,9 +299,17 @@ A page reports its own freezes of half a second or more over its WebSocket, and 
 in the same places, naming the device and the canvas: where the browser says where the time went
 (Chromium's long animation frames: the scripts by what invoked them, and style and layout), the
 largest parts; and the server's messages the page took in during the three seconds before, by type
-and size. Safari and Firefox tell only the length. A page out of view is not watched, as the
-browser holds it back by itself; one that froze while its connection was down reports once it is
-back.
+and size. Safari and Firefox tell only the length. A page finds its freezes by a heartbeat from a
+worker thread, which it has to take in: one taken in half a second or more after it was sent means
+the page's thread was busy that long. A page whose timers the browser merely holds back reports
+nothing: WebKit runs a page's timers about once a second while its window seems idle to it (not in
+front, nothing drawn for a while), with the page still in view, and a worker's timers on. A page out
+of view is not watched, as the browser holds it back by itself; one that froze while its connection
+was down reports once it is back. A page that stalls again and again the same way (from the same
+page, with its time going to the same places) gets one entry for the first, and the ones like it
+that follow, each within a minute of the one before, are counted: one line says how many, over what
+span and how long each was, once a minute has passed without another, or every hour while they go
+on, so that such a page cannot push the server's own stalls out of `stalls.log`.
 
 ### Setup assistant
 
@@ -473,6 +481,13 @@ them).
   calls only (a stall in code nobody thought of goes unnamed); profiling only on demand (the stall
   is over by the time someone asks); a slow-request log (the page acts on a click before the
   server answers, so a slow answer freezes nothing).
+- **A page's freezes are found by a worker's heartbeat, not by its own timer running late**
+  (2026-10-30): the app's webview on macOS runs a page's timers about once a second when its window
+  is not in front, with the page still in view, and logged a stall of about a second every second
+  all night. A worker's timer runs on, and its message waits only for a busy thread. Rejected:
+  taking a page without focus for one held back (a page shown beside the window in use is watched
+  too, and freezes there as well); counting late timers only where the browser tells long animation
+  frames (WebKit tells none, so it would watch nothing).
 - **Obeya restarts itself for new code on its own checkout instead of hot reloading**: workers resume
   by session id anyway; hot reloading keeps old state alive next to new code. It also restarts for
   commits made outside Obeya.

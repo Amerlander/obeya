@@ -312,6 +312,8 @@ const shutdown = (code: number) => {
   demoSpace.stop();
   endAgentsHere();
   awake.stop();
+  // what it counted of a page's stalls, before it goes
+  stalls.stop();
   access.release();
   transcriber.stop();
   narration.stop();

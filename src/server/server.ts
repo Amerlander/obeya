@@ -979,7 +979,7 @@ export function serve(
             const stall = pageStall(msg);
             const { device } = ws.data;
             const where = `${device ? (access.devices().find((d) => d.id === device)?.name ?? 'another device') : 'this machine'}, canvas ${ws.data.canvas}`;
-            if (stall) stalls?.page(stall, where);
+            if (stall) stalls?.page(stall, where, ws.data.page);
           }
           if (msg.type === 'focus') {
             const seen = parsePlace(typeof msg.place === 'string' ? msg.place : undefined);
