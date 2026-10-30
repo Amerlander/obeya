@@ -474,7 +474,7 @@ export function Detail(p: Props) {
         <p className="hint">{t.idea.builtOn(plain(item.prototypes?.find((x) => x.id === item.builtOn)?.title ?? ''))}</p>
       )}
       {p.from && !item.prototypeOf && item.state !== 'proposal' && <p className="hint">{t.followUpOf(plain(p.from.title))}</p>}
-      {!p.from && item.fromElsewhere && <FromElsewhere item={item} />}
+      {!p.from && item.fromElsewhere && item.state !== 'proposal' && <FromElsewhere item={item} />}
 
       {item.state === 'planned' && !item.queue && <LastFailure cardId={item.id} />}
 
@@ -729,13 +729,16 @@ function SupersededBox({ item, all, act, onDelete }: { item: Item; all: Item[]; 
   );
 }
 
+/** Where the card a card comes from opens on its other canvas. */
+const elsewhereHref = (item: Item) => `?c=${encodeURIComponent(item.fromElsewhere!.canvas)}&card=${encodeURIComponent(item.from!)}`;
+
 /** A card that comes from a card on another canvas: which, and a link that opens it there. */
 function FromElsewhere({ item }: { item: Item }) {
   const e = item.fromElsewhere!;
   return (
     <p className="hint">
       {t.fromElsewhere(plain(e.title), e.canvasName)}{' '}
-      <a className="link" href={`?c=${encodeURIComponent(e.canvas)}&card=${encodeURIComponent(item.from!)}`}>
+      <a className="link" href={elsewhereHref(item)}>
         {t.openThere}
       </a>
     </p>
@@ -1011,6 +1014,16 @@ function ProposalView({
             {!!item.images?.length && <p className="hint">{t.proposalShots}</p>}
             {!idea && <StartAt item={item} act={act} />}
             {from && <p className="hint">{t.proposedBy(plain(from.title))}{item.proposal?.reason && <> {item.proposal.reason}</>}</p>}
+            {/* proposed by the agent of a card on another canvas, whose repository this is */}
+            {!from && item.fromElsewhere && (
+              <p className="hint">
+                {t.proposedByElsewhere(plain(item.fromElsewhere.title), item.fromElsewhere.canvasName)}
+                {item.proposal?.reason && <> {item.proposal.reason}</>}{' '}
+                <a className="link" href={elsewhereHref(item)}>
+                  {t.openThere}
+                </a>
+              </p>
+            )}
             {item.retro && <p className="hint">{t.proposedByRetro(item.retro)}</p>}
             {item.proposal?.setup && item.proposal.reason && <p className="hint">{item.proposal.reason}</p>}
           </>

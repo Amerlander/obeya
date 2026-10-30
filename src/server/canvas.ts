@@ -711,6 +711,7 @@ export class CanvasRuntime {
       machineSettings: this.settingsOf(rc),
       shares: () => !!repo.ref.share,
       repo: ref.id,
+      otherBoards: () => (deps.canvases?.() ?? []).filter((c) => c !== this).map((c) => c.board),
       preferences: this.preferences,
       onOwnerInput: (card, kind, text, context) => this.koordinator.learn(card, kind, text, context),
       onPrOpened: (cardId) => {

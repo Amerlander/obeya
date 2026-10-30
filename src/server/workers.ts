@@ -12,7 +12,7 @@ import { basename, isAbsolute } from 'node:path';
 import { type CardFile, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
 import { DEFAULT_DEMO_DIRECTORY } from '../../plugin/skills/demo/lib/settings.ts';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type Demo, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoSettings, type RestartReason, type Share, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started } from '../core/types';
+import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, type WorkerTurn, type CardLanding, type Demo, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, type Question, type RepoRef, type RepoSettings, type RestartReason, type Share, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started } from '../core/types';
 import { BadRequest, type Board, replyNote, type Retracted, type StoredDemo, titleKey } from './board';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
 import { checkArtifact, DEMO_SKILL, DEMO_SKILL_FILE, demoSkillName, OBEYA_PLUGIN, placeIn, readChapters } from './demo';
@@ -56,6 +56,8 @@ export interface WorkerOptions {
   onOwnerInput?: (card: Item, kind: 'answer' | 'note' | 'feedback', text: string, context?: InputContext) => void;
   /** On a canvas with several repositories: the one these workers work in. */
   repo?: string;
+  /** The boards of the other canvases this Obeya runs: a worker proposes a card in their repositories too. */
+  otherBoards?: () => Board[];
   /** The worker reported the card's pull request: a demo shared before gets its link. */
   onPrOpened?: (cardId: string) => void;
   /**
@@ -3289,9 +3291,11 @@ export class Workers {
     const shares = this.shares;
     // the vocabulary the page's tags come from, where the repository's site names one
     const vocabulary = shares ? dimensions(this.o.adapter.demo?.site?.tags) : [];
-    // on a canvas with several repositories a proposal may go to another one than the card's
+    // a proposal may go to another repository than the card's: of this canvas, or of another canvas this Obeya runs
     const repos = this.o.board.canvas.repos;
     const ownRepo = this.o.repo ?? this.o.board.home;
+    const others = this.otherBoards().filter((b) => b.canvas.repos.length);
+    const anotherRepo = repos.length > 1 || others.length > 0;
     const handOver = () => {
       live.handedOver = true;
       live.nudged = false;
@@ -3386,8 +3390,10 @@ export class Workers {
               `questions: what the owner has to decide first (product behaviour, a trade-off), each with up to four short options; keep them out of task. The owner may answer them on the proposal; what they decided and what stays open go to the agent with the task.`,
               `replaces: the title of an earlier proposal of yours this one takes the place of; Obeya takes that one off the canvas, or, if the owner has taken it on already, marks it as replaced and offers to remove it.`,
               `start_at: when the card is to start, ISO 8601 with your timezone's offset (2026-11-04T08:00:00+01:00), for a task that can only be done later (whether a bank has registered a form two weeks on, say): accepted, it waits until then and starts by itself. Its agent then checks what it can and asks the owner for what only they can see.`,
-              ...(repos.length > 1
-                ? [`repo: the repository the change is to be made in, by its id: ${repos.map((r) => `${r.id} (${r.path}${r.id === ownRepo ? ', yours' : ''})`).join(', ')}; yours when left out.`]
+              ...(anotherRepo
+                ? [
+                    `repo: the repository the change is to be made in, by its id: ${repos.map((r) => `${r.id} (${r.path}${r.id === ownRepo ? ', yours' : ''})`).join(', ')}${others.length ? `; on other canvases, where the proposal then waits for the owner: ${others.map((b) => `on „${b.canvas.name}“ ${b.canvas.repos.map((r) => `${r.id} (${r.path})`).join(', ')}`).join('; ')}` : ''}; yours when left out.`,
+                  ]
                 : []),
               `Everything in ${language}.`,
             ].join(' '),
@@ -3399,27 +3405,29 @@ export class Workers {
               questions: PROPOSAL_QUESTIONS.optional(),
               replaces: z.string().optional(),
               start_at: z.string().optional(),
-              ...(repos.length > 1 ? { repo: z.string().optional() } : {}),
+              ...(anotherRepo ? { repo: z.string().optional() } : {}),
             },
             run: ({ title, task, reason, idea, questions, replaces, start_at, repo }) => {
               const wanted = typeof repo === 'string' && repo.trim() ? repo.trim() : undefined;
-              const into = wanted ? this.o.board.canvas.repos.find((r) => r.id === wanted || r.name.toLowerCase() === wanted.toLowerCase()) : undefined;
-              if (wanted && !into) return `Not proposed: there is no repository ${wanted} on this canvas; give one of ${this.o.board.canvas.repos.map((r) => r.id).join(', ')}.`;
+              const into = wanted ? this.proposalRepo(wanted) : undefined;
+              if (typeof into === 'string') return into;
+              const board = into?.board ?? this.o.board;
               const named = typeof start_at === 'string' && start_at.trim() ? start_at.trim() : undefined;
               const at = named ? Date.parse(named) : NaN;
               if (named && Number.isNaN(at)) return 'Not proposed: give start_at as ISO 8601 with your timezone offset (2026-11-04T08:00:00+01:00).';
               if (named && at <= Date.now()) return `Not proposed: start_at has passed (it is ${new Date().toISOString()} now).`;
               if (named && at > Date.now() + SNOOZE_LIMIT) return 'Not proposed: start_at lies more than a year ahead.';
-              const p = this.o.board.propose(cardId, {
+              const p = board.propose(cardId, {
                 title: String(title),
                 task: String(task),
                 reason: String(reason),
                 idea: !!idea,
                 questions: proposalQuestions(questions as z.infer<typeof PROPOSAL_QUESTIONS> | undefined),
                 ...(named ? { startAt: new Date(at).toISOString() } : {}),
-                ...(into ? { repo: into.id } : {}),
+                ...(into ? { repo: into.repo } : {}),
               });
-              this.o.board.log(cardId, 'activity', 'worker', idea ? this.o.board.t.worker.proposedIdea(p.title) : this.o.board.t.worker.proposedCard(p.title));
+              const there = board === this.o.board ? undefined : board.canvas.name;
+              this.o.board.log(cardId, 'activity', 'worker', idea ? this.o.board.t.worker.proposedIdea(p.title, there) : this.o.board.t.worker.proposedCard(p.title, there));
               const old = typeof replaces === 'string' && replaces.trim() ? replaces.trim() : undefined;
               return old ? `Proposed. ${this.retract(cardId, old, { by: p.id, title: p.title })}` : 'Proposed; the owner decides. Continue with your task.';
             },
@@ -3439,8 +3447,12 @@ export class Workers {
               run: (args: Record<string, unknown>) => {
                 const { title, why, replaced_by } = args as { title: string; why: string; replaced_by?: string };
                 // the latest by that title, as retract takes the latest it replaces: of two alike, the newer replaces the older
-                const by = replaced_by?.trim() ? this.o.board.snapshot().items.findLast((i) => i.from === cardId && (!!i.proposal || !!i.proposed) && titleKey(i.title) === titleKey(replaced_by)) : undefined;
-                if (replaced_by?.trim() && !by) return `No card you proposed on the canvas is called „${replaced_by.trim()}“. Nothing was withdrawn.`;
+                const by = replaced_by?.trim()
+                  ? this.proposalBoards()
+                      .map((b) => b.snapshot().items.findLast((i) => i.from === cardId && (!!i.proposal || !!i.proposed) && titleKey(i.title) === titleKey(replaced_by)))
+                      .find(Boolean)
+                  : undefined;
+                if (replaced_by?.trim() && !by) return `No card you proposed is called „${replaced_by.trim()}“. Nothing was withdrawn.`;
                 return this.retract(cardId, String(title).trim(), { ...(by ? { by: by.id, title: by.title } : {}), ...(why?.trim() ? { why: clip(why.trim(), 1000) } : {}) });
               },
             },
@@ -3869,8 +3881,44 @@ export class Workers {
   }
 
   /** The worker takes back one of its proposals by title, or marks it replaced (`s.by`): what became of it, as the tool's result. */
+  /** The boards a card's proposals may be on: this canvas's, then those of the other canvases. */
+  private proposalBoards(): Board[] {
+    return [this.o.board, ...this.otherBoards()];
+  }
+
+  private otherBoards(): Board[] {
+    return (this.o.otherBoards?.() ?? []).filter((b) => b !== this.o.board);
+  }
+
+  /**
+   * The repository a worker names for its proposal (by id, name or path) and the board of its
+   * canvas: this canvas's first, then another canvas's; or why there is none.
+   */
+  private proposalRepo(wanted: string): { board: Board; repo: string } | string {
+    const w = wanted.toLowerCase();
+    const dir = (path: string) => path.replace(/[/\\]+$/, '');
+    const named = (r: RepoRef) => r.id.toLowerCase() === w || r.name.toLowerCase() === w || dir(r.path) === dir(wanted);
+    const here = this.o.board.canvas.repos.find(named);
+    if (here) return { board: this.o.board, repo: here.id };
+    const found = this.otherBoards().flatMap((board) => board.canvas.repos.filter(named).map((r) => ({ board, repo: r.id, path: r.path })));
+    if (found.length === 1) return found[0]!;
+    if (found.length > 1) return `Not proposed: several canvases have a repository ${wanted}; give its path instead: ${found.map((f) => f.path).join(', ')}.`;
+    const all = this.proposalBoards().flatMap((b) => b.canvas.repos.map((r) => r.id));
+    return `Not proposed: Obeya has no repository ${wanted}; give one of ${all.join(', ')}.`;
+  }
+
   private retract(cardId: string, title: string, s: Superseded): string {
-    const r = this.o.board.retract(cardId, title, s);
+    // the proposal may be on another canvas: where none of this card's has the title, the next one is asked
+    const mine: Extract<Retracted, { kind: 'unknown' }>['mine'] = [];
+    let r: Retracted = { kind: 'unknown', mine };
+    for (const b of this.proposalBoards()) {
+      const there = b.retract(cardId, title, s);
+      if (there.kind !== 'unknown') {
+        r = there;
+        break;
+      }
+      mine.push(...there.mine);
+    }
     if (r.kind === 'gone' || r.kind === 'marked') this.o.board.log(cardId, 'activity', 'worker', this.o.board.t.worker.withdrewProposal(r.title, s.why, s.title));
     return retractedText(r, !!s.by);
   }
@@ -4008,10 +4056,13 @@ ${idea.idea.brief}` : '',
     if (card.body.trim() && taskAuthor(card) === 'owner') parts.push('The owner wrote this task themselves: write to them in its language.');
     if (card.mocks?.length) parts.push(mocksText(card.mocks));
     if (card.builtOn) parts.push(this.builtOnPrototype(card.builtOn, !!card.parent));
-    const from = card.from && !card.prototypeOf ? this.o.board.item(card.from) ?? this.o.board.archived().find((i) => i.id === card.from) : undefined;
-    if (from) {
-      const summary = this.o.board.summary(from.id)?.trim();
-      parts.push(`This card follows up on the card “${from.title}”.${summary ? ` Its worker handed it over with this summary:\n\n${summary}` : ''}`);
+    // the card it follows up on may be on another canvas (a proposal from a worker there)
+    const fromBoard = card.from && !card.prototypeOf ? this.proposalBoards().find((b) => b.item(card.from!) ?? b.archived().some((i) => i.id === card.from)) : undefined;
+    const from = fromBoard ? fromBoard.item(card.from!) ?? fromBoard.archived().find((i) => i.id === card.from) : undefined;
+    if (fromBoard && from) {
+      const summary = fromBoard.summary(from.id)?.trim();
+      const there = fromBoard === this.o.board ? '' : ` on the canvas “${fromBoard.canvas.name}”`;
+      parts.push(`This card follows up on the card “${from.title}”${there}.${summary ? ` Its worker handed it over with this summary:\n\n${summary}` : ''}`);
     }
     const shots = this.taskImages(card);
     if (shots.length)

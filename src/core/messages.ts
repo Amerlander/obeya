@@ -191,8 +191,8 @@ const de = {
     limitStatus: 'Nutzungslimit',
     limitStatusUntil: (when: string) => `Nutzungslimit · weiter ${when}`,
     proposesBuild: (reason: string) => `Schlägt vor, die Idee auf diesem Prototyp zu bauen: ${reason}`,
-    proposedIdea: (title: string) => `Idee vorgeschlagen: ${title}`,
-    proposedCard: (title: string) => `Aufgabe vorgeschlagen: ${title}`,
+    proposedIdea: (title: string, canvas?: string) => `Idee vorgeschlagen${canvas ? ` auf der Leinwand „${canvas}“` : ''}: ${title}`,
+    proposedCard: (title: string, canvas?: string) => `Aufgabe vorgeschlagen${canvas ? ` auf der Leinwand „${canvas}“` : ''}: ${title}`,
     /** The agent's own earlier proposal, withdrawn or replaced (`by`: the proposal that takes its place). */
     withdrewProposal: (title: string, why?: string, by?: string) =>
       by ? `Ersetzt den Vorschlag „${title}“ durch „${by}“${why ? `: ${why}` : '.'}` : `Zieht den Vorschlag „${title}“ zurück${why ? `: ${why}` : '.'}`,
@@ -640,8 +640,8 @@ const en: Messages = {
     limitStatus: 'Usage limit',
     limitStatusUntil: (when: string) => `Usage limit · continues ${when}`,
     proposesBuild: (reason: string) => `Proposes building the idea on this prototype: ${reason}`,
-    proposedIdea: (title: string) => `Proposed an idea: ${title}`,
-    proposedCard: (title: string) => `Proposed a task: ${title}`,
+    proposedIdea: (title: string, canvas?: string) => `Proposed an idea${canvas ? ` on the canvas “${canvas}”` : ''}: ${title}`,
+    proposedCard: (title: string, canvas?: string) => `Proposed a task${canvas ? ` on the canvas “${canvas}”` : ''}: ${title}`,
     withdrewProposal: (title: string, why?: string, by?: string) =>
       by ? `Replaces the proposal “${title}” by “${by}”${why ? `: ${why}` : '.'}` : `Withdraws the proposal “${title}”${why ? `: ${why}` : '.'}`,
     superseded: (by?: string, why?: string) =>

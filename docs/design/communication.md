@@ -20,8 +20,9 @@ visible on a card.
   An answer stands in the conversation at once and leaves the card open.
 - `propose_card(title, task, reason, idea?, questions?, replaces?, start_at?, repo?)` and
   `withdraw_proposal(title, why, replaced_by?)` (see Proposals): something it noticed outside its
-  task, instead of doing it, or a follow-up due later (`start_at`). `repo` exists only on a canvas
-  with several repositories, whose ids and paths its description lists.
+  task, instead of doing it, or a follow-up due later (`start_at`). `repo` exists wherever Obeya
+  runs more than one repository: its description lists the ids and paths of the canvas's own and,
+  by canvas, those of the other canvases.
 - `ready_for_review(summary, demo)`, whose summary is the report the owner reads. The demo's
   `question` (text, options, multiple, pick, pick_why) is asked and answered as with `ask`, while the
   card goes on waiting for approval (see Waiting for approval in Card lifecycle).

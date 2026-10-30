@@ -17,13 +17,17 @@ like anything entered on a card. It shows on a canvas with several repositories,
 whose new repository is picked already (by the idea's agent from the conversation, or by the
 Koordinator from the owner's words); on a canvas with one repository a card without one shows no
 picker. A proposal's picker
-offers only the canvas's repositories. A card leaves its canvas only that way, built in a new
-repository with a canvas of its own; it then refers across canvases to the cards it came from or
-that come from it. A proposal goes to the repository its agent
-names, the one where the change is to be made, and otherwise inherits its card's: a worker in one
-repository often notices what needs changing in another (one drafting posts about the app sees what
-the app lacks), and a proposal filed under the wrong repository would start its worker in the wrong
-place unless the owner noticed and switched it.
+offers only the canvas's repositories. A card leaves its canvas only built in a new repository with
+a canvas of its own; it then refers across canvases to the cards it came from or that come from it.
+A proposal goes to the repository its agent names, the one where the change is to be made, and
+otherwise inherits its card's: a worker in one repository often notices what needs changing in
+another (one drafting posts about the app sees what the app lacks), and a proposal filed under the
+wrong repository would start its worker in the wrong place unless the owner noticed and switched it.
+That repository may be on another canvas: the proposal is then made there, at a free spot, and waits
+for the owner on that canvas (its count in the switcher), with „Vorgeschlagen vom Agenten der Aufgabe
+„…“ auf der Leinwand „…““ and a link to that card; the proposing card's conversation names the canvas.
+Its agent can take it back or replace it there as on its own canvas, and the worker that takes it on
+reads the card it came from as with any follow-up.
 
 The UI opens `?c=<canvas>`; the pill after the logo switches canvases. Cards on other canvases that
 need the owner show as a count at their entry in the switcher and, while it is closed, as the sum on
@@ -457,6 +461,11 @@ Prompts only agents read stay English, with German examples of what the owner ma
 - **A canvas may span several repositories, and one Obeya serves several canvases.** Rejected: one
   canvas per repository.
 - **A canvas belongs to a repository, not a checkout**, named after its `origin`, so clones share one.
+- **A worker's proposal may go to a repository of another canvas** (2026-10-30): a worker in a home
+  automation repository found the cause of its bug in Obeya, on another canvas; offered only its
+  own canvas's repositories, it filed the fix in its own, where it would have started in the wrong
+  repository. Rejected: keeping proposals on their own canvas, where the owner had to notice and
+  make the card anew on the right one.
 - **What a repository says about itself is values in its own `.obeya/settings.json`**, read from the
   main branch (2026-10-15): set without code, in one place, outside Obeya's open-source repository.
   Rejected: adapters per project in Obeya's repository; a TypeScript module per repository
