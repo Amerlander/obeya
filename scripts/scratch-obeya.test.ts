@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CanvasSnapshot } from '../src/core/types';
@@ -137,3 +138,26 @@ test('without a port, stagings at the same time each pick a free one, and stagin
     for (const s of [one!, two!]) rmSync(s.dir, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('--stop ends the server it staged, but not another process that has its number by now', async () => {
+  const staged = JSON.parse(readFileSync(join(dir, 'staged.json'), 'utf8')) as { pid: number };
+  const stopped = Bun.spawnSync([process.execPath, script, '--stop', String(port), '--dir', dir]);
+  expect(stopped.stderr.toString()).toBe('');
+  expect(stopped.exitCode).toBe(0);
+  expect(() => process.kill(staged.pid, 0)).toThrow();
+  // a server.pid from before a reboot, its number now another program's that leads a process group of its own
+  const stale = join(tmp, 'stale');
+  mkdirSync(stale);
+  const hourAgo = new Date(Date.now() - 3600_000);
+  const other = spawn('sleep', ['60'], { detached: true, stdio: 'ignore' });
+  try {
+    writeFileSync(join(stale, 'server.pid'), String(other.pid));
+    utimesSync(join(stale, 'server.pid'), hourAgo, hourAgo);
+    const r = Bun.spawnSync([process.execPath, script, '--stop', '4999', '--dir', stale]);
+    expect(r.stderr.toString()).toBe('');
+    expect(r.exitCode).toBe(0);
+    expect(() => process.kill(other.pid!, 0)).not.toThrow();
+  } finally {
+    other.kill('SIGKILL');
+  }
+}, 20_000);

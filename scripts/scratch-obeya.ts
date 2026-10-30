@@ -19,7 +19,8 @@
 // before and takes its port again while that is free; with another --code, the two run side by
 // side. The dir is --dir, else the stage file's `dir`, else /tmp/obeya-scratch-<port>.
 // `url` signs browsers in (design: Who may talk to it), until the scratch Obeya stops; --login
-// prints it again. The script itself talks to the API with the owner's key of the scratch home.
+// prints it again. --stop ends only the server it staged, never another program that has its
+// process number by now, and fails if the server still runs after it. The script itself talks to the API with the owner's key of the scratch home.
 //
 // With idle workers, --say and --artifact act as a card's agent (by its key in staged.json), for a
 // check of what the owner sees while an agent works: through the server, which runs the agent's own
@@ -290,7 +291,8 @@ const SAYS = {
 
 const stopPort = opt('stop');
 if (stopPort) {
-  stop(opt('dir') ?? scratchDir(Number(stopPort)));
+  const d = opt('dir') ?? scratchDir(Number(stopPort));
+  if (!stop(d)) fail(`the server of ${d} (process ${pidIn(d)}) still runs after the stop`);
   process.exit(0);
 }
 const loginPort = opt('login');
@@ -811,9 +813,9 @@ function run(cmd: string, a: string[], cwd: string) {
 async function pickPort(givenDir: string | undefined): Promise<number> {
   const earlier = givenDir ? resolve(givenDir) : scratchDirs().find((d) => JSON.stringify(stagedIn(d)?.from) === JSON.stringify(from));
   const was = earlier ? stagedIn(earlier)?.port : undefined;
-  if (earlier) stop(earlier);
+  if (earlier && !stop(earlier)) console.error(`scratch-obeya: the server of ${earlier} (process ${pidIn(earlier)}) still runs after the stop`);
   for (const p of [...(was ? [was] : []), ...Array.from({ length: 500 }, (_, i) => 4480 + i)]) {
-    if (p === 4417 || alive(pidIn(scratchDir(p))) || !claim(p)) continue;
+    if (p === 4417 || serverIn(scratchDir(p)) || !claim(p)) continue;
     if (await free(p)) {
       // one whose port went to another meanwhile leaves no dir behind
       if (earlier && !givenDir && earlier !== scratchDir(p)) rmSync(earlier, { recursive: true, force: true });
@@ -848,6 +850,38 @@ function pidOf(file: string) {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The process number of the scratch server of `d`, while it runs. server.pid alone does not tell:
+ * a scratch dir outlives a reboot and process numbers come again (on Windows soon), so by now it
+ * may name another program. The server started right before server.pid was written; a process
+ * with its number that started later is another one.
+ */
+function serverIn(d: string) {
+  const file = join(d, 'server.pid');
+  const pid = pidOf(file);
+  if (!alive(pid)) return undefined;
+  const started = startOf(pid!);
+  // a second for the start's precision, one for the file time's
+  return started !== undefined && started <= statSync(file).mtimeMs + 2000 ? pid : undefined;
+}
+
+/** When process `pid` started (ms since the epoch, to the second), unless it is gone or not ours to look at. */
+function startOf(pid: number): number | undefined {
+  if (process.platform === 'win32') {
+    const r = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', `([DateTimeOffset](Get-Process -Id ${pid} -ErrorAction Stop).StartTime).ToUnixTimeMilliseconds()`], {
+      encoding: 'utf8',
+    });
+    const ms = Number(r.stdout?.trim());
+    return r.status === 0 && ms > 0 ? ms : undefined;
+  }
+  // the time since it started as [[dd-]hh:]mm:ss, which macOS and Linux both give
+  const r = spawnSync('ps', ['-o', 'etime=', '-p', String(pid)], { encoding: 'utf8' });
+  const m = /^\s*(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)\s*$/.exec(r.stdout ?? '');
+  if (r.status !== 0 || !m) return undefined;
+  const [days, hours, minutes, seconds] = m.slice(1).map((n) => Number(n ?? 0));
+  return Date.now() - (((days! * 24 + hours!) * 60 + minutes!) * 60 + seconds!) * 1000;
 }
 
 function alive(pid: number | undefined) {
@@ -901,9 +935,9 @@ async function free(p: number) {
   return !answers;
 }
 
-/** Ends the scratch Obeya that `dir` belongs to, and what it started, if it still runs. */
+/** Ends the scratch Obeya that `dir` belongs to, and what it started, if it still runs; false if its server outlives the stop. */
 function stop(d: string) {
-  stopServer(d);
+  const gone = stopServer(d);
   // one that was killed left its `tailscale serve` entry, which would serve whatever takes the port next
   const served = join(d, 'home', 'tailscale-serve.json');
   if (existsSync(served)) {
@@ -912,23 +946,26 @@ function stop(d: string) {
     if (tailscale) new Tailscale(tailscale).unserveSync(entry.name, entry);
     rmSync(served, { force: true });
   }
+  return gone;
 }
 
+/** Ends the scratch server of `d` with its process group (its tree on Windows); whether it is gone then. */
 function stopServer(d: string) {
-  const pid = pidIn(d);
-  if (!pid) return;
-  if (process.platform === 'win32') return stopTree(pid);
+  const pid = serverIn(d);
+  if (!pid) return true;
+  if (process.platform === 'win32') stopTree(pid);
+  else signalGroup(pid);
+  return serverIn(d) !== pid;
+}
+
+function signalGroup(pid: number) {
   try {
     process.kill(-pid, 'SIGTERM');
   } catch {
     return;
   }
   for (let i = 0; i < 40; i++) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return;
-    }
+    if (!alive(pid)) return;
     // Obeya waits for workers in the middle of a turn (an idle worker always is); a second signal ends it at once
     if (i === 15)
       try {
@@ -939,6 +976,7 @@ function stopServer(d: string) {
   try {
     process.kill(-pid, 'SIGKILL');
   } catch {}
+  for (let i = 0; i < 20 && alive(pid); i++) Bun.sleepSync(100);
 }
 
 /**
@@ -946,7 +984,6 @@ function stopServer(d: string) {
  * without a window lets end only forcefully, and waits until it is gone and lets go of its files.
  */
 function stopTree(pid: number) {
-  if (!alive(pid)) return;
   spawnSync('taskkill', ['/F', '/T', '/PID', String(pid)], { stdio: 'ignore' });
   for (let i = 0; i < 50 && alive(pid); i++) Bun.sleepSync(100);
 }
