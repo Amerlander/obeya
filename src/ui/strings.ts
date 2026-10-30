@@ -1944,7 +1944,7 @@ const de = {
   /** The menu of the agent's skills that `/` opens in a field whose words go to a card's agent. */
   skills: {
     menu: 'Skills des Agenten',
-    hint: '„/“ ruft einen Skill des Agenten auf, wie in Claude Code.',
+    hint: '„/“ ruft einen Skill des Agenten auf.',
     loading: 'Skills werden geladen …',
   },
   /** On an empty canvas: speaking first (and where its card lands), the double-click second. */
@@ -3759,7 +3759,7 @@ const en: Strings = {
   /** The menu of the agent's skills that `/` opens in a field whose words go to a card's agent. */
   skills: {
     menu: "The agent's skills",
-    hint: '“/” asks the agent for one of its skills, as in Claude Code.',
+    hint: '“/” asks the agent for one of its skills.',
     loading: 'Loading skills …',
   },
   empty: { none: 'No tasks yet.', speak: 'Hold Space and say what Obeya should build.', where: 'The card appears where the pointer is when you let go.', click: 'Or double-click on the canvas to create one yourself.' },

@@ -302,8 +302,7 @@ fits. The arrow keys mark, Enter, Tab or a click picks, Esc closes the menu and 
 open. Picking types `/name ` over the word, as if by hand (⌘Z takes it back). The words reach the
 agent as they are: Claude Code's skill tool takes `/name` in a message as the owner asking for that
 skill, at the start or in the middle of a sentence. Until the owner has used the menu once (moved
-through it with the arrow keys or picked a skill), a hint under the field says so while it has the cursor („„/“ ruft einen Skill des Agenten auf, wie in
-Claude Code.“).
+through it with the arrow keys or picked a skill), a hint under the field says so while it has the cursor („„/“ ruft einen Skill des Agenten auf.“).
 
 Claude Code says which skills there are: Obeya starts it in the repository's Lesestand with the
 agent's plugins and settings, asks for its commands and skills, and ends it without a message (no
