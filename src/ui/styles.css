@@ -289,10 +289,11 @@ button.pill:hover { box-shadow: var(--lift); }
 .canvas-agents.running::before { content: ""; width: 26px; height: 2px;
   background: linear-gradient(90deg, var(--c) 0 50%, transparent 50%) 0 0 / 200% 100% no-repeat, color-mix(in srgb, var(--c) 22%, transparent);
   animation: draw 1.6s cubic-bezier(.5,0,.3,1) infinite; }
+/* faint like the pause on a card and on the bubble in its conversation, full under the pointer */
 .agents-turn { display: none; place-items: center; width: 26px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: 3px;
-  background: var(--panel); color: var(--c); cursor: pointer; }
+  background: transparent; color: var(--muted); opacity: .55; cursor: pointer; transition: opacity .12s; }
 .agents-turn .btn-mark { margin: 0; }
-.agents-turn:hover, .agents-turn:focus-visible { color: var(--ink); border-color: var(--muted); }
+.agents-turn:hover, .agents-turn:focus-visible { opacity: 1; color: var(--ink); border-color: var(--muted); }
 /* what it does, at once while the pointer is on it, beside the menu */
 .agents-turn { position: relative; }
 .agents-turn .tip { display: none; position: absolute; left: calc(100% + 16px); top: 50%; transform: translateY(-50%); padding: 6px 10px; border-radius: 3px;
@@ -308,7 +309,8 @@ button.pill:hover { box-shadow: var(--lift); }
 .ph-canvases li { display: flex; align-items: center; gap: 10px; }
 .ph-canvases .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .ph-canvases .canvas-agents { position: static; transform: none; width: auto; height: auto; }
-.ph-canvases .agents-turn { display: flex; align-items: center; gap: 6px; width: auto; height: auto; min-height: 40px; padding: 0 12px; font: inherit; font-size: 14px; }
+.ph-canvases .agents-turn { display: flex; align-items: center; gap: 6px; width: auto; height: auto; min-height: 40px; padding: 0 12px; font: inherit; font-size: 14px;
+  opacity: 1; background: var(--panel); color: var(--c); }
 .pill:is(.workspaces, .usage) { position: relative; padding: 0; }
 #bar .pill:is(.workspaces, .usage) { padding: 0; }
 .pill:is(.workspaces, .usage) .face { display: flex; align-items: center; gap: 8px; height: 100%; padding: 7px 14px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; border-radius: inherit; }

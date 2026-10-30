@@ -115,7 +115,7 @@ along then. „Stoppen“ stays in the card's action row: it ends the agent and 
 
 With several canvases, each row of the canvas switcher shows the moving line of a card at work while
 at least one agent works on that canvas (any agent with a pause, as above). While the pointer is on
-the row, the line turns into a pause button, „x laufende Agenten pausieren“ in its tooltip; with
+the row, the line turns into a pause button, faint like a card's, „x laufende Agenten pausieren“ in its tooltip; with
 none at work but at least one paused, the row shows ▶ on the same hover, „x pausierte Agenten
 fortsetzen“. On a touch screen the button is always there; the phone lists, above what runs, each
 canvas with agents and the same button with its words. Nothing else of it sits in the bar.
