@@ -447,6 +447,9 @@ export function serve(
       },
       // the owner has the restart of a repository's agents that waits for them go ahead at once
       '/api/c/:canvas/restart': { POST: on((c) => ({ restarting: c.restartNow() })) },
+      // the owner pauses the canvas's agents at work (and holds its queue), or resumes its paused ones
+      '/api/c/:canvas/pause': { POST: on((c) => c.pauseAgents()) },
+      '/api/c/:canvas/resume': { POST: on((c) => c.resumeAgents()) },
       // the owner has a restart that waits for workers go ahead at once
       '/api/restart': {
         POST: () =>

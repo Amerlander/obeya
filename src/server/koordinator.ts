@@ -68,6 +68,8 @@ export interface KoordinatorOptions {
   repoFor: (card: Item) => RepoHands;
   /** Where the Koordinator reads for what the owner says without a card: the home repository's Lesestand. */
   home: () => string;
+  /** Whether the owner paused the canvas's agents: a card the Koordinator lets start waits until they resume them (`{ paused }` in its queue). */
+  paused?: () => boolean;
   /** How long a project's start, or taking a card's workspace, waits for the owner to take it back; START_ALL_HOLD_MS and EVICT_HOLD_MS by default. */
   holdMs?: number;
   /** After how many of the owner's inputs the Rückschau runs; REVIEW_EVERY by default. */
@@ -744,6 +746,11 @@ export class Koordinator {
   private launch(cardId: string, since?: string) {
     const card = this.o.board.item(cardId);
     if (!card) return;
+    if (this.o.paused?.()) {
+      this.setQueue(cardId, { paused: true }, since);
+      this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.koordinator.canvasPaused);
+      return;
+    }
     const refused = (e: unknown) => {
       const shortage = e instanceof BadRequest ? shortageOf(e.code) : undefined;
       if (!shortage) return this.o.board.log(cardId, 'error', 'obeya', messageOf(e), { code: e instanceof BadRequest ? e.code : undefined });
@@ -780,15 +787,27 @@ export class Koordinator {
     const full = new Set<string | undefined>();
     // cards waiting for a clone on one machine (`near`) that has none: asked again after a while, as for a full repository
     let again = false;
+    const paused = !!this.o.paused?.();
     // the owner's question to a finished card whose agent needs a full clone goes before queued cards
     for (const f of items.filter((i) => i.waitsForClone && !i.repoDown)) {
       const hands = this.o.repoFor(f);
       if (full.has(f.repo) || !hands.workspaces.leasable(true) || !hands.workers.takeClone(f.id)) full.add(f.repo);
     }
     for (const w of waiting) {
-      // one whose repository does not run waits on until it is back; one giving up its workspace, until it has
+      // one whose repository does not run waits on until it is back; one giving up its workspace, until it has;
+      // one let start, until the owner resumes the canvas's agents
       if (w.repoDown || this.giving.has(w.id)) continue;
+      if ('paused' in w.queue!) {
+        if (!paused) this.startNow(w.id, this.o.board.t.koordinator.canvasPlays);
+        continue;
+      }
       if ('workspace' in w.queue!) {
+        // the slots the paused agents freed are not for it: it waits for them to resume
+        if (paused) {
+          this.setQueue(w.id, { paused: true }, w.queue!.since);
+          this.o.board.log(w.id, 'state', 'obeya', this.o.board.t.koordinator.canvasPaused);
+          continue;
+        }
         // a card whose branch a clone keeps takes one on that clone's machine: none there leaves the others to the cards behind it
         const near = this.o.board.row(w.id).kept_in;
         if (full.has(w.repo) || !this.o.repoFor(w).workspaces.leasable(false, near)) {
@@ -1028,7 +1047,7 @@ export class Koordinator {
             .map((a) => {
               const q = a.queue!;
               const waitsFor =
-                'behind' in q ? q.behind.map((id) => `"${this.o.board.item(id)?.title ?? id}"`).join(', ') : 'workspace' in q ? 'a free workspace (its start is decided)' : '';
+                'behind' in q ? q.behind.map((id) => `"${this.o.board.item(id)?.title ?? id}"`).join(', ') : 'workspace' in q ? 'a free workspace (its start is decided)' : 'paused' in q ? "the owner to resume the canvas's paused agents (its start is decided)" : '';
               return [
                 `- ${tagOf(tags, a.id)}: "${a.title}"${a.body ? ` — ${a.body.split('\n')[0]!.slice(0, 200)}` : ''}`,
                 `  expected to change: ${(a.scope ?? []).filter(hard).join(', ') || '(no estimate)'}`,

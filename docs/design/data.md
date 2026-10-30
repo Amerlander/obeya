@@ -7,7 +7,7 @@ and the repositories already know is read from them, not stored.
 
 Persistent (SQLite):
 
-- canvases, their per-canvas settings (home repository, the card collecting each repository's
+- canvases, their per-canvas settings (home repository, whether the owner paused its agents, the card collecting each repository's
   CLAUDE.md rules, the Rückschau's and Arbeitsrückschau's counts and when they last ran), groups
   and each card's group;
 - cards with everything shown on them or needed to resume them: kind, state, position, parent, the

@@ -214,6 +214,10 @@ export const api = {
   restartNow: () => call<{ restarting: boolean }>('POST', '/api/restart'),
   /** Has the restart of this canvas's repositories' agents that waits for them go ahead at once. */
   restartReposNow: () => call<{ restarting: boolean }>('POST', at('/restart')),
+  /** Pauses the agents at work on a canvas; cards the Koordinator lets start there wait until they resume. */
+  pauseAgents: (canvas: string) => call<void>('POST', `/api/c/${encodeURIComponent(canvas)}/pause`),
+  /** Resumes a canvas's paused agents, and the cards waiting for that start. */
+  resumeAgents: (canvas: string) => call<void>('POST', `/api/c/${encodeURIComponent(canvas)}/resume`),
   /** Installs the newer version of the app once the workers paused, as a restart waits for them. */
   installUpdate: () => call<{ updating: boolean }>('POST', '/api/app-update/install'),
   /** Fast-forwards the checkout Obeya runs from to its upstream; Obeya then restarts with the new code once the workers paused. */

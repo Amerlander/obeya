@@ -224,6 +224,11 @@ const de = {
   noneRuns: 'Keine Leinwand läuft',
   repos: (n: number) => `${n} Repositories`,
   switchCanvas: 'Leinwand wechseln',
+  /** The pause and resume of a canvas's agents, on its row in the canvas switcher and on the phone. */
+  canvasPause: {
+    pause: (n: number) => (n === 1 ? '1 laufenden Agenten pausieren' : `${n} laufende Agenten pausieren`),
+    resume: (n: number) => (n === 1 ? '1 pausierten Agenten fortsetzen' : `${n} pausierte Agenten fortsetzen`),
+  },
   waitingThere: (n: number) => (n === 1 ? '1 Aufgabe braucht dich dort' : `${n} Aufgaben brauchen dich dort`),
   waitingElsewhere: (n: number) => (n === 1 ? '1 Aufgabe auf einer anderen Leinwand braucht dich' : `${n} Aufgaben auf anderen Leinwänden brauchen dich`),
   start: 'Agent starten',
@@ -483,6 +488,9 @@ const de = {
     behind: (cards: { title: string; notStarted: boolean }[]) => `Wartet auf ${cards.map((c) => `„${c.title}“${c.notStarted ? ' (noch nicht gestartet)' : ''}`).join(', ')}.`,
     workspace: 'Wartet auf Workspace',
     slot: 'Wartet auf freien Slot',
+    paused: 'Wartet: Leinwand pausiert',
+    pausedWhy: 'Die Agenten dieser Leinwand sind pausiert.',
+    pausedLong: 'Die Agenten dieser Leinwand sind pausiert: Die Aufgabe startet von selbst, sobald du sie fortsetzt (▶ bei der Leinwand in der Leinwandliste).',
     /** On the card: why it waits for a workspace. */
     workspaceWhy: { none: 'Alle Workspaces sind belegt.', dirty: 'Die freien Workspaces haben nicht committete Änderungen.', slots: 'Alle Slots sind belegt.' },
     workspaceLong: {
@@ -2115,6 +2123,10 @@ const en: Strings = {
   noneRuns: 'No canvas is running',
   repos: (n: number) => `${n} repositories`,
   switchCanvas: 'Switch canvas',
+  canvasPause: {
+    pause: (n: number) => (n === 1 ? 'Pause 1 running agent' : `Pause ${n} running agents`),
+    resume: (n: number) => (n === 1 ? 'Resume 1 paused agent' : `Resume ${n} paused agents`),
+  },
   waitingThere: (n: number) => (n === 1 ? '1 task needs you there' : `${n} tasks need you there`),
   waitingElsewhere: (n: number) => (n === 1 ? '1 task on another canvas needs you' : `${n} tasks on other canvases need you`),
   start: 'Start agent',
@@ -2347,6 +2359,9 @@ const en: Strings = {
     behind: (cards: { title: string; notStarted: boolean }[]) => `Waits for ${cards.map((c) => `“${c.title}”${c.notStarted ? ' (not started yet)' : ''}`).join(', ')}.`,
     workspace: 'Waiting for a workspace',
     slot: 'Waiting for a free slot',
+    paused: 'Waiting: canvas paused',
+    pausedWhy: "This canvas's agents are paused.",
+    pausedLong: "This canvas's agents are paused: the task starts by itself once you resume them (▶ on the canvas's row in the canvas list).",
     workspaceWhy: { none: 'All workspaces are taken.', dirty: 'The free workspaces have uncommitted changes.', slots: 'All slots are taken.' },
     workspaceLong: {
       none: 'No workspace free: all are taken, the free ones blocked, or none is set up. The task starts by itself as soon as one is free. “Workspaces” in the bar at the top shows what blocks one.',
@@ -3808,6 +3823,8 @@ export const stateLabel = (i: { kind?: string; thread?: { thinking?: boolean }; 
     : i.queue
     ? 'checking' in i.queue
       ? t.queue.checking
+      : 'paused' in i.queue
+        ? t.queue.paused
       : 'workspace' in i.queue
         ? i.queue.workspace === 'slots'
           ? t.queue.slot

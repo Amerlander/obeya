@@ -1064,6 +1064,7 @@ export class Commander {
         if (card.state !== 'planned') return `only a planned card can be started (${is})`;
         if (card.queue && 'behind' in card.queue) return { do: 'force', card: card.id };
         if (card.queue && 'workspace' in card.queue) return 'the card waits for a free workspace and starts by itself once one is free';
+        if (card.queue && 'paused' in card.queue) return "the owner paused this canvas's agents: the card starts by itself once they resume them";
         if (card.queue) return 'Obeya is still checking the card; it starts by itself unless it collides';
         break;
       case 'dequeue':
@@ -1359,6 +1360,7 @@ export function talkReplyNote(quoted: TalkQuote | undefined): string {
 /** A queued card's state as the Koordinator reads it. */
 function queued(q: Queue, items: Item[]): string {
   if ('checking' in q) return 'queued: Obeya checks it for merge conflicts';
+  if ('paused' in q) return "waits for the owner to resume this canvas's paused agents; starts by itself then";
   if ('workspace' in q && q.workspace === 'slots') return 'waits for a free slot (every machine with a free workspace has as many workers busy as it has slots); starts by itself once one is done';
   if ('workspace' in q) return `waits for a free workspace (${q.workspace === 'dirty' ? 'every free one has uncommitted changes' : 'all are leased'}); starts by itself once one is free`;
   const titles = q.behind

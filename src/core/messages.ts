@@ -342,6 +342,8 @@ const de = {
     /** A card whose workspace the owner gave to another waits in the queue for the next one. */
     requeued: 'Wartet auf den nächsten freien Workspace und macht dann auf ihrem Branch weiter.',
     slotFree: 'Ein Rechner hat wieder einen Slot frei; es geht los.',
+    canvasPaused: 'Die Agenten dieser Leinwand sind pausiert: Die Aufgabe startet, sobald du sie fortsetzt.',
+    canvasPlays: 'Die Agenten dieser Leinwand laufen wieder; es geht los.',
     waitedDone: 'Worauf sie gewartet hat, ist erledigt; es geht los.',
     waitedDoneRecheck: 'Obeya: Worauf sie gewartet hat, ist erledigt; prüft neu gegen die laufende Arbeit.',
     noWorkspace: 'Kein Workspace frei: Alle sind belegt oder es ist keiner eingerichtet. Die Aufgabe startet, sobald einer frei wird.',
@@ -776,6 +778,8 @@ const en: Messages = {
     workspaceFree: 'A workspace is free; it starts.',
     requeued: 'Waits for the next free workspace and then goes on on its branch.',
     slotFree: 'A machine has a free slot again; it starts.',
+    canvasPaused: "This canvas's agents are paused: the task starts once you resume them.",
+    canvasPlays: "This canvas's agents run again; it starts.",
     waitedDone: 'What it waited for is done; it starts.',
     waitedDoneRecheck: 'Obeya: what it waited for is done; checks it again against the work in progress.',
     noWorkspace: 'No workspace free: all are taken or none is set up. The task starts as soon as one is free.',

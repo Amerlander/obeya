@@ -85,7 +85,9 @@ Confirmation and undo.
 A note reaches the worker at any time without stopping it. To stop it mid-work, the conversation's
 bubble that shows the agent at work („Agent arbeitet …“) has a pause mark, faint. At the desk it
 shows only while the pointer is on the bubble, so a long run does not keep a button in view; on a
-touch screen it is always there. By voice „halt mal an“.
+touch screen it is always there. By voice „halt mal an“. On the canvas, the card's moving line in
+its state line (see The canvas) turns into the same pause while the pointer is on the card, and a
+paused card shows ▶ there on the same hover, which resumes it as „Weitermachen“ does.
 The bubble and the pause exist exactly while an agent runs a turn (background work included): a
 Question card's agent reading, an idea's agent replying, a worker in any card state (at work, taking
 in the owner's words on its handover, in its PR, finishing after the landing). An idle agent (a PR
@@ -106,6 +108,22 @@ Weitermachen“, over the line „Pausiert.“; a restart of Obeya leaves paused
 agent hears that it was paused and what ran was stopped (exit code 137), plus the owner's words and
 what it had not answered. What Obeya had for a paused worker meanwhile (a review, a landing) goes
 along then. „Stoppen“ stays in the card's action row: it ends the agent and plans the card again.
+
+### Pausing a canvas's agents
+
+With several canvases, each row of the canvas switcher shows the moving line of a card at work while
+at least one agent works on that canvas (any agent with a pause, as above). While the pointer is on
+the row, the line turns into a pause button, „x laufende Agenten pausieren“ in its tooltip; with
+none at work but at least one paused, the row shows ▶ on the same hover, „x pausierte Agenten
+fortsetzen“. On a touch screen the button is always there; the phone lists, above what runs, each
+canvas with agents and the same button with its words. Nothing else of it sits in the bar.
+
+Pausing pauses each agent at work there as its own pause does, at once. As long as one of them is
+still paused, the cards the Koordinator lets start on that canvas wait in the queue („Wartet:
+Leinwand pausiert“) instead of taking the slots that pausing freed. Resuming resumes every paused
+agent there, as „Weitermachen“ does, and the waiting cards start. Once none on the canvas is paused
+any more (the owner resumed each on its card, or their cards went), the queue runs again by itself.
+A restart leaves it as it was: the cards stay paused and the canvas holds its queue.
 
 ### Snoozing a card
 
@@ -258,6 +276,15 @@ as a learned preference does. Older answers agents gave in the owner's name stay
   newcomer finds a button that appears where the pointer goes, so none stays in view until its
   first use. Rejected: always visible; visible until used once. A touch screen, without hover,
   shows them all.
+- **A canvas pauses as its agents, each with its own pause** (2026-10-29, owner and maintainer, PR
+  #22): the owner with several canvases steers where the tokens go, pausing the less important
+  ones. The canvas has no state of its own beyond holding its queue: what shows and what resumes
+  are its paused cards, and the pause lasts over restarts as theirs does. Holding the queue keeps
+  pausing a busy canvas from just swapping its running agents for its queued ones. Rejected: a
+  canvas-wide stop at a safe point with every session ended and everything for its workers held
+  (a state of its own beside the cards' pauses); a button beside the canvas pill (too close to
+  the one in the switcher, and in view all the time); a setting to start Obeya with every canvas
+  paused (pauses last over restarts anyway).
 - **Waits of hours or days are a snooze Obeya holds** (2026-10-17). Rejected: workers keeping a turn
   open with chained background sleeps (the card looked busy for days and held a slot, every restart
   cut in, some 35 times a day, Obeya knew nothing of the reminders, and a night without network
