@@ -1122,6 +1122,88 @@ describe('the link in the pull request', () => {
   });
 });
 
+describe('the link to the commit, without a pull request', () => {
+  let repo: string;
+  beforeEach(() => {
+    // a checkout whose `origin` is on GitHub
+    repo = gitRepo(join(dir, 'checkout'));
+    git(repo, 'remote', 'add', 'origin', 'git@github.com:acme/app.git');
+    sharing = make(repo);
+  });
+  /** The card's work lands in `n` commits: `shipped`, as a landing writes it. */
+  function land(id: string, n = 1) {
+    const base = git(repo, 'rev-parse', 'HEAD');
+    for (let i = 0; i < n; i++) git(repo, 'commit', '--quiet', '--allow-empty', '-m', `Step ${i}`);
+    const to = git(repo, 'rev-parse', 'HEAD');
+    board.work(id, { shipped: JSON.stringify({ commit: to, base }) });
+    return { base, to };
+  }
+  const commitOf = (id: string, at = -1) => (calls().at(at)!.pages[slug(id)]!.meta as { commit?: { url: string; several?: true } }).commit;
+  const page = (id: string) => readFileSync(join(dir, 'deployed', slug(id), 'index.html'), 'utf8');
+
+  test('a page shared before the work landed is published again with the commit', async () => {
+    const c = card();
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(commitOf(c.id)).toBeUndefined();
+    const { to } = land(c.id);
+    await sharing.landed(c.id);
+    // the card goes on showing the page while it goes out again
+    expect(share(c.id)!.state).toBe('shared');
+    await until(() => calls().length === 2 && !board.row(c.id).share!.includes('publishing'));
+    expect(commitOf(c.id)).toEqual({ url: `https://github.com/acme/app/commit/${to}` });
+    expect(page(c.id)).toContain(`<a href="https://github.com/acme/app/commit/${to}">Commit ansehen</a>`);
+    expect(log(c.id)).toContain(`Die geteilte Seite verlinkt jetzt den Commit auf main: ${share(c.id)!.url}`);
+    // once: the page links it already
+    await sharing.landed(c.id);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls()).toHaveLength(2);
+  });
+
+  test('work landed in several commits links the comparison over them; a page shared then links it at once', async () => {
+    const c = card('In English', {}, null);
+    const { base, to } = land(c.id, 3);
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(calls()).toHaveLength(1);
+    expect(commitOf(c.id)).toEqual({ url: `https://github.com/acme/app/compare/${base}...${to}`, several: true });
+    expect(page(c.id)).toContain('>View commits</a>');
+  });
+
+  test('a landing while the page goes out gets a second round with the commit', async () => {
+    const c = card();
+    writeFileSync(join(dir, 'hold'), '');
+    sharing.share(c.id);
+    await until(() => calls().length === 1);
+    const { to } = land(c.id);
+    // the page is going out: it picks the commit up once it is done
+    await sharing.landed(c.id);
+    rmSync(join(dir, 'hold'));
+    await until(() => calls().length === 2 && !board.row(c.id).share!.includes('publishing'));
+    expect(commitOf(c.id, 0)).toBeUndefined();
+    expect(commitOf(c.id)).toEqual({ url: `https://github.com/acme/app/commit/${to}` });
+  });
+
+  test('a card with a pull request links that, not the commit', async () => {
+    const c = card();
+    openPr(c.id);
+    land(c.id);
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(meta(c.id).pr).toBe(PR);
+    expect(commitOf(c.id)).toBeUndefined();
+  });
+
+  test('a repository whose origin is a path links no commit', async () => {
+    git(repo, 'remote', 'set-url', 'origin', join(dir, 'elsewhere.git'));
+    const c = card();
+    land(c.id);
+    sharing.share(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    expect(commitOf(c.id)).toBeUndefined();
+  });
+});
+
 describe('a demo narrated anew in its directory', () => {
   /** What `--revoice en` leaves in the demo's directory: the chapters and captions of the English take, the report page in English. */
   function revoiced(d: string) {

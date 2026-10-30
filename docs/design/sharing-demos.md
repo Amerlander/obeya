@@ -14,7 +14,7 @@ Where a site takes the demo, "Teilen" publishes it on a page there at once, with
 mehr teilen" withdraws it as easily. The site is the repository's own (see Static sites) where this
 machine can deploy to it, else the owner's personal one (see The personal site) where the repository
 may share there. Without either, it exports a file (see Export without a site). A page stays on the
-site it went out on: later versions, a withdrawal and the PR's link go there, even once the other
+site it went out on: later versions, a withdrawal and the link to the PR or commit go there, even once the other
 site would take a new page. Pages go out one change at a time through one
 queue for all canvases, which resumes after a restart. The slug comes from the card's title and id
 once and stays, so the link survives republishing. The deploy's output goes into the card's log; a
@@ -214,6 +214,19 @@ rebased branch's last commit (`--no-verify`, author kept), skips a trailer alrea
 commit it cannot amend without one. A publish that succeeds for a landing that then fails leaves a
 public page for work not on `main`; accepted, since the next handover lands it.
 
+#### The page and the commit
+
+Work that lands on `main` without a pull request (landing on `main`, or pushed there directly) is
+linked from its page the way a PR is: „Commit ansehen“ („View commit“) where the PR's link would be,
+or „Commits ansehen“ („View commits“) over the comparison of several commits. The address is built
+from the checkout's `origin`, `<web address of the repository>/commit/<sha>` or
+`/compare/<before>...<last>` (GitHub's, Forgejo's and Gitea's path; GitLab puts it below `/-/`); an
+`origin` that is a path gives no link. The page goes out on approval before the commit exists, so
+once the work landed Obeya publishes it again as it is with the link, or gives a share still going
+out a second round, as for a PR opened late; the log says „Die geteilte Seite verlinkt jetzt den
+Commit auf main“. A card with a PR links the PR only. Where `main` is pushed later than it lands, the
+link answers once it is pushed; accepted, since nothing else names the commit before.
+
 #### Export without a site
 
 Without a site, "Teilen" exports the page (`GET …/cards/<id>/export?as=zip|html`): a ZIP with a
@@ -263,7 +276,7 @@ Pages, Netlify, Vercel, `aws s3 sync`, `rsync`, a Pages branch, a script.
 
 The site lives in `sites/<key>/` under Obeya's home, the key from the URL's host and path, shared by
 all repositories naming it. `site/` holds a directory per page (demo files, `index.html`,
-`meta.json`: kind, title, text, chapters, PR, first shared, last changed, a hash of the demo's own
+`meta.json`: kind, title, text, chapters, PR (or without one the commit: its address, and whether it is a comparison over several), first shared, last changed, a hash of the demo's own
 files, language, who shared it, its tags, and under `more` the later versions, their files in `2/`, `3/` …),
 the overview, dated by each page's newest version, and an Atom feed (`feed.xml`, linked from the
 overview as „Feed abonnieren“ and by `<link rel="alternate">`) with one entry per page in the overview's order (title,
@@ -436,6 +449,11 @@ another machine withdrew loses its link here, with a line naming the machine.
   nothing loads in CORS mode. Rejected: `allow-same-origin` (the artifact's scripts could read the
   whole site with the viewer's cookie), and the page around fetching files for the frame (fails from
   disk; markup lacks images until a script inserts them).
+- **A page of work landed without a PR links its commit** (owner, 2026-10-30): a repository that
+  commits to `main` directly has no PR to link back to, but its commit is as good a source. Several
+  commits get the comparison over them, since the last alone shows only part of the change.
+  Rejected: holding the approval's publish until the landing, to deploy once; the second deploy
+  is the one a late PR already takes.
 - **HTML artifacts are shared too** (2026-10-05): an analysis with charts is background for a pull
   request as much as a video.
 - **A worker hears of its page with its next step, not in a turn of its own** (2026-10-29): it

@@ -732,6 +732,7 @@ export class CanvasRuntime {
         this.sharing.prOpened(cardId);
       },
       onApproval: (cardId) => this.sharing.approved(cardId),
+      onLanded: (cardId) => void this.sharing.landed(cardId),
       onMerged: () => void read.refresh(),
       onPrototype: (prototype, summary, demo) => this.prototypeReady(prototype, summary, demo),
       onPrototypeAnswer: (prototype, question, answer) => this.prototypeAnswered(prototype, question, answer),

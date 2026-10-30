@@ -2,8 +2,19 @@ import { expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { confidence, type Forge, ghCli, githubRepo, lastAsked, makeGhForge, parsePrUrl, readable, readyToMerge, reviewOf, reviewStale, routedForge, type PrStatus } from './forge';
+import { confidence, type Forge, ghCli, githubRepo, landedUrl, lastAsked, makeGhForge, parsePrUrl, readable, readyToMerge, reviewOf, reviewStale, routedForge, type PrStatus } from './forge';
 import { fakeGh, noContributions } from './testing';
+
+test('landedUrl: the commit, or the comparison over several, on the forge of any remote but a path', () => {
+  expect(landedUrl('git@github.com:example-org/app.git', 'b2')).toBe('https://github.com/example-org/app/commit/b2');
+  expect(landedUrl('https://github.com/example-org/app.git', 'b2', 'a1')).toBe('https://github.com/example-org/app/compare/a1...b2');
+  expect(landedUrl('https://user:token@codeberg.org/example/app', 'b2')).toBe('https://codeberg.org/example/app/commit/b2');
+  expect(landedUrl('ssh://git@git.example.dev:2222/team/app.git', 'b2')).toBe('https://git.example.dev/team/app/commit/b2');
+  expect(landedUrl('http://localhost:3000/forgejo/team/app.git/', 'b2')).toBe('http://localhost:3000/forgejo/team/app/commit/b2');
+  expect(landedUrl('git@gitlab.com:group/sub/app.git', 'b2', 'a1')).toBe('https://gitlab.com/group/sub/app/-/compare/a1...b2');
+  expect(landedUrl('/srv/git/app.git', 'b2')).toBeNull();
+  expect(landedUrl('file:///srv/git/app.git', 'b2')).toBeNull();
+});
 
 test('parsePrUrl: GitHub and GitHub Enterprise, and Forgejo or Gitea on any server', () => {
   const github = (url: string) => /^https?:\/\/(github\.com|github\.example\.com)(\/|$)/i.test(url);

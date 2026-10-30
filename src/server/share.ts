@@ -3,7 +3,8 @@
 // the page's text when the worker did not. A page keeps the newest page change (page-changes.ts) it
 // was published after: one that lacks a change since is offered to share again ("Erneut teilen"),
 // with what that brings, on its card, or many at once from the Koordinator's sheet.
-// Once the card has a pull request, its description links the page and the page links it. A
+// Once the card has a pull request, its description links the page and the page links it; work that
+// lands without one links the page in its commit's trailer, and the page links the commit. A
 // repository without a site (or with a site whose credentials are not on this machine) exports
 // the demo instead: the same page as a ZIP with its files, or as one HTML file.
 // Pages of one target are on one site, so each publish names the others.
@@ -14,7 +15,7 @@ import { z } from 'zod';
 import { LANGUAGE_NAMES } from '../core/locale';
 import { MESSAGES, type Messages } from '../core/messages';
 import { type Demo, type DemoKind, type DemoPage, EXPORT_HTML_MAX, type Item, type PageTags, withSupplemented } from '../core/types';
-import { BadRequest, type Board, cardDemos, contributionOf, type DemoRef, pageTagsOf, type PrState, reshareable, sameDemo, type SharedDemo, sharedDemos, type StoredDemo, type StoredReshare, type StoredShare } from './board';
+import { BadRequest, type Board, cardDemos, contributionOf, type DemoRef, pageTagsOf, type PrState, reshareable, sameDemo, type SharedDemo, sharedDemos, type Shipped, type StoredDemo, type StoredReshare, type StoredShare } from './board';
 import { PAGE_CHANGES, pagesVersion } from '../core/page-changes';
 import { dimensions, shownTags, tagsOf, untagged } from '../core/page-tags';
 import type { DemoSite } from '../adapters/types';
@@ -24,12 +25,13 @@ import { allowedHere, approvedHere, newToken, type PersonalSite, personalDemoSit
 import { artifactCopy } from './artifact-copy';
 import { GITHUB_PAGES } from './site-hosts';
 import { rereadChapters } from './demo';
-import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, ON_DISK, PAGE_WORDS, type PageLanguage } from './demo-page';
-import { type Forge, parsePrUrl } from './forge';
+import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, type DemoPageParts, day, demoFile, demoPageHtml, ON_DISK, PAGE_WORDS, type PageCommit, type PageLanguage } from './demo-page';
+import { type Forge, landedUrl, parsePrUrl } from './forge';
 import type { AgentRuntime } from './runtime';
 import { readSession } from './koordinator';
 import type { CardRow } from './db';
-import { branchName } from './workspaces';
+import { branchName, gitAsync } from './workspaces';
+import { originOf } from './forgejo';
 import { zip } from './zip';
 import { messageOf } from '../core/text';
 
@@ -56,6 +58,8 @@ export interface SharePage {
   chapters: [number, string][];
   /** The card's pull request, once it has one. */
   pr: string | null;
+  /** Without a pull request: where the card's work landed on the default branch, once it has. */
+  commit?: PageCommit | null;
   /** The demo's language, for the page's own words (`language` of the page templates). */
   language: PageLanguage;
   /** The demo's directory: `demo.mp4`, `poster.jpg`, `captions.vtt`; an artifact's `index.html` and the files it loads. */
@@ -352,6 +356,18 @@ export class Sharing {
     if (pr && s?.url && !s.state && s.pr !== pr) this.refresh(cardId);
   }
 
+  /**
+   * The card's work landed on the default branch: a page shared before, without a pull request, gets
+   * the link to its commit. A share under way picks it up when it is done.
+   */
+  async landed(cardId: string) {
+    const card = this.find(cardId);
+    const s = this.stored(cardId);
+    if (!card || !s?.url || s.state) return;
+    const commit = await this.commitOf(card);
+    if (commit && s.commit !== commit.url && !this.stored(cardId)?.state) this.refresh(cardId);
+  }
+
   /** After a restart: a share under way goes on, a withdrawal too. */
   resume() {
     this.convert();
@@ -588,10 +604,12 @@ export class Sharing {
     if (lacking) await this.chooseTags(card, demos, lacking);
     const tags = tagsOf(pageTagsOf(this.o.board.row(cardId)), vocabulary);
     const pr = this.prOf(cardId);
+    const commit = pr ? null : await this.commitOf(card);
     const input: SharePage = {
       slug: pathOf(s),
       ...first.shown,
       pr,
+      ...(commit ? { commit } : {}),
       language: this.languageOf(first.dir, card),
       dir: first.dir,
       shared: this.others(cardId, target.key),
@@ -602,15 +620,16 @@ export class Sharing {
     this.lost(target.key, r.gone);
     if ('why' in r) return back(r.why, r.said);
     const { url } = r;
-    this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), version: pagesVersion(), ...kept(s), ...(s.personal ? { personal: true as const } : {}) });
+    this.set(cardId, { slug: s.slug, url, demos, ...(pr ? { pr } : {}), ...(commit ? { commit: commit.url } : {}), version: pagesVersion(), ...kept(s), ...(s.personal ? { personal: true as const } : {}) });
     if (r.said) this.o.board.log(cardId, 'activity', 'obeya', r.said);
-    this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.retag ? t.retagged(url) : s.refresh ? t.linksPr(url) : t.shared(url));
+    this.o.board.log(cardId, 'state', 'obeya', s.again ? t.sharedAgain(url) : s.retag ? t.retagged(url) : s.refresh ? (pr ? t.linksPr(url) : t.linksCommit(url)) : t.shared(url));
     this.settled(cardId, { url });
     if (pr) await this.linkPr(cardId, pr, url, target.repo, first.shown.kind);
-    // the pull request was opened while the page went out, or the owner changed its tags: once more, with them
+    // the pull request was opened or the work landed while the page went out, or the owner changed its tags: once more, with them
     const now = this.prOf(cardId);
+    const landed = !now && (await this.commitOf(card))?.url;
     const retag = JSON.stringify(tagsOf(pageTagsOf(this.o.board.row(cardId)), vocabulary)) !== JSON.stringify(tags);
-    if ((now && now !== pr) || retag) this.refresh(cardId, retag);
+    if ((now && now !== pr) || (landed && landed !== commit?.url) || retag) this.refresh(cardId, retag);
     return true;
   }
 
@@ -699,6 +718,7 @@ export class Sharing {
       text: page.text,
       chapters: demo.chapters,
       pr: this.prOf(cardId),
+      commit: await this.commitOf(card),
       when: PAGE_WORDS[language].demoOf(day(statSync(video).mtime, language)),
       tabTitle: page.title,
       language,
@@ -736,7 +756,7 @@ export class Sharing {
     const index = readFileSync(join(demo.dir, 'index.html'), 'utf8');
     const language = this.languageOf(demo.dir, card);
     const when = PAGE_WORDS[language].demoOf(day(statSync(join(demo.dir, 'index.html')).mtime, language));
-    const parts = { title: page.title, text: page.text, pr: this.prOf(card.id), when, tabTitle: page.title, language };
+    const parts = { title: page.title, text: page.text, pr: this.prOf(card.id), commit: await this.commitOf(card), when, tabTitle: page.title, language };
     let out: { name: string; type: string; data: Uint8Array<ArrayBuffer> };
     if (as === 'html') {
       out = { name: `${slug}.html`, type: 'text/html; charset=utf-8', data: new TextEncoder().encode(artifactPageHtml({ ...parts, artifact: { html: index } })) };
@@ -977,6 +997,24 @@ export class Sharing {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Where the card's work landed on the default branch without a pull request, on the forge of its
+   * repository's `origin`: its commit, or for several the comparison over them; null before it
+   * landed, with a pull request, or where `origin` is no forge.
+   */
+  private async commitOf(card: Item): Promise<PageCommit | null> {
+    const row = this.o.board.row(card.id);
+    const shipped = row.shipped ? (JSON.parse(row.shipped) as Shipped) : null;
+    const repo = this.o.sourceFor(card)?.repo;
+    if (!shipped?.commit || shipped.pr || this.prOf(card.id) || !repo) return null;
+    const remote = await originOf(repo);
+    if (!remote) return null;
+    // the checkout may not have them (pushed from the card's clone): then the last commit stands for them
+    const count = shipped.base ? Number(await gitAsync(repo, 'rev-list', '--count', `${shipped.base}..${shipped.commit}`).catch(() => '1')) : 1;
+    const url = landedUrl(remote, shipped.commit, count > 1 ? shipped.base : undefined);
+    return url ? { url, ...(count > 1 ? { several: true as const } : {}) } : null;
   }
 
   /** The card's pull request, once its worker opened it. */

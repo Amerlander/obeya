@@ -48,7 +48,7 @@ import type { Messages } from '../core/messages';
 import { dimensions } from '../core/page-tags';
 import type { PageTags } from '../core/types';
 import { readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
-import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, credit, day, demoFile, demoPageHtml, esc, OBEYA_URL, PAGE_STYLE, paragraphs, PAGE_WORDS, type PageLanguage, type StackedDemo, stackedPageHtml } from './demo-page';
+import { ARTIFACT_DIR, artifactFiles, artifactPageHtml, credit, day, demoFile, demoPageHtml, esc, OBEYA_URL, PAGE_STYLE, type PageCommit, paragraphs, PAGE_WORDS, type PageLanguage, type StackedDemo, stackedPageHtml } from './demo-page';
 import { artifactCopy } from './artifact-copy';
 import { pagePolicy, sealed, withHeightReport } from '../core/frame';
 import { DEMO_FILES, OWN_CONNECTIONS } from './demo';
@@ -72,6 +72,8 @@ interface Meta {
   text: string;
   chapters: [number, string][];
   pr: string | null;
+  /** Without a pull request: where the work landed on the default branch; absent before it did, and on pages from before (until 2026-10-30). */
+  commit?: PageCommit;
   /** When it was first shared, and when its video or artifact last changed (the date the page and the overview show). */
   first: string;
   at: string;
@@ -622,6 +624,7 @@ export function siteTarget(site: DemoSite, repo: string, home: string, t: Messag
               text: p.text.trim(),
               chapters: first.html ? [] : (p.chapters ?? []),
               pr: p.pr ?? null,
+              ...(p.commit ? { commit: p.commit } : {}),
               first: before?.first ?? now,
               at: first.at,
               source: first.source,
@@ -736,7 +739,10 @@ export function pagesHash(): { video: string; html: string; stacked: string } {
   };
   const hash = (pages: string[]) => createHash('sha256').update(pages.join('\0')).digest('hex').slice(0, 12);
   const languages: PageLanguage[] = ['de', 'en'];
-  const video = hash(languages.map((language) => pageHtml(site, { ...sample, language }, () => true)));
+  // without a pull request, the commit (the commits) the work landed as
+  const commit = { url: 'https://github.com/o/r/commit/b' };
+  const commits = { url: 'https://github.com/o/r/compare/a...b', several: true as const };
+  const video = hash(languages.flatMap((language) => [pageHtml(site, { ...sample, language }, () => true), pageHtml(site, { ...sample, language, pr: null, commit }, () => true)]));
   const html = hash(languages.map((language) => pageHtml(site, { ...sample, kind: 'html', chapters: [], language }, () => false) + sealed(withHeightReport('<body></body>'), new URL(site.url).origin)));
   // a page with several versions: a video, then an artifact and a video as addenda
   const more: MoreMeta[] = [
@@ -744,7 +750,7 @@ export function pagesHash(): { video: string; html: string; stacked: string } {
     { title: 'Third', text: 'Another detail.', chapters: [[0, 'Only']], dir: '3', handed: at, at, source: '' },
   ];
   // the same on every machine: the time of an addendum is said in the machine's time zone
-  const stacked = hash(languages.map((language) => pageHtml(site, { ...sample, language, more }, () => true, 'UTC')));
+  const stacked = hash(languages.flatMap((language) => [pageHtml(site, { ...sample, language, more }, () => true, 'UTC'), pageHtml(site, { ...sample, language, more, pr: null, commit: commits }, () => true, 'UTC')]));
   return { video, html, stacked };
 }
 
@@ -793,6 +799,7 @@ function pageHtml(site: DemoSite, m: Meta, poster: (dir: string) => boolean, tim
     title: m.title,
     text: m.text,
     pr: m.pr,
+    commit: m.commit ?? null,
     when: w.sharedOn(day(m.at, language), m.by),
     tabTitle: unlisted ? m.title : `${m.title} · ${site.title}`,
     language,

@@ -190,6 +190,8 @@ export interface StoredShare {
   next?: DemoRef[];
   /** The pull request the published page links. */
   pr?: string;
+  /** Without a pull request: the address of the commit (or the comparison over the commits) the published page links. */
+  commit?: string;
   /** While `publishing`: the page goes out again as it is, now with the PR's link; the card shows it as shared meanwhile. */
   refresh?: true;
   /** The newest page change (page-changes.ts) when it was published, '' before any: the changes after it are what sharing again brings. */

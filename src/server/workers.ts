@@ -68,6 +68,8 @@ export interface WorkerOptions {
   onApproval?: (cardId: string) => string | null;
   /** The default branch has moved: the card's pull request was merged, or its work pushed there directly. */
   onMerged?: (cardId: string) => void;
+  /** The card's work landed on the default branch without a pull request (`shipped` says where): its shared page links the commit. */
+  onLanded?: (cardId: string) => void;
   /** A prototype was handed over: the idea's agent hears the summary. */
   onPrototype?: (prototype: Item, summary: string, demo: string | undefined) => void;
   /** A question on a prototype was answered: the idea's agent hears both, so its brief holds them. */
@@ -1660,6 +1662,7 @@ export class Workers {
     const sw = result.switched;
     if (sw) this.o.board.log(cardId, 'state', 'obeya', t.switchedToMain(sw.branch, sw.commit));
     if (direct) this.o.onMerged?.(cardId);
+    this.o.onLanded?.(cardId);
     this.afterLanding(
       cardId,
       [

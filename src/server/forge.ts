@@ -132,6 +132,23 @@ export const sameRepo = (remote: string, owner: string, repo: string) =>
     .join('/') === `${owner}/${repo}`.toLowerCase();
 
 /**
+ * Where work that landed on the default branch without a pull request shows on the forge of
+ * `remote` (https, ssh or scp-like): its commit `to`, or with `from` the comparison over its
+ * commits `from..to`. The path is GitHub's, Forgejo's and Gitea's; GitLab puts it below `/-/`.
+ * None for a repository on this machine.
+ */
+export function landedUrl(remote: string, to: string, from?: string): string | null {
+  const url = remote.trim();
+  const host = remoteHost(url);
+  if (!host) return null;
+  const web = /^https?:\/\//i.test(url)
+    ? url.replace(/^(https?:\/\/)[^@/]*@/i, '$1')
+    : `https://${host}/${url.replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*\//i, '').replace(/^[^/\\:]*:\/?/, '')}`;
+  const repo = `${web.replace(/\/+$/, '').replace(/\.git$/, '')}${host.includes('gitlab') ? '/-' : ''}`;
+  return from ? `${repo}/compare/${from}...${to}` : `${repo}/commit/${to}`;
+}
+
+/**
  * The forge a pull request is on, by its URL; one is opened on the forge of the repository's
  * `origin` (GitHub where `onGitHub` says so, else Forgejo).
  */

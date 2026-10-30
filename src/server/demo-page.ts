@@ -1,7 +1,8 @@
 // The page a demo is shared on, for people who have never seen Obeya, in the demo's language: title, text, the video with
-// its chapters and captions (or an HTML artifact in a frame), the pull request. A repository's demo
-// site is built from it (site.ts), and a repository without one exports it (share.ts): as a ZIP
-// with the video or the artifact beside the page, or as one HTML file with everything inside.
+// its chapters and captions (or an HTML artifact in a frame), the pull request, or without one the
+// commit it landed as. A repository's demo site is built from it (site.ts), and a repository
+// without one exports it (share.ts): as a ZIP with the video or the artifact beside the page, or as
+// one HTML file with everything inside.
 
 import { type Dirent, existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
@@ -19,6 +20,9 @@ export const PAGE_WORDS: Record<
     captions: string;
     play: string;
     pr: string;
+    /** The link to work that landed without a pull request: its commit, or the comparison over its commits. */
+    commit: string;
+    commits: string;
     ownWindow: string;
     demoOf: (day: string) => string;
     /** A page on a site (`site.ts`): when it was shared and by whom (git's name of the one whose Obeya shared it), the link to the overview; the overview's own words. */
@@ -49,6 +53,8 @@ export const PAGE_WORDS: Record<
     captions: 'Deutsch',
     play: 'Abspielen',
     pr: 'Pull Request ansehen',
+    commit: 'Commit ansehen',
+    commits: 'Commits ansehen',
     ownWindow: 'In eigenem Fenster öffnen',
     demoOf: (day) => `Demo vom ${day}`,
     sharedOn: (day, by) => (by ? `Geteilt von ${by} am ${day}` : `Geteilt am ${day}`),
@@ -76,6 +82,8 @@ export const PAGE_WORDS: Record<
     captions: 'English',
     play: 'Play',
     pr: 'View pull request',
+    commit: 'View commit',
+    commits: 'View commits',
     ownWindow: 'Open in its own window',
     demoOf: (day) => `Demo from ${day}`,
     sharedOn: (day, by) => (by ? `Shared by ${by} on ${day}` : `Shared on ${day}`),
@@ -111,12 +119,20 @@ function timeParts(at: string, locale: string, month: 'numeric' | 'short', timeZ
   return { day: parts.day ?? '', month: parts.month ?? '', hour: parts.hour ?? '', minute: parts.minute ?? '' };
 }
 
+/** Work that landed without a pull request, on its forge: its commit, or the comparison over its commits (`several`). */
+export interface PageCommit {
+  url: string;
+  several?: true;
+}
+
 /** What a page shows of every demo, a video or an HTML artifact. */
 interface PageParts {
   title: string;
   /** Paragraphs separated by blank lines. */
   text: string;
   pr: string | null;
+  /** Without a pull request: where the work landed on the default branch, once it has. */
+  commit?: PageCommit | null;
   /** The line under the title (when it was shared, and by whom). */
   when: string;
   /** The browser tab's title. */
@@ -151,6 +167,9 @@ export const paragraphs = (text: string) =>
     .filter(Boolean)
     .map((p) => `<p>${esc(p)}</p>`)
     .join('\n');
+/** The link to the change: its pull request, or without one the commit (the commits) it landed as; '' before either. */
+const changeLink = (p: Pick<PageParts, 'pr' | 'commit'>, w: (typeof PAGE_WORDS)[PageLanguage]) =>
+  p.pr ? `<a href="${esc(p.pr)}">${w.pr}</a>` : p.commit ? `<a href="${esc(p.commit.url)}">${p.commit.several ? w.commits : w.commit}</a>` : '';
 /** Text inside a `<script>` element must not close it. */
 const inScript = (s: string) => s.replace(/<\//g, '<\\/');
 
@@ -274,7 +293,7 @@ export function artifactPageHtml(p: ArtifactPageParts): string {
       : `<iframe srcdoc="${esc(sealed(withHeightReport(p.artifact.html)))}" sandbox="allow-scripts" title="${esc(p.title)}"></iframe>`;
   const links = [
     'src' in p.artifact ? `<a href="?alone" target="_blank" rel="noopener">${w.ownWindow}</a>` : '',
-    p.pr ? `<a href="${esc(p.pr)}">${w.pr}</a>` : '',
+    changeLink(p, w),
   ].filter(Boolean);
   return `${pageStart(p, language, pagePolicy(ON_DISK))}${links.length ? `<div class="links">${links.join('')}</div>\n` : ''}<div class="artifact">${frame}</div>
 ${credit(language)}</main>
@@ -321,10 +340,11 @@ export function demoPageHtml(p: DemoPageParts): string {
     ? `<ol>${p.chapters.map(([at, title], i) => `<li><button data-at="${at}"${i === 0 ? ' class="on"' : ''}><span class="t">${mmss(at)}</span>${esc(title)}</button></li>`).join('')}</ol>`
     : '';
   const src = 'src' in p.video ? ` src="${esc(p.video.src)}"` : '';
+  const link = changeLink(p, w);
   const track = 'src' in p.captions ? `<track kind="captions" src="${esc(p.captions.src)}" srclang="${language}" label="${w.captions}">` : '';
   return `${pageStart(p, language)}<div class="grid">
   <div class="player"><video controls preload="metadata"${src}${p.poster ? ` poster="${esc(p.poster)}"` : ''}>${track}</video><button class="start" aria-label="${w.play}"><span><svg viewBox="0 0 24 24"><path d="M6 4l15 8-15 8z"/></svg></span></button></div>
-  <div>${chapters}${p.pr ? `<div class="pr"><a href="${esc(p.pr)}">${w.pr}</a></div>` : ''}</div>
+  <div>${chapters}${link ? `<div class="pr">${link}</div>` : ''}</div>
 </div>
 ${credit(language)}</main>
 ${'vtt' in p.captions ? `<script type="text/vtt" id="captions">${inScript(p.captions.vtt)}</script>\n` : ''}${'base64' in p.video ? `<script type="application/octet-stream" id="video">${p.video.base64}</script>\n` : ''}<script>
@@ -379,16 +399,16 @@ export function stackedPageHtml(p: StackedPageParts): string {
   const list = `<nav class="sections">${p.demos.map((_, i) => `<a href="#v${i + 1}">${i + 1}. ${esc(name(i))}</a>`).join('')}</nav>
 `;
   const block = (d: StackedDemo, i: number) => {
-    const pr = i === 0 && p.pr ? p.pr : null;
+    const link = i === 0 ? changeLink(p, w) : '';
     if (d.kind === 'html')
-      return `<div class="links"><a href="?alone=${i + 1}" target="_blank" rel="noopener">${w.ownWindow}</a>${pr ? `<a href="${esc(pr)}">${w.pr}</a>` : ''}</div>
+      return `<div class="links"><a href="?alone=${i + 1}" target="_blank" rel="noopener">${w.ownWindow}</a>${link}</div>
 <div class="artifact"><iframe src="${esc(d.base + ARTIFACT_DIR)}/index.html" sandbox="allow-scripts" title="${esc(d.title)}"></iframe></div>`;
     const chapters = d.chapters.length
       ? `<ol>${d.chapters.map(([at, title], j) => `<li><button data-at="${at}"${j === 0 ? ' class="on"' : ''}><span class="t">${mmss(at)}</span>${esc(title)}</button></li>`).join('')}</ol>`
       : '';
     return `<div class="grid">
   <div class="player"><video controls preload="metadata" src="${esc(d.base)}demo.mp4"${d.poster ? ` poster="${esc(d.base)}poster.jpg"` : ''}><track kind="captions" src="${esc(d.base)}captions.vtt" srclang="${language}" label="${w.captions}"></video><button class="start" aria-label="${w.play}"><span><svg viewBox="0 0 24 24"><path d="M6 4l15 8-15 8z"/></svg></span></button></div>
-  <div>${chapters}${pr ? `<div class="pr"><a href="${esc(pr)}">${w.pr}</a></div>` : ''}</div>
+  <div>${chapters}${link ? `<div class="pr">${link}</div>` : ''}</div>
 </div>`;
   };
   const artifacts = p.demos.some((d) => d.kind === 'html');

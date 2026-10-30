@@ -304,12 +304,16 @@ describe('the landed commit names the demo’s page', () => {
   const PAGE = 'Demo-Video: https://demos.example.dev/zahlerstande-exportieren-1/';
   /** The cards approved, as the demo site heard of them; a card titled „Ohne Seite“ has no page. */
   let approvals: string[];
+  /** The cards whose work landed without a pull request, with what they shipped then, as the demo site heard of them. */
+  let landings: [string, string | null][];
   function withSite(adapter: Parameters<typeof setup>[0], withOrigin = false) {
     rmSync(dir, { recursive: true, force: true });
     setup(adapter, withOrigin);
     approvals = [];
+    landings = [];
     const onApproval = (id: string) => (approvals.push(id), board.item(id)!.title === 'Ohne Seite' ? null : PAGE);
-    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter, onApproval }));
+    const onLanded = (id: string) => void landings.push([id, board.row(id).shipped]);
+    setWorkers(new Workers({ board, runtime, workspaces: spaces, adapter, onApproval, onLanded }));
   }
   /** A handed-over card whose last commit has a trailer of its own. */
   async function handedOver(title = 'Zählerstände exportieren', commit = true) {
@@ -337,6 +341,8 @@ describe('the landed commit names the demo’s page', () => {
     expect(git(main, 'log', '-1', '--format=%B')).toBe(`Zählerstände als CSV\n\nDer Export liest alle Zähler.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n${PAGE}`);
     expect(git(main, 'log', '--format=%s', '-3').split('\n')).toEqual(['Zählerstände als CSV', 'Erste Hälfte', 'init']);
     expect(git(main, 'log', '-1', '--format=%an <%ae>')).toBe('T <t@example.com>');
+    // the page then links where it landed
+    expect(landings).toEqual([[c.id, JSON.stringify({ commit: git(main, 'rev-parse', 'HEAD'), base: git(main, 'rev-parse', 'HEAD~2') })]]);
   });
 
   test('pushed directly onto origin’s main, the same', async () => {
@@ -345,6 +351,7 @@ describe('the landed commit names the demo’s page', () => {
     await workers.approve(c.id, { direct: true });
     expect(state(c.id)).toBe('live');
     expect(git(origin, 'log', '-1', '--format=%(trailers:key=Demo-Video)', 'main')).toBe(PAGE);
+    expect(landings.map(([id]) => id)).toEqual([c.id]);
   });
 
   test('a card without a page lands as it was', async () => {
@@ -361,6 +368,7 @@ describe('the landed commit names the demo’s page', () => {
     await workers.approve(c.id);
     expect(state(c.id)).toBe('inPr');
     expect(approvals).toEqual([c.id]);
+    expect(landings).toEqual([]);
   });
 
   test('with nothing to land, too', async () => {
