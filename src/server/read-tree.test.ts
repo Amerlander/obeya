@@ -227,9 +227,19 @@ describe("the seal of a repository's refs", () => {
     expect(seal()).not.toBe(packed);
   });
 
-  test("is none where a branch names a card's, which it moves with", () => {
-    git(checkout, 'branch', 'obeya/source-c3');
-    git(checkout, 'symbolic-ref', 'refs/heads/trunk', 'refs/heads/obeya/source-c3');
+  test("is none where a branch names a card's, which it moves with; a branch of its own with the cards' prefix inside its name counts", () => {
+    git(checkout, 'branch', 'release/obeya/stable');
+    const before = refsSeal(checkout);
+    git(checkout, 'checkout', '--quiet', 'release/obeya/stable');
+    writeFileSync(join(checkout, 'r.md'), 'r\n');
+    git(checkout, 'add', '-A');
+    git(checkout, 'commit', '--quiet', '-m', 'R');
+    git(checkout, 'checkout', '--quiet', '--detach');
+    expect(refsSeal(checkout)).not.toBe(before);
+
+    // `ref: refs/heads/obeya/` and a name that makes the file as long as a commit's hash
+    git(checkout, 'branch', 'obeya/source-c3xxxxxxxxx');
+    git(checkout, 'symbolic-ref', 'refs/heads/trunk', 'refs/heads/obeya/source-c3xxxxxxxxx');
     expect(refsSeal(checkout)).toBeNull();
   });
 

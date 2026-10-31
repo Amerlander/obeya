@@ -36,8 +36,9 @@ export function* readingDefaultBranch(repoPath: string): GitSteps<{ branch: stri
  * A seal of what the default branch and its commit are read from (`defaultBranchCommit`), taken
  * without git, by a few `stat`s: while it is the same, so is that commit, and what was read there
  * holds. The repository's own branches and `origin`'s, each by its name and the file git wrote it
- * in last (git writes a branch anew beside it, then renames it into place), the packed refs, and
- * the branch the checkout is on where that is no card's (the main branch may be told by it); not
+ * in last (git writes a branch anew beside it, then renames it into place), the packed refs, the
+ * main branch the owner set, and the branch the checkout is on where that is no card's (the main
+ * branch may be told by it); not
  * the cards' branches, which change all the time and decide nothing of it. Null where it cannot be
  * told (refs in a reftable, a branch that names a card's or another ref, no git directory found):
  * git reads it then.
@@ -58,23 +59,30 @@ export function refsSeal(repoPath: string): string | null {
     const at = (path: string, ref = true) => {
       const s = statSync(path, { bigint: true, throwIfNoEntry: false });
       if (!s) return;
-      // a branch holds a commit's hash and a newline, or names the ref it follows
-      if (ref && s.size !== 41n && s.size !== 65n && !followsSealed(readFileSync(path, 'utf8'))) throw new Error(`${path} names no commit Obeya can seal`);
+      // a branch holds a commit's hash, or names the ref it follows
+      if (ref) {
+        const text = readFileSync(path, 'utf8');
+        if (text.startsWith('ref:') && !followsSealed(text)) throw new Error(`${path} follows a ref Obeya does not seal`);
+      }
       seal.push(`${path.slice(common.length)} ${s.ino}:${s.size}:${s.mtimeNs}`);
     };
-    const refs = (dir: string) => {
+    const refs = (dir: string, top: string) => {
       if (!existsSync(dir)) return;
       for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const path = join(dir, e.name);
         if (e.isDirectory()) {
-          if (e.name !== CARD_REFS) refs(join(dir, e.name));
-        } else at(join(dir, e.name));
+          // the cards' branches, not a branch of the repository's own that has the word in its name
+          if (path !== join(top, CARD_REFS)) refs(path, top);
+        } else at(path);
       }
     };
-    for (const r of sealed) refs(join(common, r));
+    for (const r of sealed) refs(join(common, r), join(common, r));
     at(join(common, 'packed-refs'), false);
     // where no other rule tells the main branch, the branch the checkout is on does (`detectingBranch`)
     const head = readFileSync(join(dirs.own, 'HEAD'), 'utf8').trim();
     if (head.startsWith('ref: ') && !head.startsWith(`ref: refs/heads/${CARD_BRANCH}`)) seal.push(`HEAD ${head}`);
+    // the main branch the owner set takes the place of the one detected
+    seal.push(`branch ${branchSetting(repoPath) ?? ''}`);
   } catch {
     return null;
   }
