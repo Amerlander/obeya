@@ -100,7 +100,7 @@ export interface WorkerOptions {
    * changed where they work (its own adapter, its `.obeya/settings.json`). `pushedFrom` is the
    * workspace work was pushed from straight to the remote's main, which leaves the checkout as it is.
    */
-  restartsFor?: (landed: Landed, pushedFrom?: string) => 'obeya' | 'repo' | false;
+  restartsFor?: (landed: Landed, pushedFrom?: string) => Promise<'obeya' | 'repo' | false> | 'obeya' | 'repo' | false;
   /** Added to every worker's environment: where Obeya is (`OBEYA_URL`), for a demo's narration. */
   env?: Record<string, string>;
   /** The narration language of the demo settings, for a repository that names none for its demos; the conversation language when left out. */
@@ -1645,7 +1645,7 @@ export class Workers {
     if (this.unheard(cardId).some((u) => u.text.startsWith(NOT_LANDED))) this.o.board.work(cardId, { unheard: JSON.stringify(this.unheardBut(cardId, NOT_LANDED)) });
     this.o.board.planDocsLanded(cardId, added);
     this.bump(cardId);
-    const restartFor = this.o.restartsFor?.(result, direct ? (row.workspace ?? undefined) : undefined) ?? false;
+    const restartFor = (await this.o.restartsFor?.(result, direct ? (row.workspace ?? undefined) : undefined)) ?? false;
     const restarts = !!restartFor;
     const page = this.pageNote(cardId);
     this.o.board.work(cardId, {

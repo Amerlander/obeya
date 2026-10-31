@@ -4,10 +4,10 @@
 // whatever card's branch leased it last, and the Lesestand is a detached worktree of it under
 // Obeya's home, kept on the default branch as `origin` has it.
 
-import { existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import { dirname } from 'node:path';
-import { branchSetting, type Branches, detachedTree, detectingBranch, GIT, type GitSteps, gitOrNull, gitSteps, gitStepsSync, isFolder, readingBranches } from './workspaces';
+import { dirname, join, resolve } from 'node:path';
+import { branchSetting, type Branches, CARD_BRANCH, detachedTree, detectingBranch, GIT, type GitSteps, gitOrNull, gitSteps, gitStepsSync, isFolder, readingBranches } from './workspaces';
 
 const gitIn =
   (path: string) =>
@@ -26,10 +26,74 @@ export function defaultBranchCommit(repoPath: string): { branch: string; commit:
 }
 
 /** `defaultBranchCommit` as git steps. */
-function* readingDefaultBranch(repoPath: string): GitSteps<{ branch: string; commit: string }> {
+export function* readingDefaultBranch(repoPath: string): GitSteps<{ branch: string; commit: string }> {
   const branches = yield* readingBranches();
   const branch = branchSetting(repoPath) || (yield* detectingBranch(branches));
   return { branch, commit: yield* branchCommit(branch, branches) };
+}
+
+/**
+ * A seal of what the default branch and its commit are read from (`defaultBranchCommit`), taken
+ * without git, by a few `stat`s: while it is the same, so is that commit, and what was read there
+ * holds. The repository's own branches and `origin`'s, each by its name and the file git wrote it
+ * in last (git writes a branch anew beside it, then renames it into place), and the packed refs;
+ * not the cards' branches, which change all the time and decide nothing of it. Null where it
+ * cannot be told (refs in a reftable, no git directory found): git reads it then.
+ */
+export function refsSeal(repoPath: string): string | null {
+  const common = commonDir(repoPath);
+  if (!common || existsSync(join(common, 'reftable'))) return null;
+  const seal: string[] = [];
+  const at = (path: string) => {
+    try {
+      const s = statSync(path, { bigint: true });
+      seal.push(`${path.slice(common.length)} ${s.ino}:${s.size}:${s.mtimeNs}`);
+    } catch {}
+  };
+  const refs = (dir: string) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        if (e.name !== CARD_REFS) refs(join(dir, e.name));
+      } else at(join(dir, e.name));
+    }
+  };
+  refs(join(common, 'refs/heads'));
+  refs(join(common, 'refs/remotes/origin'));
+  at(join(common, 'packed-refs'));
+  return seal.sort().join('\n');
+}
+
+/** The directory the cards' branches are in, under a repository's branches and `origin`'s. */
+const CARD_REFS = CARD_BRANCH.slice(0, -1);
+
+/** By the repository's path: its git directory the worktrees share, where its refs are, as `commonDir` found it. */
+const commonDirs = new Map<string, string>();
+
+/** The git directory of the repository at `repoPath` its worktrees share (`--git-common-dir`), from its `.git` without git; null where none is found. */
+function commonDir(repoPath: string): string | null {
+  const known = commonDirs.get(repoPath);
+  if (known) return known;
+  let dir = join(repoPath, '.git');
+  try {
+    if (statSync(dir).isFile()) {
+      const m = readFileSync(dir, 'utf8').match(/^gitdir: (.+)$/m);
+      if (!m) return null;
+      dir = resolve(repoPath, m[1]!.trim());
+    }
+    const common = join(dir, 'commondir');
+    if (existsSync(common)) dir = resolve(dir, readFileSync(common, 'utf8').trim());
+    if (!statSync(join(dir, 'refs')).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+  commonDirs.set(repoPath, dir);
+  return dir;
 }
 
 /** The commit of the default branch `branch` by `defaultBranchCommit`'s rule, as git steps, from `branches` where they were read already. */
@@ -50,8 +114,8 @@ export interface ReadTreeOptions {
   dir: string | null;
   /** Whether the checkout has an `origin` to fetch from. */
   remote: boolean;
-  /** The Lesestand moved to another commit. */
-  onChange: () => void;
+  /** The Lesestand moved to another commit; a move settles once what this returns does. */
+  onChange: () => void | Promise<void>;
 }
 
 export class ReadTree {
@@ -155,7 +219,7 @@ export class ReadTree {
         } finally {
           this.moving = false;
         }
-        if (moved && !this.stopped) this.o.onChange();
+        if (moved && !this.stopped) await this.o.onChange();
       })
       .finally(() => this.queued--);
     this.moves = moved.catch(() => {});

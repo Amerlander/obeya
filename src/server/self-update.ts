@@ -8,7 +8,7 @@ import { dirname } from 'node:path';
 import { inert } from '../core/inert';
 import type { OwnerHold, RestartReason } from '../core/types';
 import { COMPILED } from './resources';
-import { gitOrNull } from './workspaces';
+import { gitAsync, gitOrNull } from './workspaces';
 
 /** The exit code that asks the supervisor for a fresh server. */
 export const RESTART = 75;
@@ -183,9 +183,9 @@ const OUTRANKS: Record<RestartReason, number> = { code: 0, config: 0, repository
 
 const key = (b: Busy[]) => b.map((x) => `${x.canvas}/${x.card}`).join(' ');
 
-/** Whether the commits from `from` to `to` change code, not only docs (unknown counts as code). */
-export function changesCode(checkout: string, from: string, to: string): boolean {
-  const changed = gitOrNull(checkout, 'diff', '--name-only', from, to);
+/** Whether the commits from `from` to `to` change code, not only docs (unknown counts as code); without the server waiting for git. */
+export async function changesCode(checkout: string, from: string, to: string): Promise<boolean> {
+  const changed = await gitAsync(checkout, 'diff', '--name-only', from, to).catch(() => null);
   return changed === null || changed.split('\n').some((f) => f && !inert(f));
 }
 
@@ -230,20 +230,34 @@ export function watchOwnCode(checkout: string, fn: (from: string, to: string) =>
   if (!start) return () => {};
   let seen = start;
   let base = start;
-  const timer = setInterval(() => {
-    const head = headOf(checkout);
-    if (!head) return;
+  let looking = false;
+  let stopped = false;
+  const look = async () => {
+    const head = await gitAsync(checkout, 'rev-parse', 'HEAD').catch(() => null);
+    if (!head || stopped) return;
     if (head !== seen) {
       seen = head;
       return;
     }
     if (head === base) return;
-    if (!changesCode(checkout, base, head)) {
+    const code = await changesCode(checkout, base, head);
+    if (stopped) return;
+    if (!code) {
       base = head;
       return;
     }
-    clearInterval(timer);
+    stop();
     fn(base, head);
+  };
+  // git answers without the server waiting; a look that takes longer than the interval is not overtaken
+  const timer = setInterval(() => {
+    if (looking) return;
+    looking = true;
+    void look().finally(() => (looking = false));
   }, intervalMs);
-  return () => clearInterval(timer);
+  const stop = () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+  return stop;
 }

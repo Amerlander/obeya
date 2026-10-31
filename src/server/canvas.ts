@@ -4,7 +4,7 @@
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { defaultsFor, hasAdapterModule, readingAdapterModule, readingShared, readShared, repoValues, type SharedRead, withSettings } from '../adapters';
+import { defaultsFor, hasAdapterModule, readingAdapterModule, readingShared, readShared, readSharedFiles, repoValues, type SharedRead, withSettings } from '../adapters';
 import { Answers, answersDir, answerTag } from './answers';
 import { demoDirectory, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import { demoFile } from './demo-page';
@@ -28,7 +28,7 @@ import { type ContributionInfo, type Forge, parsePrUrl, sameRepo } from './forge
 import { Koordinator } from './koordinator';
 import { WorkRetro } from './work-retro';
 import { PrWatcher } from './pr-watcher';
-import { branchCommit, defaultBranchCommit, ReadTree } from './read-tree';
+import { branchCommit, readingDefaultBranch, ReadTree, refsSeal } from './read-tree';
 import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
 import { ghHosts, onGitHub, outsidePlanDir, readPlanDocs, watchPlanDocs } from './repo';
@@ -46,7 +46,7 @@ import { siteMissing, siteName } from './site';
 import { allowedHere, approvedHere, personalDemoSite, readPersonal } from './personal-site';
 import { dimensions } from '../core/page-tags';
 import { type DueRestart, Workers } from './workers';
-import { branchSetting, type CardWorkspaces, defaultBranch, type FileAt, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitStepsSync, type Landed, markFolder, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
+import { branchSetting, type CardWorkspaces, defaultBranch, type FileAt, detectingBranch, gitCalls, gitOrNull, type GitSteps, gitSteps, gitStepsSync, isFolder, type Landed, markFolder, readingBranches, together, useBranchSetting, Workspaces } from './workspaces';
 import { FolderWorkspaces } from './folder';
 import { claudeToken, githubToken, hostName, registerHost } from './hosts';
 import { clip, messageOf, oneLine } from '../core/text';
@@ -166,6 +166,8 @@ interface Repo extends RepoRuntime {
   problemSources?: string;
   /** The resolved configuration it was set up by, and its place there: what it starts again with where a new one fails. */
   from: { resolved: Resolved; index: number };
+  /** Its settings read again (`moved`), the last of those under way. */
+  moving?: Promise<unknown>;
 }
 
 /**
@@ -232,6 +234,8 @@ export class CanvasRuntime {
   private pending: RepoRestart | null = null;
   /** Set once the canvas stopped because its home repository did not start again. */
   private stopped = false;
+  /** Set once the canvas shut down: what git reads for it after that changes nothing. */
+  private shutDown = false;
   /** By repository's id: why it does not run as the configuration has it (`StartFailure`). */
   private failed = new Map<string, { detail: string; before?: true }>();
   /** The restart of all of Obeya that waits, if one does: it covers the repositories' too. */
@@ -549,11 +553,13 @@ export class CanvasRuntime {
   /**
    * Whether an agent working in `cwd` works in a repository of the canvas (its checkout, its
    * Lesestand, a workspace of it; the most specific, since the home repository's workspaces hold
-   * the others') whose own Claude Code configuration waits for the owner's trust. Read afresh from
-   * the default branch, not as the canvas last read it: a commit there that the canvas did not
-   * notice (on the checkout's main, from outside Obeya) is in the files the session reads.
+   * the others') whose own Claude Code configuration waits for the owner's trust. As the default
+   * branch has it now, not as the canvas last read it: a commit there that the canvas did not notice
+   * (on the checkout's main, from outside Obeya) is in the files the session reads. Agents start
+   * often, many at once when work lands: what was read stands while the repository's refs did not
+   * move (`refsSeal`), and git reads it again without the server waiting for it.
    */
-  private claudeHeld = (cwd: string): boolean => {
+  private claudeHeld = (cwd: string): boolean | Promise<boolean> => {
     const depth = (dir: string) => (cwd === dir || cwd.startsWith(dir.endsWith(sep) || dir.endsWith('/') ? dir : `${dir}${dir.includes('://') ? '/' : sep}`) ? dir.length : -1);
     let best: { r: Repo; at: number } | undefined;
     for (const r of this.repos)
@@ -564,20 +570,28 @@ export class CanvasRuntime {
     if (!best) return false;
     const path = best.r.info.path;
     const mine = this.deps.settings ? this.deps.settings(path) : best.r.config.settings;
-    // the commit itself, not a name of it (`HEAD` in a repository without the branch), which moves
-    const commit = gitOrNull(path, 'rev-parse', '--verify', '--quiet', `${defaultBranchCommit(path).commit}^{commit}`);
     const trusted = this.deps.store.trustedCommands(path);
-    // read again only where the default branch, the trust or this machine's settings moved: agents start often
-    const key = JSON.stringify([commit, trusted, mine]);
-    const known = this.claudeTrust.get(path);
-    if (commit && known?.key === key) return known.held;
-    const held = heldGroups(commandsOf(readShared(path, commit ?? undefined)), trusted, mine).includes('claude');
-    this.claudeTrust.set(path, { key, held });
-    return held;
+    const held = (read: SharedRead) => heldGroups(commandsOf(read), trusted, mine).includes('claude');
+    // a folder without git is read as it is
+    if (best.r.info.folder) return held(readSharedFiles(path));
+    const seal = refsSeal(path);
+    const known = this.defaultRead.get(path);
+    const read = seal && known?.seal === seal ? known.read : this.readSettings(path);
+    return read instanceof Promise ? read.then((r) => held(r.shared)) : held(read.shared);
   };
 
-  /** By repository's path: whether its Claude Code configuration was held, and what that was worked out from (`claudeHeld`). */
-  private claudeTrust = new Map<string, { key: string; held: boolean }>();
+  /**
+   * By repository's path: what its default branch had when last read (`claudeHeld`, `moved`), or as
+   * it is being read, under the seal its refs had before (`refsSeal`).
+   */
+  private defaultRead = new Map<string, { seal: string; read: DefaultRead | Promise<DefaultRead> }>();
+
+  /** Keeps `read`, read from the default branch after its refs had `seal`; a read since (another seal) is not undone. */
+  private readAt(path: string, seal: string, read: DefaultRead | Promise<DefaultRead>) {
+    const entry = { seal, read };
+    this.defaultRead.set(path, entry);
+    if (read instanceof Promise) void read.then((r) => this.defaultRead.get(path) === entry && this.defaultRead.set(path, { seal, read: r }), () => this.defaultRead.get(path) === entry && this.defaultRead.delete(path));
+  }
 
   /**
    * What a configuration of this canvas amounts to, with this machine's settings and the
@@ -585,7 +599,9 @@ export class CanvasRuntime {
    */
   private resolve(config: CanvasConfig) {
     return resolveCanvas(config, this.deps.store, this.settingsOf, this.sharedOf, (path, folder) => {
+      const seal = folder ? null : refsSeal(path);
       const read = readRepo(path, folder);
+      if (read && seal) this.readAt(path, seal, { shared: read.shared, adapterModule: read.adapterModule });
       if (read && !this.shared.has(path)) this.shared.set(path, read.shared);
       if (read) this.adapterModules.set(path, read.adapterModule);
       return read;
@@ -645,7 +661,7 @@ export class CanvasRuntime {
       remote: !folder && !!info.remote,
       onChange: () => {
         board.lesestandMoved(repo.ref.id, read.head());
-        if (this.moved(repo) === 'follow') this.follow();
+        return Promise.resolve(this.moved(repo)).then((m) => void (m === 'follow' && this.follow()));
       },
     });
     stops.push(() => read.stop());
@@ -738,10 +754,10 @@ export class CanvasRuntime {
       onPrototypeAnswer: (prototype, question, answer) => this.prototypeAnswered(prototype, question, answer),
       // where work lands on the local main, the Lesestand is the checkout and moves with the landing;
       // a push leaves the checkout as it is: what it changes applies once the Lesestand fetches it
-      restartsFor: (l: Landed, pushedFrom?: string) => {
+      restartsFor: async (l: Landed, pushedFrom?: string) => {
         if (pushedFrom) return false;
-        if (deps.ownCheckout && sameDir(deps.ownCheckout, info.path) && changesCode(info.path, l.from, l.to)) return 'obeya';
-        const moved = this.moved(repo);
+        if (deps.ownCheckout && sameDir(deps.ownCheckout, info.path) && (await changesCode(info.path, l.from, l.to))) return 'obeya';
+        const moved = await this.moved(repo);
         if (moved === 'follow') this.follow();
         return moved === 'due' ? 'repo' : false;
       },
@@ -827,7 +843,7 @@ export class CanvasRuntime {
    * left the canvas has its agents restarted once they paused, or stopped; the other repositories
    * work on, and their settings apply as they are read.
    */
-  apply(next: CanvasConfig) {
+  apply(next: CanvasConfig): Promise<void> | undefined {
     // back in the configuration before it left: it stays, and so do its repositories
     if (this.retiring) {
       this.retiring = null;
@@ -874,7 +890,7 @@ export class CanvasRuntime {
       if (this.obeyaDue) r.workers.restartDue(this.obeyaDue);
       r.workers.resumeAll(true);
     });
-    this.settingsChanged();
+    return this.settingsChanged();
   }
 
   /** The configuration no longer has the canvas: it stops once its agents paused, and then `done`. */
@@ -1155,9 +1171,14 @@ export class CanvasRuntime {
    * (`.obeya/settings.json`): they are read where they are used; what the canvas set up
    * by them follows (`follow`), and a repository whose agents now work elsewhere restarts them.
    */
-  settingsChanged() {
-    for (const r of [...this.repos]) this.moved(r);
-    this.follow();
+  settingsChanged(): Promise<void> {
+    const moved = [...this.repos].map((r) => this.moved(r));
+    // where no repository's refs moved, at once
+    if (moved.every((m) => typeof m === 'string')) {
+      this.follow();
+      return Promise.resolve();
+    }
+    return Promise.all(moved).then(() => void (!this.shutDown && this.follow()));
   }
 
   /**
@@ -1166,17 +1187,50 @@ export class CanvasRuntime {
    * Where the repository's agents now work elsewhere (clones or worktrees, set up when they start),
    * they restart once they paused (`due`); where demos are shared may have changed, and so may the
    * configuration's problems of the repository (`configRev`). Says which of these it came to:
-   * `follow` where the canvas follows what changed.
+   * `follow` where the canvas follows what changed. What was read stands while the repository's
+   * refs did not move (`refsSeal`): the owner saved settings, say. Otherwise git reads without the
+   * server waiting for it, the reads of a repository one after the other, so that one git answers
+   * sooner does not undo a later one.
    */
-  private moved(r: Repo): 'same' | 'follow' | 'due' {
-    if (!this.repos.includes(r)) return 'same';
+  private moved(r: Repo): Moved | Promise<Moved> {
     const path = r.info.path;
+    const known = r.moving ? undefined : this.readNow(path);
+    if (known) return this.movedTo(r, known);
+    const now = (r.moving ?? Promise.resolve()).then(async () => this.movedTo(r, await this.readSettings(path)));
+    const moving: Promise<void> = (r.moving = now.then(
+      () => {},
+      () => {},
+    ));
+    void moving.then(() => r.moving === moving && delete r.moving);
+    return now;
+  }
+
+  /** What `moved` read of the repository at `path` last, where its refs did not move since; a folder without git as it is now. */
+  private readNow(path: string): DefaultRead | undefined {
+    if (isFolder(path)) return { shared: readSharedFiles(path), adapterModule: false };
+    const seal = refsSeal(path);
+    const known = this.defaultRead.get(path);
+    return seal && known?.seal === seal && !(known.read instanceof Promise) ? known.read : undefined;
+  }
+
+  /** Reads the repository at `path` on its default branch again, without the server waiting for git, and keeps that (`defaultRead`). */
+  private readSettings(path: string): Promise<DefaultRead> {
+    const seal = refsSeal(path);
+    const read = gitSteps(path, readingSettings(path));
+    if (seal) this.readAt(path, seal, read);
+    return read;
+  }
+
+  /** `moved`, with what was read of the repository on its default branch. */
+  private movedTo(r: Repo, read: DefaultRead): Moved {
+    const path = r.info.path;
+    if (this.shutDown || !this.repos.includes(r)) return 'same';
     if (this.pending?.paths.has(path)) return 'due';
-    const shared = this.reread(r);
+    const shared = this.reread(r, read.shared);
     const was = this.held.get(path);
     this.held.delete(path);
     const held = JSON.stringify(this.heldOf(path)) !== JSON.stringify(was ?? []);
-    const sources = this.problemSources(path);
+    const sources = this.problemSources(path, read.adapterModule);
     const problems = sources !== r.problemSources;
     if (problems) {
       // the page reads the configuration's problems again
@@ -1213,14 +1267,13 @@ export class CanvasRuntime {
   }
 
   /**
-   * Reads the repository's `.obeya/settings.json` again from its default branch. Where it changed,
-   * this machine's values that it now holds as well go (they were taken over for everyone, see
-   * `Config.takenOver`). Says whether it changed.
+   * The repository's `.obeya/settings.json` as its default branch has it now (`now`). Where it
+   * changed, this machine's values that it now holds as well go (they were taken over for everyone,
+   * see `Config.takenOver`). Says whether it changed.
    */
-  private reread(r: Repo): boolean {
+  private reread(r: Repo, now: SharedRead): boolean {
     const path = r.info.path;
     const before = this.shared.get(path);
-    const now = readShared(path);
     if (JSON.stringify([now.settings, now.claude]) === JSON.stringify([before?.settings, before?.claude])) {
       // a field that does not count changed alone: the problems change, the settings do not
       this.shared.set(path, now);
@@ -1284,7 +1337,7 @@ export class CanvasRuntime {
     const cwd = this.repoOf(card).read.path;
     // an idea's agent loads no plugins; a review card's reads none of the repository's settings
     const idea = card.state === 'idea';
-    return this.skills.of({ cwd, plugins: idea ? [] : [OBEYA_PLUGIN], untrusted: (!idea && !!card.contribution) || this.claudeHeld(cwd) });
+    return this.skills.of({ cwd, plugins: idea ? [] : [OBEYA_PLUGIN], untrusted: (!idea && !!card.contribution) || (await this.claudeHeld(cwd)) });
   }
 
   /** Whether the app in the card's workspace answers, for the owner to try it by hand (`Workers.appUp`). */
@@ -2465,6 +2518,7 @@ export class CanvasRuntime {
   }
 
   shutdown() {
+    this.shutDown = true;
     clearInterval(this.waker);
     clearTimeout(this.wakeSoon);
     this.unwatch();
@@ -2641,6 +2695,22 @@ export function* readingRepo(path: string, folder = false): GitSteps<RepoRead | 
   const commit = yield* branchCommit(branch, branches);
   const [adapterModule, shared] = yield* together(readingAdapterModule(commit), readingShared(commit));
   return { info: { path, remote: remote ?? null, branch }, detected, adapterModule, shared };
+}
+
+/** What `moved` came to (`moved`). */
+type Moved = 'same' | 'follow' | 'due';
+
+/** What a repository's default branch has of its settings: its `.obeya/settings.json` and Claude Code configuration (`readShared`), and whether an adapter module is still there (`hasAdapterModule`). */
+interface DefaultRead {
+  shared: SharedRead;
+  adapterModule: boolean;
+}
+
+/** `DefaultRead` of the git repository at `path` as git steps. */
+function* readingSettings(path: string): GitSteps<DefaultRead> {
+  const { commit } = yield* readingDefaultBranch(path);
+  const [adapterModule, shared] = yield* together(readingAdapterModule(commit), readingShared(commit));
+  return { shared, adapterModule };
 }
 
 /** Reads a repository for `resolveCanvas`, the server waiting; null where `path` is no git repository (no directory, for a `folder`). */

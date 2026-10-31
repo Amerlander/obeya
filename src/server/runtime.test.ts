@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import type { HookInput, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { type AgentEvent, askOwner, BOUNDED_WAITS, Inbox, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resetIn, resultFailure, spawnHere, endAgentsHere, usageLimit, withLimitWait, withStderr } from './runtime';
+import { type AgentEvent, askOwner, BOUNDED_WAITS, Inbox, backgroundWork, deniedBy, claudeExecutable, cleanEnv, FOREGROUND_SLEEP_LIMIT, failureReason, foregroundSleep, refuseForegroundWait, resetIn, resultFailure, spawnHere, endAgentsHere, usageLimit, withLimitWait, withRepoTrust, withStderr } from './runtime';
 import { FakeRuntime } from './testing';
 import { MESSAGES } from '../core/messages';
 
@@ -251,4 +251,27 @@ test.skipIf(process.platform === 'win32')("Claude Code here runs out of the term
   expect(alive()).toBe(false);
   expect(withStderr('Claude Code process exited with code 1', stderr)).toBe('Claude Code process exited with code 1. stderr: not logged in');
   expect(withStderr('x. stderr: not logged in', stderr)).toBe('x. stderr: not logged in');
+});
+
+test("an agent whose repository's trust takes git to tell starts once it is told, with what it was sent meanwhile; closed before, it never starts", async () => {
+  const fake = new FakeRuntime();
+  let tell!: (held: boolean) => void;
+  const runtime = withRepoTrust(fake, () => new Promise<boolean>((r) => (tell = r)));
+  const spec = { cwd: '/nowhere', system: 'Work.', tools: [], onEvent: () => {} };
+  const session = runtime.start(spec, 'Start.');
+  session.send('And this.');
+  expect(fake.sessions).toHaveLength(0);
+  tell(true);
+  await Bun.sleep(0);
+  expect(fake.last.spec.untrusted).toBe(true);
+  expect(fake.last.inbox).toEqual(['Start.', 'And this.']);
+  session.close();
+  expect(fake.last.closed).toBe(true);
+  await session.done;
+
+  const closed = runtime.start(spec, 'Start.');
+  closed.close();
+  tell(false);
+  await closed.done;
+  expect(fake.sessions).toHaveLength(1);
 });

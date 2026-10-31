@@ -208,7 +208,8 @@ agents, as the dialog says at the field, which sits in the repository's row (see
 `.obeya/settings.json` (like `.vscode/settings.json`) is what a fresh clone brings: every value but
 the main branch, versioned and reviewed with the code it describes. It is read from the main branch,
 not the checkout, since clones are on cards' branches, perhaps from before the file changed: when a
-canvas starts, whenever the Lesestand moves, and on save. A new version takes effect without a
+canvas starts, whenever the Lesestand moves, and on save, by git without the server waiting for it;
+a save while the branches have not moved keeps the last read. A new version takes effect without a
 restart; one that changes `workspaces` restarts the repository's agents once they paused (see
 Restarts for landed code).
 
@@ -255,7 +256,11 @@ together, since a stop without its keep could stop what it keeps), `site`, and `
 under `.claude/` and `.mcp.json`). A group the main branch has otherwise is held: the settings are
 read without it (no stop or keep, no site; demos are exported), and an agent working in the
 repository starts with `settingSources: ['user']` and gets its directory's CLAUDE.md in its
-instructions instead (not on another machine), trust being worked out afresh at each agent start.
+instructions instead (not on another machine), trust being worked out afresh at each agent start
+from the main branch as it is then, a commit made there outside Obeya included. What was read there
+last stands while the repository's own branches, `origin`'s and its packed refs are as they were (a
+few `stat`s; the cards' branches do not count); otherwise git reads it again and the agent starts
+once it has, without the server waiting.
 What this machine sets needs no trust: its values standing in for a whole group, and values it took
 over into the file (but not a trusted `keep` that went beside them).
 

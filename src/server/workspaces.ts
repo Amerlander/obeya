@@ -1894,7 +1894,7 @@ export function* gitCalls(...calls: string[][]): GitSteps<(string | null)[]> {
 }
 
 /** What every card's branch begins with. */
-const CARD_BRANCH = 'obeya/';
+export const CARD_BRANCH = 'obeya/';
 
 /** `obeya/<slug>` from a card title, kept short and unique by the card id. */
 export function branchName(title: string, cardId: string): string {

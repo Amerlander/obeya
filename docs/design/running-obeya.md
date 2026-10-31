@@ -295,6 +295,11 @@ the time, the stall's length, the few places in the code where most of it went w
 that called it, by file and line), and each process the server waited for longer than 50 ms, by its
 command line. A pause the thread did not run in at all (the machine slept) is no stall.
 
+What happens often or many times at once therefore never waits for a process: starting an agent and
+landing work read git without blocking, and of the processes Obeya waits for without blocking, a few
+start per turn of the event loop, the rest in the next; starting one takes the thread a moment, under
+load many milliseconds.
+
 A page reports its own freezes of half a second or more over its WebSocket, and the server logs them
 in the same places, naming the device and the canvas: where the browser says where the time went
 (Chromium's long animation frames: the scripts by what invoked them, and style and layout), the
@@ -481,6 +486,15 @@ them).
   calls only (a stall in code nobody thought of goes unnamed); profiling only on demand (the stall
   is over by the time someone asks); a slow-request log (the page acts on a click before the
   server answers, so a slow answer freezes nothing).
+- **Agent starts and landings read git without the server waiting, and reuse what was read while
+  the refs stand still** (2026-10-31): with many cards landing in a row, the trust check at each
+  agent start and the settings read after each landing called git synchronously, a few calls each,
+  and held the server up for up to 1.1 s. Whether the main branch moved is told by `stat`s of the
+  refs, so an agent whose repository did not move starts at once. Rejected: every agent start
+  waiting for git (each start later, though the main branch rarely moved); watching the refs for
+  changes (the event comes after a commit made just before the start); a cap on git processes
+  running at once (a fetch or clone taking minutes would hold a place, and the trust check of an
+  agent start would queue behind it).
 - **A page's freezes are found by a worker's heartbeat, not by its own timer running late**
   (2026-10-30): the app's webview on macOS runs a page's timers about once a second when its window
   is not in front, with the page still in view, and logged a stall of about a second every second

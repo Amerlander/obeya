@@ -188,17 +188,58 @@ export function claudeExecutable(env: Record<string, string | undefined> = proce
  * the owner's confirmation (`untrusted`, by the agent's `cwd`) without them: their hooks, MCP
  * servers and helpers would run outside the permission checks. Claude Code then reads none of the
  * repository's files, its CLAUDE.md neither, so the agent gets that in its instructions instead.
+ * Where finding that out takes git, the agent starts once git has answered (`startingLater`): the
+ * server does not wait for it.
  */
-export function withRepoTrust(runtime: AgentRuntime, untrusted: (cwd: string) => boolean): AgentRuntime {
+export function withRepoTrust(runtime: AgentRuntime, untrusted: (cwd: string) => boolean | Promise<boolean>): AgentRuntime {
   return {
     start(spec, firstMessage, images) {
       // one already started without them (a review card's) brings its notes from elsewhere
-      if (spec.untrusted || !untrusted(spec.cwd)) return runtime.start(spec, firstMessage, images);
-      const file = join(spec.cwd, 'CLAUDE.md');
-      const notes = !remote(spec.cwd) && existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
-      const system = notes ? `${spec.system}\n\nThe repository's CLAUDE.md:\n\n${notes}` : spec.system;
-      return runtime.start({ ...spec, untrusted: true, system }, firstMessage, images);
+      if (spec.untrusted) return runtime.start(spec, firstMessage, images);
+      const start = (held: boolean) => {
+        if (!held) return runtime.start(spec, firstMessage, images);
+        const file = join(spec.cwd, 'CLAUDE.md');
+        const notes = !remote(spec.cwd) && existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
+        const system = notes ? `${spec.system}\n\nThe repository's CLAUDE.md:\n\n${notes}` : spec.system;
+        return runtime.start({ ...spec, untrusted: true, system }, firstMessage, images);
+      };
+      const held = untrusted(spec.cwd);
+      if (typeof held === 'boolean') return start(held);
+      // where it cannot be told, the repository's settings are not read
+      return startingLater(
+        held.catch(() => true).then((h) => () => start(h)),
+        spec,
+      );
     },
+  };
+}
+
+/**
+ * A session that starts once `starting` settles with how to start it: what it is sent meanwhile
+ * reaches it then. Closed before, it never starts. One that fails to start ends with the error.
+ */
+export function startingLater(starting: Promise<() => AgentSession>, spec: AgentSpec): AgentSession {
+  let session: AgentSession | undefined;
+  let closed = false;
+  const waiting: { text: string; images?: string[] }[] = [];
+  const done = starting.then(async (start) => {
+    if (closed) return;
+    try {
+      session = start();
+    } catch (e) {
+      spec.onEvent({ type: 'error', message: messageOf(e) });
+      return;
+    }
+    for (const m of waiting.splice(0)) session.send(m.text, m.images);
+    await session.done;
+  });
+  return {
+    send: (text, images) => (session ? session.send(text, images) : void waiting.push({ text, images })),
+    close: () => {
+      closed = true;
+      session?.close();
+    },
+    done,
   };
 }
 
