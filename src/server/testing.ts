@@ -148,6 +148,9 @@ export function asOwner(of: () => object) {
   };
 }
 
+/** The board's listeners have heard of what changed so far (they hear of it once the code that changed it is through: `Board.changed`). */
+export const heard = () => Bun.sleep(0);
+
 export const until = async (done: () => unknown, ms = 3000) => {
   for (const end = Date.now() + ms; !(await done()); await Bun.sleep(2)) if (Date.now() > end) throw new Error(`timed out after ${ms} ms: ${done}`);
 };

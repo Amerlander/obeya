@@ -202,7 +202,7 @@ export class Explorers {
 
   /** After a restart: an idea whose agent was in the middle of a reply gets it. */
   resumeAll() {
-    for (const i of this.o.board.snapshot().items) {
+    for (const i of this.o.board.items()) {
       if (i.state !== 'idea' || !i.idea?.thinking) continue;
       // about to pause after its reply, which the restart cut off: it stays paused, its words unanswered
       if (i.pausing) {
@@ -405,7 +405,7 @@ export class Explorers {
   private answer(cardId: string, text: string, questions: Question[] = [], next?: NextStep, mocks: Mock[] = []) {
     this.o.board.log(cardId, 'talk', 'explorer', text, { mocks });
     for (const q of questions) this.o.board.log(cardId, 'question', 'explorer', formatQuestion(q, this.o.board.language()));
-    const building = this.o.board.snapshot().items.some((i) => i.prototypeOf === cardId && (i.state === 'planned' || i.state === 'working'));
+    const building = this.o.board.items().some((i) => i.prototypeOf === cardId && (i.state === 'planned' || i.state === 'working'));
     this.o.board.setIdea(cardId, { yourTurn: questions.length > 0 || !building, questions, next });
   }
 

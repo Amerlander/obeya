@@ -1343,6 +1343,13 @@ describe('Koordinator arranges a project by what builds on what', () => {
     return r;
   }
 
+  test('a project just come is read without anything else looking at the canvas first', async () => {
+    docs = [{ file: 'docs/plan/p.md', title: 'P', goal: 'Ziel P', workstreams: [ws('W1'), ws('W2')], markdown: '' }];
+    board.docsChanged();
+    await settle();
+    expect(readings()).toHaveLength(1);
+  });
+
   test('a project just come is read and stands in columns: what can start at once on the left', async () => {
     const { p, w1, w2, w3, w4 } = project();
     expect(item(p.id).arranging).toBe(true);

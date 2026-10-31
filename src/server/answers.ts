@@ -235,7 +235,7 @@ export class Answers {
 
   /** After a restart: questions still being looked up are looked up again, and Question cards answer what waited (not while paused). */
   resumeAll() {
-    for (const i of this.o.board.snapshot().items) {
+    for (const i of this.o.board.items()) {
       if (i.kind !== 'question' || !i.thread?.thinking) continue;
       // about to pause after its answer, which the restart cut off: it stays paused, what it was asked pending
       if (i.pausing) {

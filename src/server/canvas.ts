@@ -331,7 +331,7 @@ export class CanvasRuntime {
     }));
     koordinator.resume();
     // a card whose page closed before Obeya named it
-    for (const i of board.snapshot().items) if (i.state === 'planned' && !i.queue && nameless(i)) void koordinator.name(i.id);
+    for (const i of board.items()) if (i.state === 'planned' && !i.queue && nameless(i)) void koordinator.name(i.id);
     this.explorers = new Explorers({
       board,
       runtime: deps.runtime,
@@ -385,7 +385,7 @@ export class CanvasRuntime {
     });
     board.interruptTalk();
     // the undo window of a new repository is not kept across a restart: the card stays as it was
-    for (const i of board.snapshot().items) if (i.newRepo?.due) board.setNewRepo(i.id, { ...i.newRepo, due: undefined });
+    for (const i of board.items()) if (i.newRepo?.due) board.setNewRepo(i.id, { ...i.newRepo, due: undefined });
     this.commander.resume();
     this.answers.resumeAll();
     this.revisions = new Revisions({
@@ -448,7 +448,7 @@ export class CanvasRuntime {
 
   /** Wakes the snoozed cards whose time has come by `now`, and those whose card they wait on got there (or no longer can); so too the steps the Koordinator waits on cards for. */
   wakeDue(now = Date.now()) {
-    const items = this.board.snapshot().items;
+    const items = this.board.items();
     // and the Koordinator takes up the steps it waited on cards for
     this.commander.due(items);
     for (const i of items) {
@@ -825,7 +825,7 @@ export class CanvasRuntime {
     r.docs?.();
     r.docs = watchPlanDocs(r.read.path, r.adapter, () => this.board.docsChanged());
     // a review card's pull request is watched in any repository, also one that lands on main
-    if (r.adapter.land === 'pr' || this.board.snapshot().items.some((i) => (i.state === 'inPr' || (i.contribution && !finished(i.state))) && i.repo === r.ref.id)) this.watchPrs(r);
+    if (r.adapter.land === 'pr' || this.board.items().some((i) => (i.state === 'inPr' || (i.contribution && !finished(i.state))) && i.repo === r.ref.id)) this.watchPrs(r);
   }
 
   /** Watches the repository's pull requests, unless it does already. */
@@ -1074,7 +1074,7 @@ export class CanvasRuntime {
    */
   pauseAgents() {
     let paused = 0;
-    for (const i of this.board.snapshot().items.filter(pausable)) {
+    for (const i of this.board.items().filter(pausable)) {
       try {
         this.agentOf(i.id).pauseAtSafePoint(i.id);
         paused++;
@@ -1094,14 +1094,14 @@ export class CanvasRuntime {
    * cannot go on (its repository is down) stays paused, and so the canvas's pause lasts.
    */
   resumeAgents() {
-    for (const i of this.board.snapshot().items.filter(halted)) {
+    for (const i of this.board.items().filter(halted)) {
       try {
         this.agentOf(i.id).resume(i.id);
       } catch (e) {
         console.error(`Obeya: the agent of ${i.id} did not resume: ${messageOf(e)}`);
       }
     }
-    if (!this.paused || this.board.snapshot().items.some(halted)) return;
+    if (!this.paused || this.board.items().some(halted)) return;
     this.showPaused(false);
     this.board.changed();
   }
@@ -1126,7 +1126,7 @@ export class CanvasRuntime {
    * went), the canvas's pause ends.
    */
   private countAgents() {
-    const items = this.board.snapshot().items;
+    const items = this.board.items();
     const running = items.filter(pausable).length;
     const paused = items.filter(halted).length;
     if (this.paused && !paused) this.showPaused(false);
@@ -2082,7 +2082,7 @@ export class CanvasRuntime {
    * idea's other prototypes are discarded. As `buildOnPrototype`, what stands in the way is thrown at once.
    */
   private buildWorkstreamOn(prototype: Item, project: Item, workstreamId?: string) {
-    const ws = workstreamId ? this.board.item(workstreamId) : prototypeWorkstream(this.board.snapshot().items, project.id);
+    const ws = workstreamId ? this.board.item(workstreamId) : prototypeWorkstream(this.board.items(), project.id);
     if (!ws && !workstreamId) throw new BadRequest('workstreamMissing', 'the plan doc does not say which workstream builds on the prototype: choose it');
     if (!ws || ws.parent !== project.id) throw new BadRequest('invalid', 'not a workstream of the project the idea became');
     if (!buildableOn(ws)) throw new BadRequest('workstreamStarted', 'only a workstream nobody has started can be built on a prototype');
@@ -2100,7 +2100,7 @@ export class CanvasRuntime {
 
   /** The idea's prototypes still on the canvas go into the archive as discarded. */
   private discardPrototypes(ideaId: string) {
-    for (const p of this.board.snapshot().items.filter((i) => i.prototypeOf === ideaId)) this.repoOf(p).workers.endPrototype(p.id, 'discarded', 'obeya');
+    for (const p of this.board.items().filter((i) => i.prototypeOf === ideaId)) this.repoOf(p).workers.endPrototype(p.id, 'discarded', 'obeya');
   }
 
   /** The idea is decided for building: its agent's conversation ends, the brief becomes the task, the other prototypes are discarded. */
@@ -2128,7 +2128,7 @@ export class CanvasRuntime {
     const idea = this.board.idea(cardId);
     const dir = this.repoOf(card).adapter.planDocs.dir;
     const outside = this.outsidePlanDoc(card);
-    const prototypes = this.board.snapshot().items.filter((i) => i.prototypeOf === cardId);
+    const prototypes = this.board.items().filter((i) => i.prototypeOf === cardId);
     const t = this.board.t.idea;
     this.explorers.close(cardId);
     this.board.work(cardId, {
@@ -2219,7 +2219,7 @@ export class CanvasRuntime {
     if (this.repoOf(card).info.folder) throw new BadRequest('inFolder', 'a folder without git has no prototypes: its cards change the folder itself');
     const { variants = [] } = this.board.idea(cardId);
     const t = this.board.t.idea;
-    const running = new Set(this.board.snapshot().items.flatMap((i) => (i.prototypeOf === cardId && i.variant ? [i.variant] : [])));
+    const running = new Set(this.board.items().flatMap((i) => (i.prototypeOf === cardId && i.variant ? [i.variant] : [])));
     const picked = chosen ? variants.filter((v) => chosen.includes(v.approach)) : what ? [] : variants.filter((v) => !running.has(v.approach));
     if (chosen?.length && !picked.length && !what) throw new BadRequest('invalid', 'none of the chosen variants is planned');
     if (!chosen && !what && variants.length && !picked.length) throw new BadRequest('variantsRunning', 'every planned variant has its prototype on the canvas');
@@ -2446,7 +2446,7 @@ export class CanvasRuntime {
     // a card of the PR's own (one of Obeya's workers opened it) is the card for it too, also where
     // its URL was recorded in another form (a slash at the end, the host in capitals, `/pull/` on Forgejo)
     const same = (other?: string) => !!other && (parsePrUrl(other, github)?.url ?? other) === url;
-    const had = this.board.snapshot().items.find((i) => (same(i.contribution?.url) || same(i.pr?.url)) && !i.archivedAt);
+    const had = this.board.items().find((i) => (same(i.contribution?.url) || same(i.pr?.url)) && !i.archivedAt);
     if (had) {
       if (c.text) this.act(had.id, { action: 'message', text: c.text, spoken: !!c.spoken });
       this.board.notify({ text: t.review.opened(ref.number), cardId: had.id, open: true });

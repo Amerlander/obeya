@@ -495,6 +495,16 @@ them).
   changes (the event comes after a commit made just before the start); a cap on git processes
   running at once (a fetch or clone taking minutes would hold a place, and the trust check of an
   agent start would queue behind it).
+- **What reacts to a change on the canvas hears of it once the code that changed it is through, once
+  for all it changed** (2026-10-31): a landing or a card moving on changes the canvas dozens of
+  times in a row, and each reaction asks for the canvas as the page sees it, which took a few
+  milliseconds to build on a canvas with hundreds of archived and shared cards; when many cards
+  landed one after another, the server stood still for half a second at a time. The cards alone
+  (what code reads back between its writes) are built apart from the rest of that view (the sheet's
+  outdated pages, the workspaces, the notes on the plan directories), and one archived card is built
+  without the whole archive. The owner's settings file, asked for the language with every text the
+  server writes, is read again only once it changed. Rejected: reacting to each change at once and
+  only making the view cheaper (the reactions still build it once per change).
 - **A page's freezes are found by a worker's heartbeat, not by its own timer running late**
   (2026-10-30): the app's webview on macOS runs a page's timers about once a second when its window
   is not in front, with the page still in view, and logged a stall of about a second every second

@@ -18,12 +18,32 @@ export const chosenLanguage = (home: string): Language | undefined => chosen(hom
 export const chosenConversationLanguage = (home: string): Language | undefined => chosen(home, 'conversationLanguage');
 
 function chosen(home: string, key: 'language' | 'conversationLanguage'): Language | undefined {
+  const o = ownerSettings(path.join(home, OWNER_SETTINGS_FILE));
+  return LANGUAGES.find((l) => l === o[key]);
+}
+
+/** The owner's settings as last read, by file, with the file's state then: the server asks for the language with every text it writes. */
+const read = new Map<string, { at: string; settings: Record<string, unknown> }>();
+
+/** Obeya wrote the owner's settings: they are read again, even where the file's time did not move on (a coarse clock). */
+export const ownerSettingsWritten = (home: string) => read.delete(path.join(home, OWNER_SETTINGS_FILE));
+
+/** The owner's settings in the file, read again only once it changed; none where it is missing or unreadable. */
+function ownerSettings(file: string): Record<string, unknown> {
+  let stat: fs.Stats | undefined;
   try {
-    const o = JSON.parse(fs.readFileSync(path.join(home, OWNER_SETTINGS_FILE), 'utf8')) as Record<string, unknown>;
-    return LANGUAGES.find((l) => l === o[key]);
-  } catch {
-    return undefined;
-  }
+    stat = fs.statSync(file, { throwIfNoEntry: false });
+  } catch {}
+  const at = stat ? `${stat.ino}:${stat.size}:${stat.mtimeMs}` : '';
+  const known = read.get(file);
+  if (known?.at === at) return known.settings;
+  let settings: Record<string, unknown> = {};
+  try {
+    const o: unknown = stat ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+    if (o && typeof o === 'object') settings = o as Record<string, unknown>;
+  } catch {}
+  read.set(file, { at, settings });
+  return settings;
 }
 
 /**

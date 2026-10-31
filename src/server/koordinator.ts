@@ -111,7 +111,7 @@ export class Koordinator {
   /** After a restart: decide again on cards the Koordinator was checking, and start what is free. */
   resume() {
     const together = new Set<string>();
-    for (const i of this.o.board.snapshot().items) {
+    for (const i of this.o.board.items()) {
       if (i.state !== 'planned' || !i.queue) continue;
       if ('checking' in i.queue && i.queue.together) together.add(i.queue.together);
       else if ('checking' in i.queue) this.serial(() => this.decide(i.id));
@@ -198,7 +198,7 @@ export class Koordinator {
    * few seconds, so the owner can take the start back (`dequeue` on the project).
    */
   private requestAll(project: Item): void {
-    const open = this.o.board.snapshot().items.filter((i) => i.parent === project.id && i.state === 'planned' && !i.queue);
+    const open = this.o.board.items().filter((i) => i.parent === project.id && i.state === 'planned' && !i.queue);
     if (!open.length) throw new BadRequest('nothingToStart', 'the project has no planned workstream left to start');
     // one the owner set aside to start later goes with them, so a workstream building on it waits for it
     for (const w of open) if (w.snoozed?.start) this.o.board.unsnooze(w.id, 'owner');
@@ -223,7 +223,7 @@ export class Koordinator {
 
   /** Projects waiting for their reading (one just come, or one asked for before a restart): it starts. */
   private readPendingDeps() {
-    for (const p of this.o.board.snapshot().items) if (p.kind === 'project' && p.arranging && !this.readingDeps.has(p.id)) void this.readDeps(p.id).catch(() => {});
+    for (const id of this.o.board.arranging()) if (!this.readingDeps.has(id) && this.o.board.item(id)?.arranging) void this.readDeps(id).catch(() => {});
   }
 
   /**
@@ -236,7 +236,7 @@ export class Koordinator {
     const run = (async () => {
       const project = this.o.board.item(projectId);
       if (!project) return;
-      const kids = this.o.board.snapshot().items.filter((i) => i.parent === projectId);
+      const kids = this.o.board.items().filter((i) => i.parent === projectId);
       let on: Record<string, string[]>;
       try {
         on = await this.dependencies(project, kids);
@@ -327,7 +327,7 @@ export class Koordinator {
     const card = this.card(cardId);
     if (!movable(card)) throw new BadRequest('notQueued', 'the card is not waiting');
     if (!Number.isInteger(places) || places < 1) throw new BadRequest('invalid', 'places must be a positive whole number');
-    const items = this.o.board.snapshot().items;
+    const items = this.o.board.items();
     const can = reach(cardId, earlier, items);
     if (can.places < places) throw new BadRequest('notMovable', can.why ? `${can.why}: ${can.stop!.id}` : 'not that far to go');
     const order = queueOrder(items);
@@ -590,7 +590,7 @@ export class Koordinator {
   ahead(card: Item): Item[] {
     const since = card.queue?.since;
     if (!since) return [];
-    const items = this.o.board.snapshot().items;
+    const items = this.o.board.items();
     return items
       .filter((i) => i.id !== card.id && i.repo === card.repo && inQueue(i) && (i.queue!.since ?? '') < since && !waitsOn(i, card.id, items))
       .sort((a, b) => a.queue!.since.localeCompare(b.queue!.since));
@@ -603,7 +603,7 @@ export class Koordinator {
    */
   private pending(card: Item, active: Item[], ahead: Item[]): Item[] {
     if (!card.parent) return [];
-    const items = this.o.board.snapshot().items;
+    const items = this.o.board.items();
     const seen = new Set([card.id, ...active.map((i) => i.id), ...ahead.map((i) => i.id)]);
     return items.filter(
       (i) => i.parent === card.parent && i.kind !== 'project' && !seen.has(i.id) && !finished(i.state) && !i.archivedAt && !waitsOn(i, card.id, items),
@@ -668,7 +668,7 @@ export class Koordinator {
 
   /** Decides on the workstreams of a project that came to the Koordinator together. */
   private async decideAll(projectId: string) {
-    const items = this.o.board.snapshot().items;
+    const items = this.o.board.items();
     const batch = this.unplanned(projectId);
     if (!batch.length) return;
     if (batch[0]!.repoDown) return batch.forEach((w) => this.repoGone(w));
@@ -777,7 +777,7 @@ export class Koordinator {
   }
 
   private drain() {
-    const items = this.o.board.snapshot().items;
+    const items = this.o.board.items();
     // a card queued behind another that waits itself holds on while that one waits, and once it
     // has started, until it has landed: a card started or judged again here stays in this set
     const active = new Set([...this.inProgress(), ...items.filter(inQueue)].map((i) => i.id));

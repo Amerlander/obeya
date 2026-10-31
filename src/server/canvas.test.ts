@@ -9,7 +9,7 @@ import { Canvases, CanvasRuntime, startCanvases } from './canvas';
 import { Store } from './db';
 import { readShared } from '../adapters';
 import { commandsOf } from './trust';
-import { artifact, FakeRuntime, gitRepo, identify, noForge, until } from './testing';
+import { artifact, FakeRuntime, gitRepo, heard, identify, noForge, until } from './testing';
 import { git, HERE } from './workspaces';
 import { type SkillPlace, Skills } from './skills';
 import { OBEYA_PLUGIN } from './demo';
@@ -1413,14 +1413,17 @@ test("pausing a canvas's agents pauses each at work, holds the cards let start m
     const worker = runtime.sessions.at(-1)!;
     worker.emit({ type: 'session', id: 's-a' });
     worker.emit({ type: 'text', text: 'Arbeite.' });
+    await heard();
     expect(c.board.canvas.agents).toEqual({ running: 1, paused: 0 });
     c.pauseAgents();
+    await heard();
     // as the card's own pause: it brings its work to a safe point first, and counts as paused meanwhile
     expect(worker.closed).toBe(false);
     expect(worker.inbox.at(-1)).toContain('The owner pauses you now');
     expect(c.board.item(a.id)!.pausing).toBe(true);
     expect(c.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
     worker.emit({ type: 'idle' });
+    await heard();
     expect(worker.closed).toBe(true);
     expect(c.board.item(a.id)!.paused).toBe(true);
     expect(c.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
@@ -1465,6 +1468,7 @@ test("a canvas's pause ends once none of its agents is paused any more, and last
     expect(c.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
     // the owner resumes the card on its own: nothing on the canvas is paused any more
     c.act(a.id, { action: 'resume' });
+    await heard();
     expect(c.board.canvas.paused).toBeUndefined();
   } finally {
     c.shutdown();
@@ -1486,11 +1490,14 @@ test("a card the owner snoozed counts as no paused agent: resuming the canvas le
     const now = await atWork('Now', 's-now');
     // „Später …“: its worker stops until then, holding what comes for it as a paused one does
     c.act(later.id, { action: 'snooze', until: new Date(Date.now() + 3_600_000).toISOString() });
+    await heard();
     expect(c.board.canvas.agents).toEqual({ running: 1, paused: 0 });
     c.pauseAgents();
+    await heard();
     expect(c.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
     // the one paused resumed on its own card: none is paused any more, and the queue runs again
     c.act(now.id, { action: 'resume' });
+    await heard();
     expect(c.board.canvas.paused).toBeUndefined();
     // nor does resuming the canvas wake the snoozed one
     c.resumeAgents();
@@ -1522,6 +1529,7 @@ test("a canvas's pause lasts while one of its paused agents cannot go on, its re
     c.pauseAgents();
     // both end their turn at a safe point
     for (const s of runtime.sessions.filter((s) => s.spec.resume === undefined && s.spec.role === 'worker').slice(-2)) s.emit({ type: 'idle' });
+    await heard();
     expect(c.board.canvas.agents).toEqual({ running: 0, paused: 2 });
     c.apply({ name: 'Pause', repos: [both[0]!] });
     await until(() => c.repos.length === 1);
@@ -1532,12 +1540,14 @@ test("a canvas's pause lasts while one of its paused agents cannot go on, its re
     expect(runtime.sessions.some((s) => s.spec.resume === 's-front')).toBe(true);
     // the card that could not go on is still paused, and the cards let start still wait
     expect(c.board.item(gone.id)!.paused).toBe(true);
+    await heard();
     expect(c.board.canvas).toMatchObject({ paused: true, agents: { paused: 1 } });
     // its repository back, it goes on, and the pause ends
     c.apply({ name: 'Pause', repos: both });
     await until(() => c.repos.length === 2);
     c.resumeAgents();
     expect(runtime.sessions.some((s) => s.spec.resume === 's-back')).toBe(true);
+    await heard();
     expect(c.board.canvas.paused).toBeUndefined();
   } finally {
     c.shutdown();

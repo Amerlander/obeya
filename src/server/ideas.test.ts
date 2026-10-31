@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { CanvasRuntime } from './canvas';
 import { Store } from './db';
 import { Explorers } from './explorers';
-import { FakeRuntime, noForge, type FakeSession, gitRepo, identify, until } from './testing';
+import { FakeRuntime, noForge, type FakeSession, gitRepo, heard, identify, until } from './testing';
 import { git } from './workspaces';
 
 let dir: string;
@@ -793,7 +793,7 @@ describe('an idea', () => {
     expect(item(i.id).paused).toBeUndefined();
   });
 
-  test("paused with its canvas's agents, an idea's agent holds the canvas's queue until it is resumed", () => {
+  test("paused with its canvas's agents, an idea's agent holds the canvas's queue until it is resumed", async () => {
     const i = idea();
     canvas.act(i.id, { action: 'discuss', text: 'Erstens.' });
     const first = explorer();
@@ -802,6 +802,7 @@ describe('an idea', () => {
     expect(canvas.board.canvas.paused).toBe(true);
     turn(first, 'Zu Erstens.');
     expect(item(i.id).paused).toBe(true);
+    await heard();
     expect(canvas.board.canvas).toMatchObject({ paused: true, agents: { running: 0, paused: 1 } });
     canvas.resumeAgents();
     expect(canvas.board.canvas.paused).toBeUndefined();

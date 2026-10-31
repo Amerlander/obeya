@@ -2277,7 +2277,7 @@ export class Workers {
    * one, of several), else the one whose title holds it, if only one does; else why there is none.
    */
   private cardTitled(cardId: string, title: string): Item | string {
-    const items = this.o.board.snapshot().items.filter((i) => i.id !== cardId && i.kind !== 'project');
+    const items = this.o.board.items().filter((i) => i.id !== cardId && i.kind !== 'project');
     const key = titleKey(title);
     const exact = items.filter((i) => titleKey(i.title) === key);
     const pick = (of: Item[]) => of.findLast((i) => !i.archivedAt && !finished(i.state)) ?? of.at(-1)!;
@@ -2348,7 +2348,7 @@ export class Workers {
   /** After a restart (`repo`: of this repository's agents alone): resume every card whose worker was in the middle of a turn. */
   resumeAll(repo = false) {
     const restarted = repo ? REPO_RESTARTED : RESTARTED;
-    for (const i of this.o.board.snapshot().items) {
+    for (const i of this.o.board.items()) {
       if (this.o.repo && i.repo !== this.o.repo) continue;
       // the page reloaded: the owner may watch on, or have gone
       if (i.held?.length) this.releaseLater(i.id, this.o.holdGrace ?? HOLD_GRACE);
@@ -2412,7 +2412,7 @@ export class Workers {
    */
   private async listFiles() {
     if (!this.folder) return;
-    const cards = [...this.o.board.snapshot().items, ...this.o.board.archived()].filter(
+    const cards = [...this.o.board.items(), ...this.o.board.archived()].filter(
       (i) => i.kind === 'task' && (!this.o.repo || i.repo === this.o.repo) && !i.files && !i.demo && i.state !== 'working',
     );
     for (const i of cards) {
@@ -3580,7 +3580,7 @@ export class Workers {
                 // the latest by that title, as retract takes the latest it replaces: of two alike, the newer replaces the older
                 const by = replaced_by?.trim()
                   ? this.proposalBoards()
-                      .map((b) => b.snapshot().items.findLast((i) => i.from === cardId && (!!i.proposal || !!i.proposed) && titleKey(i.title) === titleKey(replaced_by)))
+                      .map((b) => b.items().findLast((i) => i.from === cardId && (!!i.proposal || !!i.proposed) && titleKey(i.title) === titleKey(replaced_by)))
                       .find(Boolean)
                   : undefined;
                 if (replaced_by?.trim() && !by) return `No card you proposed is called „${replaced_by.trim()}“. Nothing was withdrawn.`;

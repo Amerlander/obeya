@@ -164,7 +164,7 @@ export function serve(
     const items = new Map<string, Item[]>();
     for (const w of due.waiting) {
       if (w.canvas === id) continue;
-      if (!items.has(w.canvas)) items.set(w.canvas, byId.get(w.canvas)?.board.snapshot().items ?? []);
+      if (!items.has(w.canvas)) items.set(w.canvas, byId.get(w.canvas)?.board.items() ?? []);
       const title = items.get(w.canvas)!.find((i) => i.id === w.card)?.title ?? w.card;
       elsewhere.set(w.canvas, [...(elsewhere.get(w.canvas) ?? []), title]);
     }
@@ -203,10 +203,10 @@ export function serve(
     waiting[c.id] = counted(c);
     const send = (msg: ServerMessage) => sendTo(c.id, msg);
     /** The cards as last sent: what starts to wait for the owner after is pushed to their phone. */
-    let seen = new Map(c.board.snapshot().items.map((i) => [i.id, i]));
+    let seen = new Map(c.board.items().map((i) => [i.id, i]));
     const offs = [
       c.board.onChange(() => {
-        const items = c.board.snapshot().items;
+        const items = c.board.items();
         const started = startedWaiting(seen, items);
         seen = new Map(items.map((i) => [i.id, i]));
         const several = canvases.all().length > 1;

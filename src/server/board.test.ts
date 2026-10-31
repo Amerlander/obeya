@@ -6,6 +6,7 @@ import { boundsOf, onCanvas, PROJECT_COLLAPSED, sizeOf } from '../core/layout';
 import type { PlanDoc } from '../core/plan-doc';
 import { BadRequest, Board, pathOfRef, type PlanRead, repoOfRef } from './board';
 import { Store } from './db';
+import { heard } from './testing';
 
 const ws = (key: string, done = false) => ({ key, label: key, title: `Title ${key}`, body: `Body ${key}`, done, inReview: false });
 const docA: PlanDoc = { file: 'docs/plan/a.md', title: 'A', goal: 'Goal A', workstreams: [ws('W1', true), ws('W2'), ws('W3')], markdown: '# A\n\n## Goal\n\nGoal A\n' };
@@ -107,6 +108,16 @@ describe('plan docs', () => {
     board.docsChanged();
     expect(board.snapshot().items[0]).toMatchObject({ id: p.id, x: -500, y: 42 });
     expect(board.archived()).toEqual([]);
+  });
+
+  test('one card of the archive is as the archive shows it, also asked for first after its doc went', () => {
+    const [p, w1] = board.snapshot().items;
+    docs = [];
+    board.docsChanged();
+    // nothing looked at the canvas since the doc went
+    expect(board.card(p!.id)).toMatchObject({ kind: 'project', title: 'A', archivedAt: expect.any(String) });
+    board.changed();
+    expect(board.card(w1!.id)).toEqual(board.archived()[1]!);
   });
 
   test('every workstream ticked off ends the project; an open one added later brings it back to its place', () => {
@@ -359,18 +370,22 @@ describe('the archive of projects', () => {
 });
 
 describe('manual cards', () => {
-  test('create, edit, delete and restore', () => {
+  test('create, edit, delete and restore', async () => {
     let changes = 0;
     board.onChange(() => changes++);
     const c = board.create({ title: 'Fix it', x: 10, y: 20 });
     expect(c).toMatchObject({ kind: 'task', state: 'planned', title: 'Fix it', body: '', source: 'manual' });
+    await heard();
+    expect(changes).toBe(1);
     board.patch(c.id, { title: 'Fix it now', body: 'Details' });
     expect(board.snapshot().items.find((i) => i.id === c.id)).toMatchObject({ title: 'Fix it now', body: 'Details' });
     board.remove(c.id);
     expect(board.snapshot().items.some((i) => i.id === c.id)).toBe(false);
     board.restore(c.id);
     expect(board.snapshot().items.some((i) => i.id === c.id)).toBe(true);
-    expect(changes).toBe(4);
+    // what changed in a row, the listeners hear of once
+    await heard();
+    expect(changes).toBe(2);
   });
 
   test('a follow-up goes below the card it comes from, in its repository, and names it', () => {

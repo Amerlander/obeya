@@ -66,7 +66,7 @@ export class Revisions {
 
   /** After a restart: proposals still being reworked are reworked again. */
   resume() {
-    for (const i of this.o.board.snapshot().items) if (i.proposal?.revising) this.run(i.id);
+    for (const i of this.o.board.items()) if (i.proposal?.revising) this.run(i.id);
   }
 
   private run(cardId: string) {

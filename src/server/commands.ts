@@ -1073,7 +1073,7 @@ export class Commander {
     if (card.prototypeOf && a.do === 'build') {
       const project = this.o.board.projectOf(card.prototypeOf);
       if (!project) return { do: 'buildPrototype', card: card.id };
-      if (!a.cards?.length && prototypeWorkstream(this.o.board.snapshot().items, project.id)) return { do: 'buildPrototype', card: card.id };
+      if (!a.cards?.length && prototypeWorkstream(this.o.board.items(), project.id)) return { do: 'buildPrototype', card: card.id };
       const ws = a.cards?.length === 1 ? s.tags.get(a.cards[0]!) : undefined;
       if (!ws || this.o.board.item(ws)?.parent !== project.id)
         return `the prototype's idea is the project "${project.title}" now, and its plan doc does not say which workstream builds on the prototype: name the one with cards (its tag)`;
@@ -1118,7 +1118,7 @@ export class Commander {
       }
       case 'start':
         if (card.kind === 'project') {
-          if (!this.o.board.snapshot().items.some((i) => i.parent === card.id && i.state === 'planned' && !i.queue))
+          if (!this.o.board.items().some((i) => i.parent === card.id && i.state === 'planned' && !i.queue))
             return 'the project has no planned workstream left that is not already with Obeya';
           break;
         }
