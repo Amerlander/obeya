@@ -258,9 +258,10 @@ read without it (no stop or keep, no site; demos are exported), and an agent wor
 repository starts with `settingSources: ['user']` and gets its directory's CLAUDE.md in its
 instructions instead (not on another machine), trust being worked out afresh at each agent start
 from the main branch as it is then, a commit made there outside Obeya included. What was read there
-last stands while the repository's own branches, `origin`'s and its packed refs are as they were (a
-few `stat`s; the cards' branches do not count); otherwise git reads it again and the agent starts
-once it has, without the server waiting.
+last stands while the repository's own branches, `origin`'s, its packed refs and the branch its
+checkout is on are as they were (a few `stat`s; the cards' branches do not count, and a branch that
+follows a card's means no reuse); otherwise git reads it again, once more if the refs moved
+meanwhile, and the agent starts once it has, without the server waiting.
 What this machine sets needs no trust: its values standing in for a whole group, and values it took
 over into the file (but not a trusted `keep` that went beside them).
 

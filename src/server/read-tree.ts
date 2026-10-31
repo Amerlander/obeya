@@ -36,64 +36,82 @@ export function* readingDefaultBranch(repoPath: string): GitSteps<{ branch: stri
  * A seal of what the default branch and its commit are read from (`defaultBranchCommit`), taken
  * without git, by a few `stat`s: while it is the same, so is that commit, and what was read there
  * holds. The repository's own branches and `origin`'s, each by its name and the file git wrote it
- * in last (git writes a branch anew beside it, then renames it into place), and the packed refs;
- * not the cards' branches, which change all the time and decide nothing of it. Null where it
- * cannot be told (refs in a reftable, no git directory found): git reads it then.
+ * in last (git writes a branch anew beside it, then renames it into place), the packed refs, and
+ * the branch the checkout is on where that is no card's (the main branch may be told by it); not
+ * the cards' branches, which change all the time and decide nothing of it. Null where it cannot be
+ * told (refs in a reftable, a branch that names a card's or another ref, no git directory found):
+ * git reads it then.
  */
 export function refsSeal(repoPath: string): string | null {
-  const common = commonDir(repoPath);
-  if (!common || existsSync(join(common, 'reftable'))) return null;
+  const dirs = gitDirs(repoPath);
+  if (!dirs || existsSync(join(dirs.common, 'reftable'))) return null;
+  const { common } = dirs;
   const seal: string[] = [];
-  const at = (path: string) => {
-    try {
-      const s = statSync(path, { bigint: true });
+  const sealed = ['refs/heads/', 'refs/remotes/origin/'];
+  const cards = sealed.map((r) => `${r}${CARD_BRANCH}`);
+  // a branch that names another ref (`ref: <name>`) moves with that one
+  const followsSealed = (text: string) => {
+    const target = text.match(/^ref: (\S+)\s*$/)?.[1];
+    return !!target && sealed.some((r) => target.startsWith(r)) && !cards.some((r) => target.startsWith(r));
+  };
+  try {
+    const at = (path: string, ref = true) => {
+      const s = statSync(path, { bigint: true, throwIfNoEntry: false });
+      if (!s) return;
+      // a branch holds a commit's hash and a newline, or names the ref it follows
+      if (ref && s.size !== 41n && s.size !== 65n && !followsSealed(readFileSync(path, 'utf8'))) throw new Error(`${path} names no commit Obeya can seal`);
       seal.push(`${path.slice(common.length)} ${s.ino}:${s.size}:${s.mtimeNs}`);
-    } catch {}
-  };
-  const refs = (dir: string) => {
-    let entries;
-    try {
-      entries = readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (e.isDirectory()) {
-        if (e.name !== CARD_REFS) refs(join(dir, e.name));
-      } else at(join(dir, e.name));
-    }
-  };
-  refs(join(common, 'refs/heads'));
-  refs(join(common, 'refs/remotes/origin'));
-  at(join(common, 'packed-refs'));
+    };
+    const refs = (dir: string) => {
+      if (!existsSync(dir)) return;
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) {
+          if (e.name !== CARD_REFS) refs(join(dir, e.name));
+        } else at(join(dir, e.name));
+      }
+    };
+    for (const r of sealed) refs(join(common, r));
+    at(join(common, 'packed-refs'), false);
+    // where no other rule tells the main branch, the branch the checkout is on does (`detectingBranch`)
+    const head = readFileSync(join(dirs.own, 'HEAD'), 'utf8').trim();
+    if (head.startsWith('ref: ') && !head.startsWith(`ref: refs/heads/${CARD_BRANCH}`)) seal.push(`HEAD ${head}`);
+  } catch {
+    return null;
+  }
   return seal.sort().join('\n');
 }
 
 /** The directory the cards' branches are in, under a repository's branches and `origin`'s. */
 const CARD_REFS = CARD_BRANCH.slice(0, -1);
 
-/** By the repository's path: its git directory the worktrees share, where its refs are, as `commonDir` found it. */
-const commonDirs = new Map<string, string>();
+/** By the repository's path: its own git directory and the one its worktrees share, as `gitDirs` found them. */
+const knownDirs = new Map<string, { own: string; common: string }>();
 
-/** The git directory of the repository at `repoPath` its worktrees share (`--git-common-dir`), from its `.git` without git; null where none is found. */
-function commonDir(repoPath: string): string | null {
-  const known = commonDirs.get(repoPath);
+/**
+ * The git directories of the checkout at `repoPath`, from its `.git` without git: its own (`--git-dir`,
+ * where its HEAD is) and the one its worktrees share (`--git-common-dir`, where the refs are); null
+ * where none is found.
+ */
+function gitDirs(repoPath: string): { own: string; common: string } | null {
+  const known = knownDirs.get(repoPath);
   if (known) return known;
-  let dir = join(repoPath, '.git');
+  let own = join(repoPath, '.git');
+  let common: string;
   try {
-    if (statSync(dir).isFile()) {
-      const m = readFileSync(dir, 'utf8').match(/^gitdir: (.+)$/m);
+    if (statSync(own).isFile()) {
+      const m = readFileSync(own, 'utf8').match(/^gitdir: (.+)$/m);
       if (!m) return null;
-      dir = resolve(repoPath, m[1]!.trim());
+      own = resolve(repoPath, m[1]!.trim());
     }
-    const common = join(dir, 'commondir');
-    if (existsSync(common)) dir = resolve(dir, readFileSync(common, 'utf8').trim());
-    if (!statSync(join(dir, 'refs')).isDirectory()) return null;
+    const commondir = join(own, 'commondir');
+    common = existsSync(commondir) ? resolve(own, readFileSync(commondir, 'utf8').trim()) : own;
+    if (!statSync(join(common, 'refs')).isDirectory()) return null;
   } catch {
     return null;
   }
-  commonDirs.set(repoPath, dir);
-  return dir;
+  const dirs = { own, common };
+  knownDirs.set(repoPath, dirs);
+  return dirs;
 }
 
 /** The commit of the default branch `branch` by `defaultBranchCommit`'s rule, as git steps, from `branches` where they were read already. */

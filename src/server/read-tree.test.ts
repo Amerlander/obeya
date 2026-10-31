@@ -198,17 +198,17 @@ describe('the Lesestand', () => {
 describe("the seal of a repository's refs", () => {
   test("stays while only the cards' branches move, and breaks once main or origin's main moves, or the refs are packed", () => {
     const seal = () => refsSeal(checkout);
+    // the checkout on a card's branch, as a lease leaves it
+    git(checkout, 'checkout', '--quiet', '-b', 'obeya/export-a1');
     const first = seal();
     expect(first).not.toBeNull();
-    // a card's branch made, worked on, and a worktree of it
-    git(checkout, 'branch', 'obeya/export-a1');
-    git(checkout, 'checkout', '--quiet', 'obeya/export-a1');
     writeFileSync(join(checkout, 'a.md'), 'a\n');
     git(checkout, 'add', '-A');
     git(checkout, 'commit', '--quiet', '-m', 'A');
     git(checkout, 'worktree', 'add', '--quiet', '-b', 'obeya/import-b2', join(dir, 'tree'));
+    git(checkout, 'checkout', '--quiet', '--detach');
     expect(seal()).toBe(first);
-    // a worktree tells the same seal as its checkout
+    // a worktree on a card's branch tells the same seal as its checkout
     expect(refsSeal(join(dir, 'tree'))).toBe(first);
 
     git(checkout, 'checkout', '--quiet', 'main');
@@ -220,7 +220,17 @@ describe("the seal of a repository's refs", () => {
     const fetched = seal();
     expect(fetched).not.toBe(merged);
     git(checkout, 'pack-refs', '--all');
-    expect(seal()).not.toBe(fetched);
+    const packed = seal();
+    expect(packed).not.toBe(fetched);
+    // the branch the checkout is on may tell the main branch, unless it is a card's
+    git(checkout, 'checkout', '--quiet', '-b', 'release');
+    expect(seal()).not.toBe(packed);
+  });
+
+  test("is none where a branch names a card's, which it moves with", () => {
+    git(checkout, 'branch', 'obeya/source-c3');
+    git(checkout, 'symbolic-ref', 'refs/heads/trunk', 'refs/heads/obeya/source-c3');
+    expect(refsSeal(checkout)).toBeNull();
   });
 
   test('is none where there is no git repository', () => {

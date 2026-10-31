@@ -1213,10 +1213,14 @@ export class CanvasRuntime {
     return seal && known?.seal === seal && !(known.read instanceof Promise) ? known.read : undefined;
   }
 
-  /** Reads the repository at `path` on its default branch again, without the server waiting for git, and keeps that (`defaultRead`). */
-  private readSettings(path: string): Promise<DefaultRead> {
+  /**
+   * Reads the repository at `path` on its default branch again, without the server waiting for git,
+   * and keeps that (`defaultRead`). Where its refs moved while git read, what it read may be the
+   * commit before: it reads again, a few times at most.
+   */
+  private readSettings(path: string, tries = READ_TRIES): Promise<DefaultRead> {
     const seal = refsSeal(path);
-    const read = gitSteps(path, readingSettings(path));
+    const read = gitSteps(path, readingSettings(path)).then((r) => (seal && tries > 1 && refsSeal(path) !== seal ? this.readSettings(path, tries - 1) : r));
     if (seal) this.readAt(path, seal, read);
     return read;
   }
@@ -2696,6 +2700,9 @@ export function* readingRepo(path: string, folder = false): GitSteps<RepoRead | 
   const [adapterModule, shared] = yield* together(readingAdapterModule(commit), readingShared(commit));
   return { info: { path, remote: remote ?? null, branch }, detected, adapterModule, shared };
 }
+
+/** How often `readSettings` reads a repository whose refs move while git reads it. */
+const READ_TRIES = 5;
 
 /** What `moved` came to (`moved`). */
 type Moved = 'same' | 'follow' | 'due';
