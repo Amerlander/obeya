@@ -112,6 +112,9 @@ synthesise them again (a hosted voice would be paid again), and the take's cuts,
 Obeya looks a minute after it starts, every six hours after that, and at once when the setting or
 the demo directory changes, over the renders in the demo directory (`<demo>/.work`, and
 `<demo>/<voice>/.work` of a render in another voice); demos elsewhere and on hosts are not touched.
+Looking through the demo directory and counting it never hold up the server: both go to the file
+system asynchronously and a little at a time (looked through synchronously, a thousand demos held
+it up for half a second).
 
 The default applies only to the Obeya in the default home (`~/.obeya`): another one (a scratch
 Obeya, a test, a render's own Obeya) shares the demo directory without sharing the owner's demo

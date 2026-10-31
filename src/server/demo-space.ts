@@ -3,8 +3,8 @@
 // half a gigabyte a demo), which only re-voicing needs once the video is made (design: Demos, Disk
 // space of demos).
 
-import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
-import { lstat, readdir, rm } from 'node:fs/promises';
+import { existsSync, readFileSync } from 'node:fs';
+import { lstat, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { DemoSpaceView } from '../core/types';
@@ -18,6 +18,8 @@ const DAY_MS = 24 * 3600_000;
 const SWEEP_EVERY_MS = 6 * 3600_000;
 /** The first look after Obeya starts: not in the middle of its start. */
 const FIRST_SWEEP_MS = 60_000;
+/** Demos whose work directories are looked for at the same time. */
+const DEMOS_AT_ONCE = 16;
 /** Counts older than this are counted again when the owner looks. */
 const STALE_MS = 10 * 60_000;
 
@@ -34,46 +36,49 @@ export function keepDays(s: Pick<DemoSettings, 'keepFrames'>, home: string): num
 
 export const defaultDays = (home: string): number | null => (resolve(home) === resolve(homedir(), '.obeya') ? DEFAULT_KEEP_DAYS : null);
 
-/** The work directories of the renders in the demo directory: `<demo>/.work`, and `<demo>/<voice>/.work` of a render in another voice. */
-export function workDirs(dir: string): string[] {
-  const subdirs = (d: string) => {
+/**
+ * The work directories of the renders in the demo directory: `<demo>/.work`, and `<demo>/<voice>/.work`
+ * of a render in another voice. Asynchronous, like everything the deletion looks at: the demo
+ * directory holds a thousand demos and more, and looked through synchronously they held the server
+ * up for half a second.
+ */
+export async function workDirs(dir: string): Promise<string[]> {
+  const subdirs = async (d: string) => {
     try {
-      return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && e.name !== '.work').map((e) => join(d, e.name));
+      return (await readdir(d, { withFileTypes: true })).filter((e) => e.isDirectory() && e.name !== '.work').map((e) => join(d, e.name));
     } catch {
       return [];
     }
   };
+  const ofDemo = async (demo: string) => {
+    const dirs = [demo, ...(await subdirs(demo))].map((d) => join(d, '.work'));
+    const real = await Promise.all(dirs.map(realDir));
+    return dirs.filter((_, i) => real[i]);
+  };
+  const demos = await subdirs(dir);
   const found: string[] = [];
-  for (const demo of subdirs(dir)) for (const d of [demo, ...subdirs(demo)]) if (realDir(join(d, '.work'))) found.push(join(d, '.work'));
+  // a few demos at a time, so the answers for all of them do not come back in one turn of the event loop
+  for (let i = 0; i < demos.length; i += DEMOS_AT_ONCE) {
+    for (const works of await Promise.all(demos.slice(i, i + DEMOS_AT_ONCE).map(ofDemo))) found.push(...works);
+  }
   return found;
 }
 
 /** A directory itself, not a link to one: deleting in a linked one would reach wherever it points. */
-function realDir(p: string): boolean {
-  try {
-    return lstatSync(p).isDirectory();
-  } catch {
-    return false;
-  }
-}
+const realDir = (p: string): Promise<boolean> => lstat(p).then((s) => s.isDirectory(), () => false);
 
 /** When a render last wrote into its work directory: the newest of it and what lies directly in it. */
-export function lastRender(work: string): number {
-  let newest = 0;
-  for (const p of [work, ...readdirSync(work).map((n) => join(work, n))]) {
-    try {
-      newest = Math.max(newest, lstatSync(p).mtimeMs);
-    } catch {
-      // gone meanwhile
-    }
-  }
-  return newest;
+export async function lastRender(work: string): Promise<number> {
+  const names = await readdir(work);
+  // what is gone meanwhile counts for nothing
+  const times = await Promise.all([work, ...names.map((n) => join(work, n))].map((p) => lstat(p).then((s) => s.mtimeMs, () => 0)));
+  return Math.max(0, ...times);
 }
 
 /** A render that still runs holds `render.pid` with its process (the director's `holdRenderLock`). */
-function rendering(work: string): boolean {
+async function rendering(work: string): Promise<boolean> {
   try {
-    const pid = Number(readFileSync(join(work, 'render.pid'), 'utf8'));
+    const pid = Number(await readFile(join(work, 'render.pid'), 'utf8'));
     if (!pid) return false;
     process.kill(pid, 0);
     return true;
@@ -82,6 +87,9 @@ function rendering(work: string): boolean {
     return (e as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
+
+/** A file is there, or a link to one. */
+const exists = (p: string): Promise<boolean> => stat(p).then(() => true, () => false);
 
 /** What a file takes on disk: its blocks where the system says (a sparse or compressed file), else its size. */
 const onDisk = (s: { blocks?: number; size: number }) => (s.blocks ? s.blocks * 512 : s.size);
@@ -118,16 +126,16 @@ export async function usage(dir: string): Promise<{ bytes: number; work: number 
  */
 export async function sweep(dir: string, days: number, now = Date.now()): Promise<{ demos: number; bytes: number }> {
   const freed = { demos: 0, bytes: 0 };
-  for (const work of workDirs(dir)) {
+  for (const work of await workDirs(dir)) {
     const frames = join(work, 'frames');
     const list = join(work, 'frames.txt');
-    if (!realDir(frames) && !existsSync(list)) continue;
-    const due = () => now - lastRender(work) >= days * DAY_MS && !rendering(work);
-    if (!due()) continue;
+    if (!(await realDir(frames)) && !(await exists(list))) continue;
+    const due = async () => now - (await lastRender(work)) >= days * DAY_MS && !(await rendering(work));
+    if (!(await due())) continue;
     const { bytes } = await usage(frames);
     // a render may have started while they were counted
-    if (!due()) continue;
-    if (realDir(frames)) await rm(frames, { recursive: true, force: true });
+    if (!(await due())) continue;
+    if (await realDir(frames)) await rm(frames, { recursive: true, force: true });
     await rm(list, { force: true });
     freed.demos++;
     freed.bytes += bytes;

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, u
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEFAULT_KEEP_DAYS, DemoSpace, keepDays, sweep, usage, workDirs } from './demo-space';
+import { STALL_MS } from './stalls';
 
 const DAY = 24 * 3600;
 let demos: string;
@@ -38,7 +39,7 @@ describe('the frames of old demos', () => {
 
   test('of a render in another voice, in its own subdirectory, go too', async () => {
     const other = render(join(demos, 'export', 'qwen'), 30);
-    expect(workDirs(demos)).toEqual([other]);
+    expect(await workDirs(demos)).toEqual([other]);
     await sweep(demos, 14);
     expect(existsSync(join(other, 'frames'))).toBe(false);
   });
@@ -62,7 +63,7 @@ describe('the frames of old demos', () => {
       const real = render(join(demos, 'real'), 30);
       rmSync(join(real, 'frames'), { recursive: true });
       symlinkSync(join(kept, 'frames'), join(real, 'frames'), 'dir');
-      expect(workDirs(demos)).toEqual([real]);
+      expect(await workDirs(demos)).toEqual([real]);
       await sweep(demos, 14);
       expect(readdirSync(join(kept, 'frames'))).toHaveLength(3);
       expect(existsSync(join(kept, 'frames.txt'))).toBe(true);
@@ -131,3 +132,38 @@ test('what was counted in another directory is not shown', async () => {
   await space.sweepSoon();
   expect(space.view().used).toMatchObject({ bytes: 0, work: 0 });
 });
+
+test('looking through a large demo directory holds the server up for no noticeable time', async () => {
+  // a thousand demos, as in a demo directory used for months, each with its frames, rendered
+  // recently enough that they are kept: the sweep every few hours has nothing to delete
+  for (let i = 0; i < 1000; i++) {
+    const work = join(demos, `demo-${i}`, '.work');
+    mkdirSync(join(work, 'frames'), { recursive: true });
+    for (const f of ['frames.txt', ...Array.from({ length: 5 }, (_, c) => `clip-${c}.wav`)]) writeFileSync(join(work, f), '');
+  }
+  // how often the event loop turned meanwhile, and the longest it went without a turn, which the
+  // server would log as a stall
+  let turns = 0;
+  let longest = 0;
+  let last = performance.now();
+  let looking = true;
+  const turn = () => {
+    const now = performance.now();
+    longest = Math.max(longest, now - last);
+    last = now;
+    turns++;
+    if (looking) setImmediate(turn);
+  };
+  setImmediate(turn);
+  try {
+    expect(await sweep(demos, 14)).toEqual({ demos: 0, bytes: 0 });
+    // work that never lets the loop turn ends before it turns once
+    turn();
+    expect(turns).toBeGreaterThan(100);
+    await usage(demos);
+  } finally {
+    looking = false;
+  }
+  turn();
+  expect(longest).toBeLessThan(STALL_MS);
+}, 60_000);
